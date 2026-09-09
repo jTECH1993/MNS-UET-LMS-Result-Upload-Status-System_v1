@@ -1,0 +1,6 @@
+{
+  "name": "MNS-UET LMS Result Upload Status System",
+  "description": "University-wide LMS Result Upload Status Monitoring and Record Management System for Muhammad Nawaz Sharif University of Engineering & Technology, Multan",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
