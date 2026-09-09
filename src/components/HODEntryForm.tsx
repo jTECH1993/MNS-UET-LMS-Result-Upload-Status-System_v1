@@ -4,6 +4,7 @@ import {
   UNIVERSITY_DEPARTMENTS,
   ACADEMIC_SHIFTS,
   ACADEMIC_SEMESTERS,
+  DEGREE_LEVEL_OPTIONS,
   createEmptySubjectRow,
   createInitialBlankRows,
 } from '../data/departmentsData';
@@ -35,6 +36,12 @@ import {
   SlidersHorizontal,
   Sun,
   Moon,
+  Send,
+  Eye,
+  BookOpen,
+  Search,
+  FileText,
+  X,
 } from 'lucide-react';
 
 interface Props {
@@ -48,6 +55,10 @@ interface Props {
   onOpenUserModal?: () => void;
   onSessionChangedProp?: (session: string) => void;
   onSemesterChangedProp?: (semester: string) => void;
+  onDepartmentChangedProp?: (dept: string) => void;
+  onProgramChangedProp?: (prog: string) => void;
+  onShiftChangedProp?: (shift: AcademicShift) => void;
+  onSwitchToVC?: () => void;
 }
 
 export const HODEntryForm: React.FC<Props> = ({
@@ -61,6 +72,10 @@ export const HODEntryForm: React.FC<Props> = ({
   onOpenUserModal,
   onSessionChangedProp,
   onSemesterChangedProp,
+  onDepartmentChangedProp,
+  onProgramChangedProp,
+  onShiftChangedProp,
+  onSwitchToVC,
 }) => {
   // Master Selections
   const [department, setDepartment] = useState<string>(
@@ -94,17 +109,27 @@ export const HODEntryForm: React.FC<Props> = ({
     selectedProgramProp || (currentDeptPrograms[0]?.name || '')
   );
 
-  // Auto-filled Degree Level
-  const degreeLevel = useMemo(() => {
+  // Auto-derived default degree level, with user override capability
+  const autoDegreeLevel = useMemo(() => {
     const progInfo = currentDeptPrograms.find((p) => p.name === program);
-    return progInfo?.degreeLevel || 'BS';
+    return progInfo?.degreeLevel || 'BS (4 Years)';
   }, [currentDeptPrograms, program]);
+
+  const [degreeLevel, setDegreeLevel] = useState<string>(autoDegreeLevel);
+
+  useEffect(() => {
+    setDegreeLevel(autoDegreeLevel);
+  }, [autoDegreeLevel]);
 
   // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
   const [shift, setShift] = useState<AcademicShift>(selectedShiftProp || 'Morning');
 
   // Semester selection (1 to 8) - strictly isolated institutional semester cycle
   const [semester, setSemester] = useState<string>(selectedSemesterProp || '1');
+
+  // Course search query & advanced columns toggle
+  const [courseFilterQuery, setCourseFilterQuery] = useState<string>('');
+  const [showAdvancedColumns, setShowAdvancedColumns] = useState<boolean>(false);
 
   // State flags
   const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
@@ -163,8 +188,8 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   }, [currentUser]);
 
-  // Rows state: starts with only active rows (not forced 8 rows)
-  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning'));
+  // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
+  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(8, 'Morning'));
 
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record")
   useEffect(() => {
@@ -200,6 +225,7 @@ export const HODEntryForm: React.FC<Props> = ({
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
     setDepartment(newDept);
+    if (onDepartmentChangedProp) onDepartmentChangedProp(newDept);
     const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
     if (targetDept && targetDept.programs.length > 0) {
       const activeNames = StorageService.getSessionPrograms(newDept, session);
@@ -207,10 +233,23 @@ export const HODEntryForm: React.FC<Props> = ({
         ? targetDept.programs.filter((p) => activeNames.includes(p.name))
         : targetDept.programs;
       const pick = available[0] || targetDept.programs[0];
-      setProgram(pick ? pick.name : '');
+      const progName = pick ? pick.name : '';
+      setProgram(progName);
+      if (onProgramChangedProp) onProgramChangedProp(progName);
     } else {
       setProgram('');
+      if (onProgramChangedProp) onProgramChangedProp('');
     }
+  };
+
+  const handleProgramChange = (newProg: string) => {
+    setProgram(newProg);
+    if (onProgramChangedProp) onProgramChangedProp(newProg);
+  };
+
+  const handleShiftChange = (newShift: AcademicShift) => {
+    setShift(newShift);
+    if (onShiftChangedProp) onShiftChangedProp(newShift);
   };
 
   // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, or Semester changes
@@ -233,24 +272,28 @@ export const HODEntryForm: React.FC<Props> = ({
       if (existing.hodCoordinator) setHodCoordinator(existing.hodCoordinator);
       if (existing.submissionDate) setSubmissionDate(existing.submissionDate);
 
-      // Filter to existing non-empty rows, or if empty start with 1 row
+      // Filter to existing non-empty rows, pad up to 8 for fast entry
       const validRows = existing.subjects.filter(
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
       );
-      setSubjects(validRows.length > 0 ? validRows : createInitialBlankRows(1, shift, semester));
+      const rows = [...validRows];
+      while (rows.length < 8) {
+        rows.push(createEmptySubjectRow(rows.length + 1, shift, semester));
+      }
+      setSubjects(rows);
 
       showFeedback(
         'info',
-        `Database record loaded for ${program} [${shift} Shift – Semester ${semester}]: ${validRows.length} subject(s) retrieved.`
+        `Database record loaded for ${program} [${shift} Shift – Semester ${semester}]: ${validRows.length} subject(s) saved.`
       );
     } else {
-      // No record exists -> Start with 1 clean row
+      // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(1, shift, semester));
+      setSubjects(createInitialBlankRows(8, shift, semester));
       showFeedback(
         'info',
-        `New form initialized for ${program} (${shift} Shift – Semester ${semester}). Click '+ Add Course Row' to add courses.`
+        `Ready to enter courses for ${program} (${shift} Shift – Semester ${semester}). Fill course details and click 'Submit Result Status'.`
       );
     }
   }, [department, program, degreeLevel, shift, session, semester]);
@@ -267,7 +310,23 @@ export const HODEntryForm: React.FC<Props> = ({
     return StorageService.calculateSummary(subjects);
   }, [subjects]);
 
-  // Field change handler
+  // Filtered rows for course table search
+  const filteredSubjects = useMemo(() => {
+    if (!courseFilterQuery.trim()) return subjects;
+    const q = courseFilterQuery.toLowerCase().trim();
+    return subjects.filter((s) => {
+      return (
+        s.courseCode.toLowerCase().includes(q) ||
+        s.subjectTitle.toLowerCase().includes(q) ||
+        s.status.toLowerCase().includes(q) ||
+        (s.remarks && s.remarks.toLowerCase().includes(q)) ||
+        (s.uploadedBy && s.uploadedBy.toLowerCase().includes(q)) ||
+        (s.sectionShift && s.sectionShift.toLowerCase().includes(q))
+      );
+    });
+  }, [subjects, courseFilterQuery]);
+
+  // Field change handler by index
   const handleRowChange = (index: number, field: keyof SubjectRow, value: string) => {
     setSubjects((prev) => {
       const next = [...prev];
@@ -279,10 +338,22 @@ export const HODEntryForm: React.FC<Props> = ({
     });
   };
 
-  // Add extra row (up to 20 rows maximum)
+  // Field change handler by Row ID (immune to search/filter order)
+  const handleRowChangeById = (rowId: string, field: keyof SubjectRow, value: string) => {
+    setSubjects((prev) => {
+      return prev.map((item) => {
+        if (item.id === rowId) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      });
+    });
+  };
+
+  // Add extra row (up to 25 rows maximum)
   const handleAddRow = () => {
-    if (subjects.length >= 20) {
-      showFeedback('warning', 'Maximum 20 subject rows reached for this sheet.');
+    if (subjects.length >= 25) {
+      showFeedback('warning', 'Maximum 25 subject rows reached for this sheet.');
       return;
     }
     const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester);
@@ -293,6 +364,16 @@ export const HODEntryForm: React.FC<Props> = ({
     showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester}.`);
   };
 
+  // Remove last course row
+  const handleRemoveRow = () => {
+    if (subjects.length <= 1) {
+      showFeedback('warning', 'At least one row must be kept in the table.');
+      return;
+    }
+    setSubjects((prev) => prev.slice(0, -1));
+    showFeedback('info', 'Last course row removed.');
+  };
+
   // Delete a specific row
   const handleDeleteRow = (index: number) => {
     setSubjects((prev) => {
@@ -300,6 +381,12 @@ export const HODEntryForm: React.FC<Props> = ({
       return next;
     });
     showFeedback('info', `Removed row #${index + 1}.`);
+  };
+
+  // Delete row by ID
+  const handleDeleteRowById = (rowId: string) => {
+    setSubjects((prev) => prev.filter((item) => item.id !== rowId));
+    showFeedback('info', 'Course row removed.');
   };
 
   // Save / Update handler
@@ -449,410 +536,325 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Database State Pill & Record Indicator */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-slate-200 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-500 font-medium">Record Status:</span>
+      {/* CARD 1: TOP BANNER (Matching Screenshot 1) */}
+      <div
+        id="hod-header-banner"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs shrink-0">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              LMS Result Upload Status
+            </h2>
+            <p className="text-xs text-slate-500 font-medium">
+              Submit the status of result upload into LMS
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Academic Session Switcher */}
+          <button
+            id="btn-switch-session"
+            type="button"
+            onClick={() => setIsSessionModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+            title="Switch or create Academic Session"
+          >
+            <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+            <span>SESSION {session}</span>
+            <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-semibold">
+              Change
+            </span>
+          </button>
+
+          {/* Current Semester Badge */}
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold">
+            <Layers className="w-3.5 h-3.5 text-slate-500" />
+            <span>SEMESTER {semester}</span>
+          </span>
+
+          {/* VC View Link */}
+          {onSwitchToVC && (
+            <button
+              id="btn-switch-vc-view"
+              type="button"
+              onClick={onSwitchToVC}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              title="Open Vice Chancellor University-wide Monitoring Dashboard"
+            >
+              <Eye className="w-3.5 h-3.5 text-emerald-400" />
+              <span>VC View (Read Only) &gt;</span>
+            </button>
+          )}
+
+          {/* Database Saved Status Badge */}
           {isExistingRecord ? (
             <span
               id="record-status-badge"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-300"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-              Saved Record in Database
+              Saved Record
               {lastSavedTime && (
-                <span className="text-emerald-700 font-normal">
-                  (Updated: {new Date(lastSavedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                <span className="text-emerald-700 font-normal hidden lg:inline">
+                  ({new Date(lastSavedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
                 </span>
               )}
             </span>
           ) : (
             <span
               id="record-status-badge"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-300"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-medium border border-slate-300"
             >
-              <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-              New Record (Unsaved Template)
+              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+              New Record
             </span>
           )}
         </div>
-
-        <div className="flex items-center gap-3 text-slate-500">
-          <span className="hidden sm:inline">
-            Active Target: <strong className="text-slate-800">{program}</strong> ({degreeLevel})
-          </span>
-          <span className="text-slate-300">|</span>
-          <span>{summary.totalSubjects} subjects entered</span>
-        </div>
       </div>
 
-      {/* SECTION 01: SUBMISSION DETAILS */}
-      <div id="submission-details-card" className="bg-white rounded-lg border border-slate-300 shadow-xs overflow-hidden">
-        <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold tracking-wider uppercase bg-emerald-700 px-2 py-0.5 rounded text-white">
-              Section 01
-            </span>
-            <h3 className="font-semibold text-sm tracking-wide">SUBMISSION DETAILS &amp; ACADEMIC HIERARCHY</h3>
+      {/* CARD 2: SELECT PROGRAM DETAILS (Screenshot 1) */}
+      <div
+        id="select-program-details-card"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Select Program Details
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Choose department, program, degree level, semester, and offering shift for LMS monitoring.
+            </p>
           </div>
-          <span className="text-xs text-slate-300 hidden sm:inline">
-            Department → Program → Level → Shift → LMS Result Status
+          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full self-start sm:self-auto">
+            Session {session} Active
           </span>
         </div>
 
-        {/* Informative Guidance Banner */}
-        <div className="bg-emerald-50/70 border-b border-emerald-100 px-4 py-2 text-xs text-emerald-900 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              Academic Hierarchy: <strong>Department</strong> → <strong>Program</strong> → <strong>Degree Level</strong> → <strong>Shift (Morning / Evening)</strong>.
-              Morning and Evening datasets remain strictly isolated for the same program.
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-600 font-semibold text-[11px]">Academic Session:</span>
-            <button
-              id="btn-switch-academic-session"
-              type="button"
-              onClick={() => setIsSessionModalOpen(true)}
-              className="px-2.5 py-1 bg-white border border-emerald-400 hover:border-emerald-600 text-emerald-950 font-bold rounded text-xs shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Click to switch or create a different Academic Session"
+        {/* 5 Form Fields Grid matching Screenshot 1 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Department */}
+          <div>
+            <label
+              htmlFor="select-department"
+              className="block text-xs font-bold text-slate-700 mb-1.5"
             >
-              <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Session {session}</span>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-medium">Switch</span>
-            </button>
+              Department <span className="text-rose-600">*</span>
+            </label>
+            <select
+              id="select-department"
+              value={department}
+              onChange={(e) => handleDepartmentChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
+            >
+              {UNIVERSITY_DEPARTMENTS.map((dept) => (
+                <option key={dept.name} value={dept.name}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Program */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="select-program"
+                className="text-xs font-bold text-slate-700"
+              >
+                Program <span className="text-rose-600">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsRosterModalOpen(true)}
+                className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer"
+                title="Configure active roster for this session"
+              >
+                Configure
+              </button>
+            </div>
+            <select
+              id="select-program"
+              value={program}
+              onChange={(e) => handleProgramChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
+            >
+              {currentDeptPrograms.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Level */}
+          <div>
+            <label
+              htmlFor="select-degree-level"
+              className="block text-xs font-bold text-slate-700 mb-1.5"
+            >
+              Level <span className="text-rose-600">*</span>
+            </label>
+            <select
+              id="select-degree-level"
+              value={degreeLevel}
+              onChange={(e) => setDegreeLevel(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
+            >
+              {DEGREE_LEVEL_OPTIONS.map((lvl) => (
+                <option key={lvl} value={lvl}>
+                  {lvl}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Semester Dropdown */}
+          <div>
+            <label
+              htmlFor="select-semester"
+              className="block text-xs font-bold text-slate-700 mb-1.5"
+            >
+              Semester <span className="text-rose-600">*</span>
+            </label>
+            <select
+              id="select-semester"
+              value={semester}
+              onChange={(e) => handleSemesterChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
+            >
+              {ACADEMIC_SEMESTERS.map((sem) => (
+                <option key={sem.id} value={sem.id}>
+                  {sem.shortLabel} ({sem.label})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Shift (Morning / Evening toggle) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Shift <span className="text-rose-600">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
+              <button
+                id="btn-shift-morning"
+                type="button"
+                onClick={() => handleShiftChange('Morning')}
+                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  shift === 'Morning'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Morning</span>
+              </button>
+              <button
+                id="btn-shift-evening"
+                type="button"
+                onClick={() => handleShiftChange('Evening')}
+                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  shift === 'Evening'
+                    ? 'bg-indigo-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5" />
+                <span>Evening</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="p-5 space-y-4">
-          {/* Primary Dropdowns Row - 4 Hierarchy Steps */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 01: Department / School */}
-            <div>
-              <label
-                htmlFor="select-department"
-                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
-              >
-                <Building2 className="w-3.5 h-3.5 text-emerald-700" />
-                01 DEPARTMENT <span className="text-rose-600">*</span>
-              </label>
-              <select
-                id="select-department"
-                value={department}
-                onChange={(e) => handleDepartmentChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-md px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
-              >
-                {UNIVERSITY_DEPARTMENTS.map((dept) => (
-                  <option key={dept.name} value={dept.name}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 02: Program (Dependent) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                <label
-                  htmlFor="select-program"
-                  className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5"
-                >
-                  <GraduationCap className="w-3.5 h-3.5 text-emerald-700" />
-                  02 PROGRAM <span className="text-rose-600">*</span>
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    id="btn-open-session-roster"
-                    type="button"
-                    onClick={() => setIsRosterModalOpen(true)}
-                    className="text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors shadow-2xs"
-                    title={`Select which programs were enrolled in Session ${session} for this department`}
-                  >
-                    <SlidersHorizontal className="w-3 h-3 text-emerald-700" />
-                    <span>Roster</span>
-                  </button>
-                  <label className="inline-flex items-center gap-1 cursor-pointer text-[10px] text-slate-700 font-semibold bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={onlySessionFilter}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setOnlySessionFilter(checked);
-                        const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
-                        if (dept) {
-                          const activeNames = StorageService.getSessionPrograms(department, session);
-                          const valid = checked
-                            ? dept.programs.filter((p) => activeNames.includes(p.name))
-                            : dept.programs;
-                          if (valid.length > 0 && !valid.some((p) => p.name === program)) {
-                            setProgram(valid[0].name);
-                          }
-                        }
-                      }}
-                      className="rounded text-emerald-700 focus:ring-emerald-600 w-3 h-3"
-                    />
-                    <span>{session} Only</span>
-                  </label>
-                </div>
-              </div>
-              <select
-                id="select-program"
-                value={program}
-                onChange={(e) => setProgram(e.target.value)}
-                className="w-full bg-slate-50 border border-emerald-500 rounded-md px-3 py-2 text-sm font-semibold text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
-              >
-                {currentDeptPrograms.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-1 flex items-center justify-between text-[11px]">
-                <span className="text-emerald-800 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>
-                    <strong>{currentDeptPrograms.length}</strong> active in {session}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsRosterModalOpen(true)}
-                  className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold text-[11px]"
-                >
-                  Configure
-                </button>
-              </div>
-            </div>
-
-            {/* 03: Degree Level (Fills Automatically) */}
-            <div>
-              <label
-                htmlFor="input-degree-level"
-                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
-              >
-                <Layers className="w-3.5 h-3.5 text-emerald-700" />
-                03 DEGREE LEVEL
-              </label>
-              <div
-                id="input-degree-level"
-                className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-sm font-bold text-slate-800 flex items-center justify-between cursor-not-allowed select-none"
-              >
-                <span>{degreeLevel}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider bg-slate-200 text-slate-700 px-2 py-0.5 rounded">
-                  Auto-Filled
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">Derived from program credentials</p>
-            </div>
-
-            {/* 04: Shift Selection (Morning vs Evening) */}
-            <div>
-              <label
-                htmlFor="select-shift"
-                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
-              >
-                {shift === 'Morning' ? (
-                  <Sun className="w-3.5 h-3.5 text-amber-600" />
-                ) : (
-                  <Moon className="w-3.5 h-3.5 text-indigo-600" />
-                )}
-                04 ACADEMIC SHIFT <span className="text-rose-600">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-slate-100 rounded-md border border-slate-300">
-                <button
-                  id="btn-shift-morning"
-                  type="button"
-                  onClick={() => setShift('Morning')}
-                  className={`py-1.5 px-3 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    shift === 'Morning'
-                      ? 'bg-amber-500 text-white shadow-xs'
-                      : 'text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                  <span>Morning</span>
-                </button>
-                <button
-                  id="btn-shift-evening"
-                  type="button"
-                  onClick={() => setShift('Evening')}
-                  className={`py-1.5 px-3 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    shift === 'Evening'
-                      ? 'bg-indigo-700 text-white shadow-xs'
-                      : 'text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5" />
-                  <span>Evening</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                {shift === 'Morning' ? '☀️ Morning roster (separate data)' : '🌙 Evening roster (separate data)'}
-              </p>
-            </div>
+        {/* Quick Semester Selection Tabs (Semesters 1-8) */}
+        <div className="pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-600">
+              Quick Semester Jump:
+            </span>
+            <span className="text-[11px] text-slate-500">
+              Active: <strong>Semester {semester}</strong> for <strong>{shift} Shift</strong>
+            </span>
           </div>
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+            {semesterStatuses.map((sem) => {
+              const isSelected = sem.id === semester;
+              return (
+                <button
+                  key={sem.id}
+                  id={`btn-quick-sem-${sem.id}`}
+                  type="button"
+                  onClick={() => handleSemesterChange(sem.id)}
+                  className={`py-1.5 px-2 rounded-md text-xs font-bold flex flex-col items-center justify-center transition-all cursor-pointer border ${
+                    isSelected
+                      ? 'bg-emerald-800 text-white border-emerald-900 shadow-xs ring-2 ring-emerald-500/30'
+                      : sem.hasRecord
+                      ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{sem.shortLabel}</span>
+                  {sem.hasRecord && (
+                    <span className="text-[9px] text-emerald-600 font-normal">● Saved</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          {/* 05: Academic Semester Selection (Semesters 1 to 8) */}
-          <div className="pt-3 border-t border-slate-200">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        {/* Submission Metadata Row (HOD Coordinator & Submission Date) */}
+        <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center justify-between mb-1">
               <label
-                htmlFor="section-semester-picker"
-                className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5"
+                htmlFor="input-hod-coordinator"
+                className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
               >
-                <Layers className="w-3.5 h-3.5 text-emerald-700" />
-                05 ACADEMIC SEMESTER (SEMESTERS 1 TO 8) <span className="text-rose-600">*</span>
+                <User className="w-3.5 h-3.5 text-slate-500" />
+                HOD / Program Coordinator Name:
               </label>
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className="text-slate-500">Active Selection:</span>
-                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  Semester {semester} ({ACADEMIC_SEMESTERS.find((s) => s.id === semester)?.label || '1st Semester'})
-                </span>
-              </div>
-            </div>
-
-            {/* 8-Semester Tab Grid */}
-            <div id="section-semester-picker" className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-              {semesterStatuses.map((sem) => {
-                const isSelected = sem.id === semester;
-                return (
-                  <button
-                    key={sem.id}
-                    id={`btn-select-semester-${sem.id}`}
-                    type="button"
-                    onClick={() => handleSemesterChange(sem.id)}
-                    className={`p-2 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-between min-h-[58px] ${
-                      isSelected
-                        ? 'bg-emerald-800 text-white border-emerald-900 shadow-xs ring-2 ring-emerald-500/50'
-                        : sem.hasRecord
-                        ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span className="text-xs font-black">{sem.shortLabel}</span>
-                    <span
-                      className={`text-[10px] tracking-tight ${
-                        isSelected ? 'text-emerald-100 font-semibold' : 'text-slate-500'
-                      }`}
-                    >
-                      {sem.label}
-                    </span>
-                    {sem.hasRecord && (
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold mt-1 flex items-center gap-0.5 ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-emerald-200 text-emerald-900'
-                        }`}
-                        title={`LMS status saved: ${sem.summary?.uploaded || 0}/${sem.summary?.totalSubjects || 0} uploaded`}
-                      >
-                        <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
-                        Saved
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center justify-between gap-1">
-              <span>
-                Each semester holds an isolated course sheet. Click any semester (1–8) to load or create its results for <strong>{shift} Shift</strong>.
-              </span>
-              {isExistingRecord ? (
-                <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Database Record Active for Semester {semester}
-                </span>
-              ) : (
-                <span className="text-amber-700 font-semibold flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  New / Unsaved Sheet for Semester {semester}
-                </span>
+              {onOpenUserModal && (
+                <button
+                  type="button"
+                  onClick={onOpenUserModal}
+                  className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold underline cursor-pointer"
+                >
+                  Change User
+                </button>
               )}
-            </p>
+            </div>
+            <input
+              id="input-hod-coordinator"
+              type="text"
+              value={hodCoordinator}
+              onChange={(e) => setHodCoordinator(e.target.value)}
+              placeholder="e.g. Dr. Muhammad Tariq (HOD CS)"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+            />
           </div>
 
-          {/* Secondary Metadata Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-            {/* Session / Semester */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="input-session-semester"
-                  className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  SESSION & SEMESTER
-                </label>
-                <button
-                  id="btn-change-session-inline"
-                  type="button"
-                  onClick={() => setIsSessionModalOpen(true)}
-                  className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold underline decoration-emerald-500 cursor-pointer"
-                >
-                  Change Session
-                </button>
-              </div>
-              <div
-                id="input-session-semester"
-                className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-sm font-semibold text-slate-800 flex items-center justify-between"
-              >
-                <span>Session {session} – Semester {semester}</span>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                  shift === 'Morning' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'
-                }`}>
-                  {shift} • Sem {semester}
-                </span>
-              </div>
-            </div>
-
-            {/* HOD / Program Coordinator */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="input-hod-coordinator"
-                  className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5"
-                >
-                  <User className="w-3.5 h-3.5 text-slate-500" />
-                  HOD / PROGRAM COORDINATOR
-                </label>
-                {onOpenUserModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenUserModal}
-                    className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold underline decoration-emerald-500 cursor-pointer"
-                  >
-                    Change User
-                  </button>
-                )}
-              </div>
-              <input
-                id="input-hod-coordinator"
-                type="text"
-                value={hodCoordinator}
-                onChange={(e) => setHodCoordinator(e.target.value)}
-                placeholder="Enter HOD or Coordinator Name"
-                className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            {/* Date of Submission */}
-            <div>
-              <label
-                htmlFor="input-submission-date"
-                className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5"
-              >
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                DATE OF SUBMISSION
-              </label>
-              <input
-                id="input-submission-date"
-                type="date"
-                value={submissionDate}
-                onChange={(e) => setSubmissionDate(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
+          <div>
+            <label
+              htmlFor="input-submission-date"
+              className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5"
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              Date of Submission:
+            </label>
+            <input
+              id="input-submission-date"
+              type="date"
+              value={submissionDate}
+              onChange={(e) => setSubmissionDate(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+            />
           </div>
         </div>
       </div>
@@ -860,238 +862,312 @@ export const HODEntryForm: React.FC<Props> = ({
       {/* SECTION 02: EXECUTIVE SUMMARY */}
       <ExecutiveSummaryCards summary={summary} />
 
-      {/* SECTION 03: SUBJECT-WISE LMS RESULT UPLOAD STATUS */}
-      <div id="subject-table-card" className="bg-white rounded-lg border border-slate-300 shadow-xs overflow-hidden">
-        <div className="bg-slate-800 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold tracking-wider uppercase bg-emerald-700 px-2 py-0.5 rounded text-white">
-              Section 03
-            </span>
-            <h3 className="font-semibold text-sm tracking-wide">
-              SUBJECT-WISE LMS RESULT UPLOAD STATUS
-            </h3>
+      {/* CARD 3: COURSE RESULT UPLOAD STATUS (Matching Screenshot 1) */}
+      <div
+        id="course-result-upload-card"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
+      >
+        {/* Card Header matching Screenshot 1 */}
+        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                Course Result Upload Status
+              </h3>
+              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                {program} • Sem {semester} • {shift}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Enter individual course details, teaching instructor, and current upload status into the LMS portal.
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-300">
-              Total Courses: <strong className="text-white">{subjects.length}</strong> (
-              <strong className="text-emerald-400">{summary.totalSubjects}</strong> active)
-            </span>
+
+          {/* Course Search & Actions toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search courses input */}
+            <div className="relative min-w-[220px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                id="input-course-filter"
+                type="text"
+                value={courseFilterQuery}
+                onChange={(e) => setCourseFilterQuery(e.target.value)}
+                placeholder="Search course or teacher..."
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+              />
+              {courseFilterQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCourseFilterQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Toggle Advanced Columns */}
+            <button
+              id="btn-toggle-advanced-cols"
+              type="button"
+              onClick={() => setShowAdvancedColumns(!showAdvancedColumns)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                showAdvancedColumns
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+              title="Show/hide credit hours, notification date, and LMS reference columns"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>{showAdvancedColumns ? 'Compact View' : 'All Details'}</span>
+            </button>
+
+            {/* Add Course Row Button */}
             <button
               id="btn-add-subject-row"
               type="button"
               onClick={handleAddRow}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-              title="Add a new subject course row"
+              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" /> Add Course Row
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Course</span>
             </button>
           </div>
         </div>
 
-        {/* Legend / Status Key Banner */}
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 text-[11px] text-slate-600 flex flex-wrap items-center justify-between gap-3">
+        {/* Legend / Status Key & Quick Actions Banner */}
+        <div className="bg-slate-50/80 border-b border-slate-200 px-5 py-2.5 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-bold text-slate-700 uppercase tracking-wider">Status Key:</span>
-            <span className="inline-flex items-center gap-1 text-emerald-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-              <strong>Uploaded:</strong> Result fully entered on LMS
+            <span className="font-bold text-slate-700">Status Legend:</span>
+            <span className="inline-flex items-center gap-1.5 text-emerald-800 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Uploaded (Complete)
             </span>
-            <span className="inline-flex items-center gap-1 text-amber-800">
-              <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-              <strong>Pending:</strong> Not yet entered
+            <span className="inline-flex items-center gap-1.5 text-blue-800 font-medium">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              In Progress
             </span>
-            <span className="inline-flex items-center gap-1 text-blue-800">
-              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-              <strong>In Progress:</strong> Partly entered
+            <span className="inline-flex items-center gap-1.5 text-amber-800 font-medium">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              Pending
             </span>
-            <span className="inline-flex items-center gap-1 text-slate-700">
+            <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
               <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-              <strong>Not Applicable:</strong> Not offered in Sem 1
+              Not Applicable
             </span>
           </div>
-          <span className="italic text-slate-500">
-            Click <strong>+ Add Course Row</strong> to enable additional courses. Click trash icon to remove.
-          </span>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-500">
+              Showing <strong>{filteredSubjects.length}</strong> of <strong>{subjects.length}</strong> courses
+            </span>
+            {courseFilterQuery && (
+              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold">
+                Filter active
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Table Content */}
         <div className="overflow-x-auto">
-          <table id="lms-result-sheet-table" className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold tracking-wider border-b border-slate-300 text-[11px] uppercase">
-                <th className="py-2.5 px-3 w-10 text-center border-r border-slate-300">#</th>
-                <th className="py-2.5 px-3 w-28 border-r border-slate-300">Course Code</th>
-                <th className="py-2.5 px-3 min-w-[200px] border-r border-slate-300">
-                  Subject / Course Title
-                </th>
-                <th className="py-2.5 px-2 w-20 text-center border-r border-slate-300">Cr. Hrs</th>
-                <th className="py-2.5 px-3 w-28 border-r border-slate-300">Section / Shift</th>
-                <th className="py-2.5 px-3 w-40 border-r border-slate-300 bg-emerald-50 text-emerald-900">
-                  LMS Result Status *
-                </th>
-                <th className="py-2.5 px-3 w-32 border-r border-slate-300">Date Uploaded</th>
-                <th className="py-2.5 px-3 w-32 border-r border-slate-300">Uploaded By</th>
-                <th className="py-2.5 px-3 min-w-[150px] border-r border-slate-300">Remarks</th>
-                <th className="py-2.5 px-2 w-12 text-center">Action</th>
+              <tr className="bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+                <th className="py-2.5 px-3 text-center w-12">#</th>
+                <th className="py-2.5 px-3 w-32">Course Code</th>
+                <th className="py-2.5 px-3 min-w-[220px]">Course Title *</th>
+                <th className="py-2.5 px-2 text-center w-24">Credit Hours</th>
+                <th className="py-2.5 px-3 min-w-[180px]">Teacher / Instructor</th>
+                <th className="py-2.5 px-3 w-48">LMS Upload Status *</th>
+                {showAdvancedColumns && (
+                  <th className="py-2.5 px-3 w-36">Section / Shift</th>
+                )}
+                {showAdvancedColumns && (
+                  <th className="py-2.5 px-3 w-36">Date Uploaded</th>
+                )}
+                {showAdvancedColumns && (
+                  <th className="py-2.5 px-3 min-w-[150px]">LMS Ref / Remarks</th>
+                )}
+                <th className="py-2.5 px-2 text-center w-14">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {subjects.length === 0 ? (
+            <tbody className="divide-y divide-slate-200 text-xs">
+              {filteredSubjects.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-500 bg-slate-50/50">
-                    <p className="text-sm font-semibold text-slate-700 mb-2">
-                      No courses currently added for {program}
-                    </p>
-                    <p className="text-xs text-slate-500 mb-4">
-                      Click the button below to enable the first course entry row.
+                  <td
+                    colSpan={showAdvancedColumns ? 10 : 7}
+                    className="py-12 text-center text-slate-400 bg-white"
+                  >
+                    <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-600 text-sm">No matching courses found</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      No course matches &quot;{courseFilterQuery}&quot;. Clear the search or click &quot;Add Course&quot; to insert one.
                     </p>
                     <button
-                      id="btn-add-first-subject-row"
                       type="button"
-                      onClick={handleAddRow}
-                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs inline-flex items-center gap-2 transition-colors cursor-pointer"
+                      onClick={() => setCourseFilterQuery('')}
+                      className="mt-3 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" />
-                      Add First Course
+                      Clear Search Filter
                     </button>
                   </td>
                 </tr>
               ) : (
-                subjects.map((row, idx) => {
-                  const isBlank = !row.courseCode.trim() && !row.subjectTitle.trim() && !row.status;
+                filteredSubjects.map((subject, idx) => {
+                  const isUploaded = subject.status === 'Uploaded';
+                  const isPending = subject.status === 'Pending';
+                  const isInProgress = subject.status === 'In Progress';
+                  const isNotApplicable = subject.status === 'Not Applicable';
 
                   return (
                     <tr
-                      key={row.id || idx}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isBlank ? 'bg-slate-50/20' : 'bg-white'
+                      key={subject.id}
+                      className={`hover:bg-slate-50 transition-colors ${
+                        isUploaded
+                          ? 'bg-emerald-50/20'
+                          : isPending
+                          ? 'bg-amber-50/20'
+                          : isInProgress
+                          ? 'bg-blue-50/20'
+                          : ''
                       }`}
                     >
-                      {/* Index */}
-                      <td className="py-2 px-2 text-center font-bold text-slate-400 border-r border-slate-200">
+                      {/* Row index */}
+                      <td className="py-2.5 px-3 text-center text-slate-400 font-semibold">
                         {idx + 1}
                       </td>
 
-                      {/* Course Code (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
+                      {/* Course Code */}
+                      <td className="py-2 px-3">
                         <input
-                          id={`input-course-code-${idx + 1}`}
                           type="text"
-                          value={row.courseCode}
-                          onChange={(e) => handleRowChange(idx, 'courseCode', e.target.value)}
-                          placeholder="e.g. CS-301"
-                          className="w-full px-2 py-1.5 text-xs font-mono font-medium rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
-
-                      {/* Subject Title (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
-                        <input
-                          id={`input-subject-title-${idx + 1}`}
-                          type="text"
-                          value={row.subjectTitle}
-                          onChange={(e) => handleRowChange(idx, 'subjectTitle', e.target.value)}
-                          placeholder="e.g. Database Systems"
-                          className="w-full px-2 py-1.5 text-xs font-medium rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
-
-                      {/* Credit Hours (Manual Entry) */}
-                      <td className="py-1 px-1 border-r border-slate-200 text-center">
-                        <input
-                          id={`input-credit-hours-${idx + 1}`}
-                          type="text"
-                          value={row.creditHours}
-                          onChange={(e) => handleRowChange(idx, 'creditHours', e.target.value)}
-                          placeholder="3"
-                          className="w-full px-1 py-1.5 text-xs text-center font-medium rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
-
-                      {/* Section / Shift (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
-                        <input
-                          id={`input-section-shift-${idx + 1}`}
-                          type="text"
-                          value={row.sectionShift}
-                          onChange={(e) => handleRowChange(idx, 'sectionShift', e.target.value)}
-                          placeholder="e.g. Sec A / Morning"
-                          className="w-full px-2 py-1.5 text-xs rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
-
-                      {/* LMS Result Status (DROPDOWN ONLY) */}
-                      <td className="py-1 px-2 border-r border-slate-200 bg-emerald-50/20">
-                        <select
-                          id={`select-status-${idx + 1}`}
-                          value={row.status}
+                          value={subject.courseCode || ''}
                           onChange={(e) =>
-                            handleRowChange(idx, 'status', e.target.value as LMSStatus)
+                            handleRowChangeById(subject.id, 'courseCode', e.target.value.toUpperCase())
                           }
-                          className={`w-full px-2 py-1.5 text-xs font-semibold rounded border focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all ${
-                            row.status === 'Uploaded'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : row.status === 'Pending'
-                              ? 'bg-amber-100 text-amber-800 border-amber-300'
-                              : row.status === 'In Progress'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300'
-                              : row.status === 'Not Applicable'
-                              ? 'bg-slate-200 text-slate-700 border-slate-300'
-                              : 'bg-white text-slate-400 border-slate-300'
+                          placeholder="e.g. CS-101"
+                          className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs font-mono font-semibold text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                        />
+                      </td>
+
+                      {/* Course Title */}
+                      <td className="py-2 px-3">
+                        <input
+                          type="text"
+                          value={subject.subjectTitle || ''}
+                          onChange={(e) =>
+                            handleRowChangeById(subject.id, 'subjectTitle', e.target.value)
+                          }
+                          placeholder="Enter course name / subject title"
+                          className="w-full bg-transparent border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium"
+                        />
+                      </td>
+
+                      {/* Credit Hours */}
+                      <td className="py-2 px-2 text-center">
+                        <input
+                          type="text"
+                          value={subject.creditHours || ''}
+                          onChange={(e) =>
+                            handleRowChangeById(subject.id, 'creditHours', e.target.value)
+                          }
+                          placeholder="3"
+                          title="Credit hours e.g. 3 or 3(2-1)"
+                          className="w-16 mx-auto text-center bg-transparent border border-slate-200 rounded py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium"
+                        />
+                      </td>
+
+                      {/* Teacher / Instructor */}
+                      <td className="py-2 px-3">
+                        <input
+                          type="text"
+                          value={subject.uploadedBy || ''}
+                          onChange={(e) =>
+                            handleRowChangeById(subject.id, 'uploadedBy', e.target.value)
+                          }
+                          placeholder="e.g. Dr. Ahmad Khan"
+                          className="w-full bg-transparent border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                        />
+                      </td>
+
+                      {/* LMS Upload Status */}
+                      <td className="py-2 px-3">
+                        <select
+                          value={subject.status}
+                          onChange={(e) =>
+                            handleRowChangeById(subject.id, 'status', e.target.value as LMSStatus)
+                          }
+                          className={`w-full font-bold text-xs rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:outline-none focus:ring-2 ${
+                            isUploaded
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300 focus:ring-emerald-500'
+                              : isInProgress
+                              ? 'bg-blue-100 text-blue-900 border-blue-300 focus:ring-blue-500'
+                              : isPending
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 focus:ring-amber-500'
+                              : 'bg-slate-100 text-slate-700 border-slate-300 focus:ring-slate-500'
                           }`}
                         >
-                          <option value="">-- Select Status --</option>
-                          <option value="Uploaded">Uploaded</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Not Applicable">Not Applicable</option>
+                          <option value="Uploaded">✓ Uploaded (Complete)</option>
+                          <option value="In Progress">⏳ In Progress</option>
+                          <option value="Pending">⚠ Pending (Not Uploaded)</option>
+                          <option value="Not Applicable">✕ Not Applicable</option>
                         </select>
                       </td>
 
-                      {/* Date Uploaded (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
-                        <input
-                          id={`input-date-uploaded-${idx + 1}`}
-                          type="text"
-                          value={row.dateUploaded}
-                          onChange={(e) => handleRowChange(idx, 'dateUploaded', e.target.value)}
-                          placeholder="DD-MM-YYYY"
-                          className="w-full px-2 py-1.5 text-xs font-mono rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
+                      {/* Section / Shift (Advanced column) */}
+                      {showAdvancedColumns && (
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={subject.sectionShift || ''}
+                            onChange={(e) =>
+                              handleRowChangeById(subject.id, 'sectionShift', e.target.value)
+                            }
+                            placeholder="e.g. Morning - A"
+                            className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                          />
+                        </td>
+                      )}
 
-                      {/* Uploaded By (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
-                        <input
-                          id={`input-uploaded-by-${idx + 1}`}
-                          type="text"
-                          value={row.uploadedBy}
-                          onChange={(e) => handleRowChange(idx, 'uploadedBy', e.target.value)}
-                          placeholder="e.g. HOD / Teacher"
-                          className="w-full px-2 py-1.5 text-xs rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
+                      {/* Notification Date / Date Uploaded (Advanced column) */}
+                      {showAdvancedColumns && (
+                        <td className="py-2 px-3">
+                          <input
+                            type="date"
+                            value={subject.dateUploaded || ''}
+                            onChange={(e) =>
+                              handleRowChangeById(subject.id, 'dateUploaded', e.target.value)
+                            }
+                            className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                          />
+                        </td>
+                      )}
 
-                      {/* Remarks (Manual Entry) */}
-                      <td className="py-1 px-2 border-r border-slate-200">
-                        <input
-                          id={`input-remarks-${idx + 1}`}
-                          type="text"
-                          value={row.remarks}
-                          onChange={(e) => handleRowChange(idx, 'remarks', e.target.value)}
-                          placeholder="Optional remarks"
-                          className="w-full px-2 py-1.5 text-xs rounded border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all"
-                        />
-                      </td>
+                      {/* LMS Ref / Remarks (Advanced column) */}
+                      {showAdvancedColumns && (
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={subject.remarks || ''}
+                            onChange={(e) =>
+                              handleRowChangeById(subject.id, 'remarks', e.target.value)
+                            }
+                            placeholder="Optional notes / link"
+                            className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs text-slate-600 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                          />
+                        </td>
+                      )}
 
-                      {/* Action: Delete Row */}
-                      <td className="py-1 px-2 text-center">
+                      {/* Action (Delete row) */}
+                      <td className="py-2 px-2 text-center">
                         <button
-                          id={`btn-delete-row-${idx + 1}`}
                           type="button"
-                          onClick={() => handleDeleteRow(idx)}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                          title={`Delete row #${idx + 1}`}
+                          onClick={() => handleDeleteRowById(subject.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                          title="Delete course row"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1104,34 +1180,44 @@ export const HODEntryForm: React.FC<Props> = ({
           </table>
         </div>
 
-        {/* Dynamic Add Row Bottom Bar */}
-        <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <button
-            id="btn-add-subject-row-bottom"
-            type="button"
-            onClick={handleAddRow}
-            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            + Add Course Row
-          </button>
+        {/* Card Footer Toolbar with Add Row & Clear Row options */}
+        <div className="p-4 bg-slate-50/90 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddRow}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Add Another Course</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleRemoveRow}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 font-medium rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              title="Remove the last empty row"
+            >
+              <Minus className="w-3.5 h-3.5 text-slate-500" />
+              <span>Remove Last Row</span>
+            </button>
+          </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-600">
+          <div className="flex items-center gap-2 text-slate-600 font-medium">
             <span>
-              Configured for <strong>Session {session} – Semester {semester}</strong>
+              Configured: <strong>Session {session} – Semester {semester}</strong> ({shift})
             </span>
             <span className="text-slate-300">|</span>
-            <span className="font-semibold text-emerald-800">
-              Active in Summary: {summary.totalSubjects} course(s)
+            <span className="text-emerald-800 font-bold">
+              {summary.uploaded} of {summary.totalSubjects} Uploaded ({summary.uploadPercentage}%)
             </span>
           </div>
         </div>
       </div>
 
-      {/* SECTION 04: ACTION BUTTONS (Save / Update, Clear Form, Delete Record) */}
+      {/* CARD 4: ACTIONS & SUBMISSION BAR (Save, Reset, Export) */}
       <div
         id="hod-action-bar"
-        className="bg-white p-4 rounded-lg border border-slate-300 shadow-xs flex flex-wrap items-center justify-between gap-4"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-wrap items-center justify-between gap-4"
       >
         <div className="flex flex-wrap items-center gap-3">
           {/* SAVE / UPDATE BUTTON */}
@@ -1140,31 +1226,31 @@ export const HODEntryForm: React.FC<Props> = ({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-lg shadow-xs flex items-center gap-2 transition-all"
+            className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            {isExistingRecord ? 'UPDATE RECORD' : 'SAVE RECORD'}
+            <span>{isExistingRecord ? 'UPDATE RECORD IN DATABASE' : 'SAVE RECORD TO DATABASE'}</span>
           </button>
 
-          {/* CLEAR FORM BUTTON (Clears screen ONLY, does NOT delete database) */}
+          {/* CLEAR FORM BUTTON */}
           <button
             id="btn-clear-form"
             type="button"
             onClick={handleClearForm}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 flex items-center gap-2 transition-all"
-            title="Clear what is currently shown on screen without deleting saved database record"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 flex items-center gap-2 transition-all cursor-pointer"
+            title="Reset active form fields without deleting database records"
           >
             <RotateCcw className="w-4 h-4 text-slate-500" />
-            CLEAR FORM
+            <span>RESET FORM</span>
           </button>
 
-          {/* DELETE RECORD BUTTON (Only appears if record exists or when requested) */}
+          {/* DELETE RECORD BUTTON */}
           <button
             id="btn-delete-record"
             type="button"
             onClick={() => setIsDeleteModalOpen(true)}
             disabled={!isExistingRecord}
-            className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all border ${
+            className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all border cursor-pointer ${
               isExistingRecord
                 ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
                 : 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
@@ -1172,7 +1258,7 @@ export const HODEntryForm: React.FC<Props> = ({
             title="Permanently remove saved record for this program from database"
           >
             <Trash2 className="w-4 h-4" />
-            DELETE RECORD
+            <span>DELETE RECORD</span>
           </button>
         </div>
 
@@ -1182,10 +1268,10 @@ export const HODEntryForm: React.FC<Props> = ({
             id="btn-export-program-csv"
             type="button"
             onClick={handleExportCurrent}
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-all"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
-            Export Program CSV
+            <span>Export Program CSV</span>
           </button>
         </div>
       </div>

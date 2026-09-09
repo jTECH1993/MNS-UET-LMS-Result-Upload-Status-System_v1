@@ -7,8 +7,11 @@ import {
   User,
   ShieldCheck,
   Edit2,
+  Calendar,
+  Layers,
 } from 'lucide-react';
 import { ActiveUserSession } from '../types';
+import { MnsUetLogo } from './MnsUetLogo';
 
 interface Props {
   activeView: 'HOD' | 'VC';
@@ -17,6 +20,8 @@ interface Props {
   onOpenUserModal: () => void;
   currentUser: ActiveUserSession;
   savedCount: number;
+  currentSession?: string;
+  currentSemester?: string;
 }
 
 export const Header: React.FC<Props> = ({
@@ -26,6 +31,8 @@ export const Header: React.FC<Props> = ({
   onOpenUserModal,
   currentUser,
   savedCount,
+  currentSession = '2023',
+  currentSemester = '1',
 }) => {
   return (
     <header className="bg-white border-b border-slate-300 shadow-xs sticky top-0 z-30">
@@ -33,7 +40,9 @@ export const Header: React.FC<Props> = ({
       <div className="bg-emerald-800 text-emerald-100 text-[11px] font-medium py-1 px-4 flex flex-wrap justify-between items-center gap-2">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Official Portal • Academic Session 2023 – Semester 1 Results System</span>
+          <span>
+            Official Portal • Academic Session {currentSession} – Semester {currentSemester} Results System
+          </span>
         </div>
         <div className="flex items-center gap-3 text-[11px]">
           {/* User Identification Traceability Pill */}
@@ -60,8 +69,9 @@ export const Header: React.FC<Props> = ({
       <div className="max-w-7xl mx-auto px-4 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* University Crest & Titles */}
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-lg bg-emerald-900 border border-emerald-700 flex items-center justify-center text-white font-serif font-black text-xl shadow-xs shrink-0">
-            <Building className="w-7 h-7 text-emerald-200" />
+          {/* Official University Crest Logo */}
+          <div className="shrink-0 flex items-center justify-center p-0.5 rounded-full bg-slate-50 border border-slate-200 shadow-xs hover:scale-105 transition-transform">
+            <MnsUetLogo className="w-13 h-13 sm:w-14 sm:h-14" />
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-snug uppercase">
@@ -70,9 +80,15 @@ export const Header: React.FC<Props> = ({
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 font-semibold tracking-wide mt-0.5">
               <span className="text-emerald-800 font-bold">LMS RESULT UPLOAD STATUS MONITORING</span>
               <span className="text-slate-300">|</span>
-              <span className="text-slate-700">SESSION 2023</span>
+              <span className="inline-flex items-center gap-1 text-slate-800 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                <Calendar className="w-3 h-3 text-emerald-700" />
+                SESSION {currentSession}
+              </span>
               <span className="text-slate-300">|</span>
-              <span className="text-slate-700">SEMESTER 1</span>
+              <span className="inline-flex items-center gap-1 text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
+                <Layers className="w-3 h-3 text-emerald-700" />
+                SEMESTER {currentSemester}
+              </span>
             </div>
             <p className="text-[11px] text-slate-500 font-normal">
               University-wide HOD / Program Coordinator Submission Interface

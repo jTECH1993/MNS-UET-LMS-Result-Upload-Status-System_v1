@@ -117,13 +117,36 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
   },
 ];
 
+export const DEGREE_LEVEL_OPTIONS = [
+  'BS (4 Years)',
+  'BS Engineering',
+  'BS Engineering Technology',
+  'B.Tech',
+  'BBA (Hons.)',
+  'MBA',
+  'MS / M.Sc.',
+  'PhD',
+];
+
 /**
  * The unique identity of each submitted status is:
- * Department + Program + Level + Shift (+ Session + Semester)
- * e.g. Computer Science + BS Computer Science + BS + Morning
- * is strictly isolated from Computer Science + BS Computer Science + BS + Evening.
+ * Department + Program + Shift + Session + Semester
+ * e.g. Computer Science + BS Computer Science + Morning + 2023 + 1
+ * is strictly isolated from Computer Science + BS Computer Science + Evening + 2023 + 1.
  */
 export function getRecordKey(
+  department: string,
+  program: string,
+  degreeLevel?: string,
+  shift: AcademicShift = 'Morning',
+  session: string = '2023',
+  semester: string = '1'
+): string {
+  const sanitize = (str: string) => (str || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `${sanitize(department)}__${sanitize(program)}__${sanitize(shift)}__${(session || '2023').trim()}__${(semester || '1').trim()}`;
+}
+
+export function getLegacyRecordKey(
   department: string,
   program: string,
   degreeLevel: string,
@@ -131,8 +154,8 @@ export function getRecordKey(
   session: string = '2023',
   semester: string = '1'
 ): string {
-  const sanitize = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-  return `${sanitize(department)}__${sanitize(program)}__${sanitize(degreeLevel)}__${sanitize(shift)}__${session}__${semester}`;
+  const sanitize = (str: string) => (str || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `${sanitize(department)}__${sanitize(program)}__${sanitize(degreeLevel)}__${sanitize(shift)}__${(session || '2023').trim()}__${(semester || '1').trim()}`;
 }
 
 export function createEmptySubjectRow(
@@ -154,7 +177,7 @@ export function createEmptySubjectRow(
 }
 
 export function createInitialBlankRows(
-  count: number = 1,
+  count: number = 8,
   defaultShift: AcademicShift = 'Morning',
   semester: string = '1'
 ) {

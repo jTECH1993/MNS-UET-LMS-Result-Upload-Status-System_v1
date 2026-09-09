@@ -83,6 +83,8 @@ export default function App() {
         onOpenUserModal={() => setIsUserModalOpen(true)}
         currentUser={currentUser}
         savedCount={allRecords.length}
+        currentSession={targetSession}
+        currentSemester={targetSemester}
       />
 
       {/* Main Container */}
@@ -158,8 +160,12 @@ export default function App() {
             selectedSemesterProp={targetSemester}
             onSessionChangedProp={(newSess) => setTargetSession(newSess)}
             onSemesterChangedProp={(newSem) => setTargetSemester(newSem)}
+            onDepartmentChangedProp={(newDept) => setTargetDept(newDept)}
+            onProgramChangedProp={(newProg) => setTargetProg(newProg)}
+            onShiftChangedProp={(newShift) => setTargetShift(newShift)}
             currentUser={currentUser}
             onOpenUserModal={() => setIsUserModalOpen(true)}
+            onSwitchToVC={() => setActiveView('VC')}
           />
         ) : (
           <VCDashboard
@@ -172,25 +178,29 @@ export default function App() {
       {/* Institutional Footer */}
       <footer className="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Building className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-slate-800 p-0.5 flex items-center justify-center">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            </div>
             <span className="font-semibold text-slate-200">
               Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-slate-400">
-            <span>Academic Session 2023 – Semester 1 Result Portal</span>
+            <span className="text-emerald-300 font-medium">
+              Academic Session {targetSession} – Semester {targetSemester} Portal
+            </span>
             <span>•</span>
             <button
               onClick={() => setIsUserModalOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold underline"
+              className="text-emerald-400 hover:text-emerald-300 font-semibold underline cursor-pointer"
             >
               Access Identity Traceability
             </button>
             <span>•</span>
             <button
               onClick={() => setIsFirebaseModalOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold underline"
+              className="text-emerald-400 hover:text-emerald-300 font-semibold underline cursor-pointer"
             >
               Database Status & Schema
             </button>

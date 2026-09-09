@@ -39,6 +39,24 @@ export interface ActiveUserSession {
   department: string;
 }
 
+export interface AuditChangeDetail {
+  courseCode: string;
+  courseTitle?: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: 'Created' | 'Updated' | 'Unlocked';
+  actorName: string;
+  actorDesignation?: string;
+  summary: string;
+  changes?: AuditChangeDetail[];
+}
+
 export interface SubmissionRecord {
   id: string; // key: department__program__degreeLevel__shift__session__semester
   department: string;
@@ -54,6 +72,11 @@ export interface SubmissionRecord {
   userDesignation?: string;
   updatedAt: string;
   createdAt: string;
+
+  // Security credentials (No Login + Reference Number + Edit PIN)
+  referenceNumber: string; // e.g. "MNSUET-CS-BSCS-S1-M-7F4K92"
+  editPin: string; // e.g. "58392174"
+  auditTrail: AuditLogEntry[];
 }
 
 export interface ExecutiveSummary {
