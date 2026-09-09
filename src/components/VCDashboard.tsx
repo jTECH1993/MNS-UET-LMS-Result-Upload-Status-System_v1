@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
+import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SHIFTS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
-import { SubmissionRecord } from '../types';
+import { SubmissionRecord, AcademicShift } from '../types';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
+import { AcademicSessionModal } from './AcademicSessionModal';
 import {
   Building2,
   CheckCircle2,
@@ -16,82 +17,97 @@ import {
   GraduationCap,
   Filter,
   SlidersHorizontal,
+  Sun,
+  Moon,
+  Calendar,
 } from 'lucide-react';
 
 interface Props {
-  onSelectProgramToEdit: (department: string, program: string) => void;
+  onSelectProgramToEdit: (department: string, program: string, shift?: AcademicShift, session?: string) => void;
   allRecords: SubmissionRecord[];
 }
 
 export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords }) => {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | AcademicShift>('ALL');
+  const [currentSession, setCurrentSession] = useState<string>(() => StorageService.getSelectedSession());
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'PENDING'>('ALL');
-  const [onlySession2023Filter, setOnlySession2023Filter] = useState<boolean>(true);
+  const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(true);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
 
-  // Map of submissions by unique key
+  // Map of submissions by unique key: department__program__degreeLevel__shift__session
   const recordMap = useMemo(() => {
     const map = new Map<string, SubmissionRecord>();
     allRecords.forEach((r) => {
-      map.set(`${r.department.trim()}__${r.program.trim()}`, r);
+      const shiftVal = r.shift || 'Morning';
+      const sessVal = r.session || '2023';
+      map.set(`${r.department.trim()}__${r.program.trim()}__${shiftVal}__${sessVal}`, r);
     });
     return map;
   }, [allRecords]);
 
-  // Aggregate university totals using persistent Session 2023 roster
-  const allUniversityPrograms = useMemo(() => {
+  // Aggregate university cohorts by Department -> Program -> Level -> Shift (Morning & Evening)
+  const allUniversityCohorts = useMemo(() => {
     const list: {
       department: string;
       deptCode: string;
       program: string;
       degreeLevel: string;
-      session2023: boolean;
+      shift: AcademicShift;
+      sessionActive: boolean;
       submission: SubmissionRecord | null;
     }[] = [];
 
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
-      const active2023Names = StorageService.getSession2023Programs(dept.name);
+      const activeProgNames = StorageService.getSessionPrograms(dept.name, currentSession);
       dept.programs.forEach((prog) => {
-        const isSession2023Active = active2023Names.includes(prog.name);
-        const sub = recordMap.get(`${dept.name.trim()}__${prog.name.trim()}`) || null;
-        list.push({
-          department: dept.name,
-          deptCode: dept.code,
-          program: prog.name,
-          degreeLevel: prog.degreeLevel,
-          session2023: isSession2023Active,
-          submission: sub,
+        const isSessionActive = activeProgNames.includes(prog.name);
+        // Add both Morning and Evening shift cohorts
+        ACADEMIC_SHIFTS.forEach(({ id: shift }) => {
+          const sub = recordMap.get(`${dept.name.trim()}__${prog.name.trim()}__${shift}__${currentSession}`) || null;
+          list.push({
+            department: dept.name,
+            deptCode: dept.code,
+            program: prog.name,
+            degreeLevel: prog.degreeLevel,
+            shift,
+            sessionActive: isSessionActive,
+            submission: sub,
+          });
         });
       });
     });
 
     return list;
-  }, [recordMap, rosterVersion]);
+  }, [recordMap, currentSession, rosterVersion]);
 
-  // High-level statistics (Accurate Genuine Metrics based on active Session 2023 selection)
+  // High-level statistics based on active Session and Shift filters
   const stats = useMemo(() => {
     const totalDepartments = UNIVERSITY_DEPARTMENTS.length;
     
-    // Genuine tracked program set (Session 2023 cohorts only when filter is on)
-    const trackedPrograms = onlySession2023Filter
-      ? allUniversityPrograms.filter((p) => p.session2023)
-      : allUniversityPrograms;
+    // Tracked cohorts set (Session active cohorts when filter is on, and matched shift)
+    const trackedCohorts = allUniversityCohorts.filter((c) => {
+      if (onlySessionFilter && !c.sessionActive) return false;
+      if (selectedShiftFilter !== 'ALL' && c.shift !== selectedShiftFilter) return false;
+      return true;
+    });
 
-    const totalPrograms = trackedPrograms.length;
-    const submittedPrograms = trackedPrograms.filter((p) => p.submission !== null).length;
-    const pendingPrograms = totalPrograms - submittedPrograms;
+    const totalCohorts = trackedCohorts.length;
+    const submittedCohorts = trackedCohorts.filter((c) => c.submission !== null).length;
+    const pendingCohorts = totalCohorts - submittedCohorts;
 
     let totalSubjectsAcrossUni = 0;
     let totalUploadedAcrossUni = 0;
     let totalPendingAcrossUni = 0;
     let totalInProgressAcrossUni = 0;
 
-    trackedPrograms.forEach((p) => {
-      if (p.submission) {
-        const sum = StorageService.calculateSummary(p.submission.subjects);
+    trackedCohorts.forEach((c) => {
+      if (c.submission) {
+        const sum = StorageService.calculateSummary(c.submission.subjects);
         totalSubjectsAcrossUni += sum.totalSubjects;
         totalUploadedAcrossUni += sum.uploaded;
         totalPendingAcrossUni += sum.pending;
@@ -104,29 +120,30 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         ? Math.round((totalUploadedAcrossUni / totalSubjectsAcrossUni) * 100)
         : 0;
 
-    const programSubmissionPercentage =
-      totalPrograms > 0
-        ? Math.round((submittedPrograms / totalPrograms) * 100)
+    const cohortSubmissionPercentage =
+      totalCohorts > 0
+        ? Math.round((submittedCohorts / totalCohorts) * 100)
         : 0;
 
     return {
       totalDepartments,
-      totalPrograms,
-      submittedPrograms,
-      pendingPrograms,
-      programSubmissionPercentage,
+      totalCohorts,
+      submittedCohorts,
+      pendingCohorts,
+      cohortSubmissionPercentage,
       totalSubjectsAcrossUni,
       totalUploadedAcrossUni,
       totalPendingAcrossUni,
       totalInProgressAcrossUni,
       uniUploadPercentage,
     };
-  }, [allUniversityPrograms, onlySession2023Filter]);
+  }, [allUniversityCohorts, onlySessionFilter, selectedShiftFilter]);
 
-  // Filtered program list
-  const filteredPrograms = useMemo(() => {
-    return allUniversityPrograms.filter((item) => {
-      if (onlySession2023Filter && !item.session2023) return false;
+  // Filtered cohort list
+  const filteredCohorts = useMemo(() => {
+    return allUniversityCohorts.filter((item) => {
+      if (onlySessionFilter && !item.sessionActive) return false;
+      if (selectedShiftFilter !== 'ALL' && item.shift !== selectedShiftFilter) return false;
       const matchDept = selectedDeptFilter === 'ALL' || item.department === selectedDeptFilter;
       const matchStatus =
         statusFilter === 'ALL'
@@ -139,11 +156,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         !query ||
         item.program.toLowerCase().includes(query) ||
         item.department.toLowerCase().includes(query) ||
-        item.degreeLevel.toLowerCase().includes(query);
+        item.degreeLevel.toLowerCase().includes(query) ||
+        item.shift.toLowerCase().includes(query);
 
       return matchDept && matchStatus && matchSearch;
     });
-  }, [allUniversityPrograms, onlySession2023Filter, selectedDeptFilter, statusFilter, searchQuery]);
+  }, [allUniversityCohorts, onlySessionFilter, selectedShiftFilter, selectedDeptFilter, statusFilter, searchQuery]);
 
   return (
     <div id="vc-admin-dashboard" className="space-y-6">
@@ -154,14 +172,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <span className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-0.5 rounded uppercase tracking-wider">
               Executive Monitoring
             </span>
-            <span className="text-slate-400 text-xs">Session 2023 – Semester 1</span>
+            <button
+              type="button"
+              onClick={() => setIsSessionModalOpen(true)}
+              className="text-emerald-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1 border border-slate-700 transition-colors cursor-pointer"
+            >
+              <Calendar className="w-3 h-3 text-emerald-400" />
+              Session {currentSession}
+            </button>
+            <span className="text-slate-400 text-xs">• Semester 1</span>
           </div>
           <h2 className="text-xl font-bold tracking-tight text-slate-100">
             Vice Chancellor & Deans Overview Dashboard
           </h2>
           <p className="text-xs text-slate-300">
-            Real-time status of LMS result submissions across all faculties, schools, and academic
-            departments.
+            Real-time status of LMS result submissions across all faculties, schools, academic
+            departments, and shifts (Morning & Evening).
           </p>
         </div>
 
@@ -170,7 +196,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             id="btn-export-university-master-csv"
             type="button"
             onClick={() => StorageService.exportCSV()}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-2 transition-colors"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Download className="w-4 h-4" />
             Download Master University Report (CSV)
@@ -183,26 +209,32 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         {/* Total Submissions Progress */}
         <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Program Submissions
+            Class Cohort Submissions
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-2xl font-black text-slate-900">
-              {stats.submittedPrograms} / {stats.totalPrograms}
+              {stats.submittedCohorts} / {stats.totalCohorts}
             </span>
             <span className="text-xs font-bold text-emerald-700">
-              {Math.round((stats.submittedPrograms / stats.totalPrograms) * 100)}%
+              {stats.totalCohorts > 0
+                ? `${Math.round((stats.submittedCohorts / stats.totalCohorts) * 100)}%`
+                : '0%'}
             </span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">
             <div
               className="bg-emerald-600 h-full rounded-full transition-all"
               style={{
-                width: `${(stats.submittedPrograms / stats.totalPrograms) * 100}%`,
+                width: `${
+                  stats.totalCohorts > 0
+                    ? (stats.submittedCohorts / stats.totalCohorts) * 100
+                    : 0
+                }%`,
               }}
             />
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            {stats.pendingPrograms} programs awaiting HOD entry
+            {stats.pendingCohorts} cohort(s) awaiting HOD entry
           </p>
         </div>
 
@@ -218,7 +250,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <span className="text-xs text-slate-500">courses</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-3">
-            Across {stats.submittedPrograms} submitted academic programs
+            Across {stats.submittedCohorts} submitted academic cohort(s)
           </p>
         </div>
 
@@ -284,6 +316,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             </select>
           </div>
 
+          {/* Shift Filter (Morning / Evening) */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+            <span className="text-slate-400 font-semibold">Shift:</span>
+            <select
+              id="filter-shift"
+              value={selectedShiftFilter}
+              onChange={(e) => setSelectedShiftFilter(e.target.value as any)}
+              className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value="ALL">All Shifts (Morning & Evening)</option>
+              <option value="Morning">Morning Only</option>
+              <option value="Evening">Evening Only</option>
+            </select>
+          </div>
+
           {/* Submission Status Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
             <Filter className="w-4 h-4 text-slate-400" />
@@ -294,20 +341,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
               <option value="ALL">All Statuses</option>
-              <option value="SUBMITTED">Submitted in Database ({stats.submittedPrograms})</option>
-              <option value="PENDING">Pending Submission ({stats.pendingPrograms})</option>
+              <option value="SUBMITTED">Submitted in Database ({stats.submittedCohorts})</option>
+              <option value="PENDING">Pending Submission ({stats.pendingCohorts})</option>
             </select>
           </div>
 
-          {/* Session 2023 Cohort Toggle */}
+          {/* Session Active Cohort Toggle */}
           <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-700 font-semibold bg-emerald-50/70 px-2.5 py-1.5 rounded-md border border-emerald-300 hover:bg-emerald-100 transition-colors">
             <input
               type="checkbox"
-              checked={onlySession2023Filter}
-              onChange={(e) => setOnlySession2023Filter(e.target.checked)}
+              checked={onlySessionFilter}
+              onChange={(e) => setOnlySessionFilter(e.target.checked)}
               className="rounded text-emerald-700 focus:ring-emerald-600 w-3.5 h-3.5"
             />
-            <span className="text-emerald-950">Session 2023 Cohorts Only</span>
+            <span className="text-emerald-950">Session {currentSession} Active Cohorts Only</span>
           </label>
         </div>
 
@@ -319,36 +366,47 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search department or program..."
+            placeholder="Search department, program, shift..."
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
           />
         </div>
       </div>
 
-      {/* Session 2023 Genuine Tracking Notice */}
+      {/* Session Genuine Tracking Notice */}
       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
         <div className="flex items-center gap-2.5 text-emerald-950">
           <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
           <div>
-            <span className="font-bold">Session 2023 Genuine Status Active: </span>
+            <span className="font-bold">Session {currentSession} Hierarchy Active: </span>
             <span>
-              Monitoring only active programs enrolled for Session 2023 (e.g. 2 programs in Computer Science). Un-offered
-              programs are excluded from calculation, ensuring genuine 100% completion when all active cohorts submit.
+              Tracking: <strong>Department → Program → Level → Shift (Morning / Evening)</strong>. Each shift possesses
+              an independent LMS result template and data area.
             </span>
           </div>
         </div>
-        <button
-          id="btn-vc-configure-roster"
-          type="button"
-          onClick={() => {
-            setRosterDept(selectedDeptFilter !== 'ALL' ? selectedDeptFilter : UNIVERSITY_DEPARTMENTS[0].name);
-            setIsRosterModalOpen(true);
-          }}
-          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-md shadow-2xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>Configure 2023 Programs ({stats.totalPrograms} Monitored)</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-switch-session-vc"
+            type="button"
+            onClick={() => setIsSessionModalOpen(true)}
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 font-semibold rounded-md border border-slate-300 shadow-2xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer text-xs"
+          >
+            <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Switch Session ({currentSession})</span>
+          </button>
+          <button
+            id="btn-vc-configure-roster"
+            type="button"
+            onClick={() => {
+              setRosterDept(selectedDeptFilter !== 'ALL' ? selectedDeptFilter : UNIVERSITY_DEPARTMENTS[0].name);
+              setIsRosterModalOpen(true);
+            }}
+            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-md shadow-2xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer text-xs"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Configure Active Programs</span>
+          </button>
+        </div>
       </div>
 
       {/* Program Status Table */}
@@ -357,11 +415,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <div className="flex items-center gap-2">
             <GraduationCap className="w-4 h-4 text-emerald-400" />
             <h3 className="font-semibold text-sm">
-              Academic Programs LMS Result Upload Roster ({filteredPrograms.length})
+              Academic Cohort LMS Result Upload Roster ({filteredCohorts.length})
             </h3>
           </div>
           <span className="text-xs text-slate-300">
-            Click "Inspect Sheet" to view or edit full course rows in HOD view
+            Click "Inspect Sheet" to view or edit full course rows in HOD view for that exact Shift
           </span>
         </div>
 
@@ -371,7 +429,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <tr className="bg-slate-100 text-slate-700 font-bold tracking-wider border-b border-slate-300 text-[11px] uppercase">
                 <th className="py-2.5 px-3 border-r border-slate-300">Department / School</th>
                 <th className="py-2.5 px-3 border-r border-slate-300">Degree Program</th>
-                <th className="py-2.5 px-2 border-r border-slate-300 text-center w-24">Level</th>
+                <th className="py-2.5 px-2 border-r border-slate-300 text-center w-20">Level</th>
+                <th className="py-2.5 px-3 border-r border-slate-300 text-center w-28">Shift</th>
                 <th className="py-2.5 px-3 border-r border-slate-300 text-center w-36">
                   Submission Status
                 </th>
@@ -383,20 +442,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {filteredPrograms.length === 0 ? (
+              {filteredCohorts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 text-sm">
-                    No programs found matching the selected filters.
+                  <td colSpan={8} className="py-8 text-center text-slate-400 text-sm">
+                    No programs or shifts found matching the selected filters.
                   </td>
                 </tr>
               ) : (
-                filteredPrograms.map((item, index) => {
+                filteredCohorts.map((item, index) => {
                   const sub = item.submission;
                   const summary = sub ? StorageService.calculateSummary(sub.subjects) : null;
+                  const isMorning = item.shift === 'Morning';
 
                   return (
                     <tr
-                      key={`${item.department}-${item.program}-${index}`}
+                      key={`${item.department}-${item.program}-${item.shift}-${index}`}
                       className="hover:bg-slate-50 transition-colors"
                     >
                       {/* Department */}
@@ -408,9 +468,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
                         <div>{item.program}</div>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          {item.session2023 ? (
+                          {item.sessionActive ? (
                             <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200">
-                              Session 2023 Active
+                              Session {currentSession} Active
                             </span>
                           ) : (
                             <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
@@ -423,6 +483,24 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       {/* Degree Level */}
                       <td className="py-2.5 px-2 text-center text-slate-600 font-mono text-[11px] border-r border-slate-200">
                         {item.degreeLevel}
+                      </td>
+
+                      {/* Shift (Morning / Evening) */}
+                      <td className="py-2.5 px-3 text-center border-r border-slate-200">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                            isMorning
+                              ? 'bg-amber-50 text-amber-900 border-amber-300'
+                              : 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                          }`}
+                        >
+                          {isMorning ? (
+                            <Sun className="w-3 h-3 text-amber-600" />
+                          ) : (
+                            <Moon className="w-3 h-3 text-indigo-600" />
+                          )}
+                          {item.shift}
+                        </span>
                       </td>
 
                       {/* Submission Status */}
@@ -493,10 +571,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       {/* Actions */}
                       <td className="py-2.5 px-3 text-center">
                         <button
-                          id={`btn-inspect-${item.program.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                          id={`btn-inspect-${item.program.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${item.shift.toLowerCase()}`}
                           type="button"
-                          onClick={() => onSelectProgramToEdit(item.department, item.program)}
-                          className="px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 rounded border border-emerald-300 transition-colors inline-flex items-center gap-1 shadow-2xs"
+                          onClick={() => onSelectProgramToEdit(item.department, item.program, item.shift, currentSession)}
+                          className="px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 rounded border border-emerald-300 transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
                           <ExternalLink className="w-3 h-3" />
                           Inspect Sheet
@@ -511,11 +589,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
-      {/* Session 2023 Program Roster Selector Modal */}
+      {/* Academic Session Selector Modal */}
+      <AcademicSessionModal
+        isOpen={isSessionModalOpen}
+        onClose={() => setIsSessionModalOpen(false)}
+        currentSession={currentSession}
+        onSessionSelect={(newSess) => {
+          setCurrentSession(newSess);
+        }}
+      />
+
+      {/* Session Program Roster Selector Modal */}
       <Session2023SelectorModal
         isOpen={isRosterModalOpen}
         onClose={() => setIsRosterModalOpen(false)}
         departmentName={rosterDept}
+        sessionName={currentSession}
         onRosterUpdated={() => {
           setRosterVersion((v) => v + 1);
         }}

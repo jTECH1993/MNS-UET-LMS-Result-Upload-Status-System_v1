@@ -7,6 +7,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   departmentName: string;
+  sessionName?: string;
   onRosterUpdated: (activePrograms: string[]) => void;
 }
 
@@ -14,6 +15,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
   isOpen,
   onClose,
   departmentName,
+  sessionName = '2023',
   onRosterUpdated,
 }) => {
   const [selectedDept, setSelectedDept] = useState<string>(departmentName);
@@ -26,11 +28,11 @@ export const Session2023SelectorModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (selectedDept) {
-      const active = StorageService.getSession2023Programs(selectedDept);
+      const active = StorageService.getSessionPrograms(selectedDept, sessionName);
       setSelectedPrograms(active);
       setSavedSuccess(false);
     }
-  }, [selectedDept, isOpen]);
+  }, [selectedDept, sessionName, isOpen]);
 
   if (!isOpen) return null;
 
@@ -53,7 +55,10 @@ export const Session2023SelectorModal: React.FC<Props> = ({
 
   const handleSelectDefaults = () => {
     setSavedSuccess(false);
-    const defaults = allDeptPrograms.filter((p) => p.session2023).map((p) => p.name);
+    const defaults =
+      sessionName === '2023'
+        ? allDeptPrograms.filter((p) => p.session2023).map((p) => p.name)
+        : allDeptPrograms.map((p) => p.name);
     setSelectedPrograms(defaults);
   };
 
@@ -63,7 +68,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
   };
 
   const handleSave = () => {
-    StorageService.setSession2023Programs(selectedDept, selectedPrograms);
+    StorageService.setSessionPrograms(selectedDept, selectedPrograms, sessionName);
     onRosterUpdated(selectedPrograms);
     setSavedSuccess(true);
     setTimeout(() => {
@@ -73,7 +78,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
 
   return (
     <div
-      id="session-2023-selector-modal"
+      id="session-program-selector-modal"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
       <div
@@ -87,9 +92,9 @@ export const Session2023SelectorModal: React.FC<Props> = ({
               <SlidersHorizontal className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Select Session 2023 Enrolled Programs</h2>
+              <h2 className="text-lg font-bold">Select Session {sessionName} Enrolled Programs</h2>
               <p className="text-xs text-emerald-200">
-                Ensure 100% Genuine VC Dashboard Status • Choose only programs that actually enrolled in 2023
+                Accurate Dashboard Tracking • Choose programs actively enrolled in Session {sessionName}
               </p>
             </div>
           </div>
@@ -124,18 +129,16 @@ export const Session2023SelectorModal: React.FC<Props> = ({
             </select>
           </div>
 
-          {/* Genuine status explanation banner */}
+          {/* Explanation banner */}
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-900 space-y-1">
-              <p className="font-semibold">Why this selection matters for the Vice Chancellor Dashboard:</p>
-              <p>
-                If your department had only <strong>2 programs</strong> enrolled in Session 2023 (e.g. BS Computer
-                Science & BS Software Engineering), select only those 2.
+              <p className="font-semibold">
+                Why this selection matters for Session {sessionName} tracking:
               </p>
-              <p className="text-amber-800">
-                The VC Dashboard will track only those 2 programs as required. When both are uploaded, your department will
-                achieve <strong>100% genuine completion</strong>!
+              <p>
+                Departments may offer specific programs in each session. Selecting only the offered
+                programs ensures completion rates in executive dashboards accurately reflect true enrollment.
               </p>
             </div>
           </div>
@@ -143,7 +146,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
           {/* Controls Bar */}
           <div className="flex items-center justify-between pt-1">
             <div className="text-xs font-bold text-slate-600">
-              Active Programs in Session 2023:{' '}
+              Active Programs in Session {sessionName}:{' '}
               <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-mono">
                 {selectedPrograms.length} of {allDeptPrograms.length} Selected
               </span>
@@ -153,17 +156,17 @@ export const Session2023SelectorModal: React.FC<Props> = ({
                 id="btn-select-defaults"
                 type="button"
                 onClick={handleSelectDefaults}
-                className="text-xs font-medium text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 px-2.5 py-1 rounded-md border border-slate-200 transition-colors flex items-center gap-1"
-                title="Reset to 2023 established programs (2 programs)"
+                className="text-xs font-medium text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 px-2.5 py-1 rounded-md border border-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                title={`Reset to default programs for Session ${sessionName}`}
               >
                 <RotateCcw className="w-3 h-3" />
-                Defaults (2023)
+                Defaults
               </button>
               <button
                 id="btn-select-all"
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs font-medium text-slate-600 hover:text-slate-900 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors"
+                className="text-xs font-medium text-slate-600 hover:text-slate-900 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Select All
               </button>
@@ -171,7 +174,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
                 id="btn-clear-selection"
                 type="button"
                 onClick={handleClear}
-                className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded-md hover:bg-rose-50 transition-colors"
+                className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded-md hover:bg-rose-50 transition-colors cursor-pointer"
               >
                 Clear
               </button>
@@ -207,8 +210,8 @@ export const Session2023SelectorModal: React.FC<Props> = ({
                       </div>
                       <p className="text-xs text-slate-500">
                         {isChecked
-                          ? 'Enrolled for Session 2023 • Tracked in VC Dashboard'
-                          : 'Not enrolled in 2023 • Excluded from VC Dashboard calculations'}
+                          ? `Active in Session ${sessionName} • Tracked in VC Dashboard`
+                          : `Excluded from Session ${sessionName} metrics`}
                       </p>
                     </div>
                   </div>
@@ -216,11 +219,11 @@ export const Session2023SelectorModal: React.FC<Props> = ({
                   <div>
                     {isChecked ? (
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                        Active 2023
+                        Active {sessionName}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-400 font-medium px-2.5 py-0.5 rounded-full border border-dashed border-slate-300 whitespace-nowrap">
-                        Not in 2023
+                        Excluded
                       </span>
                     )}
                   </div>
@@ -235,7 +238,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
           <div className="text-xs text-slate-500">
             {savedSuccess ? (
               <span className="text-emerald-700 font-semibold flex items-center gap-1.5 animate-in fade-in">
-                <Check className="w-4 h-4 text-emerald-600" /> Roster applied successfully!
+                <Check className="w-4 h-4 text-emerald-600" /> Roster applied successfully for Session {sessionName}!
               </span>
             ) : (
               <span>Changes apply to HOD dropdown and Vice Chancellor Roster immediately.</span>
@@ -246,7 +249,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
               id="btn-cancel-roster"
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -254,7 +257,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
               id="btn-save-roster"
               type="button"
               onClick={handleSave}
-              className="px-5 py-2 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors flex items-center gap-2"
+              className="px-5 py-2 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               Save & Apply Roster
@@ -265,3 +268,4 @@ export const Session2023SelectorModal: React.FC<Props> = ({
     </div>
   );
 };
+

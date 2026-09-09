@@ -5,6 +5,7 @@ interface Props {
   isOpen: boolean;
   department: string;
   program: string;
+  shift?: string;
   session: string;
   semester: string;
   onCancel: () => void;
@@ -15,6 +16,7 @@ export const DeleteModal: React.FC<Props> = ({
   isOpen,
   department,
   program,
+  shift = 'Morning',
   session,
   semester,
   onCancel,
@@ -58,6 +60,10 @@ export const DeleteModal: React.FC<Props> = ({
               <span className="text-emerald-800 font-bold text-right">{program}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-slate-500 font-medium">Shift:</span>
+              <span className="text-indigo-800 font-bold text-right">{shift}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-slate-500 font-medium">Session / Semester:</span>
               <span className="text-slate-800 font-medium text-right">
                 Session {session} – Semester {semester}
@@ -66,7 +72,7 @@ export const DeleteModal: React.FC<Props> = ({
           </div>
           <p className="text-xs text-rose-600 mt-3 flex items-center gap-1.5 font-medium">
             <Trash2 className="w-3.5 h-3.5 shrink-0" />
-            This action only removes this specific program's record. Other programs are unaffected.
+            This action only removes this specific program and shift record. Other shifts/programs are unaffected.
           </p>
         </div>
 

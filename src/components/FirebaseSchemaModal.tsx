@@ -50,6 +50,7 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
     ? {
         session: currentRecord.session,
         semester: currentRecord.semester,
+        shift: currentRecord.shift || 'Morning',
         department: currentRecord.department,
         program: currentRecord.program,
         degreeLevel: currentRecord.degreeLevel,
@@ -105,6 +106,7 @@ service cloud.firestore {
             data: {
               session: r.session,
               semester: r.semester,
+              shift: r.shift || 'Morning',
               department: r.department,
               program: r.program,
               degreeLevel: r.degreeLevel,

@@ -2,14 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   DepartmentGroup,
   UNIVERSITY_DEPARTMENTS,
+  ACADEMIC_SHIFTS,
   createEmptySubjectRow,
   createInitialBlankRows,
 } from '../data/departmentsData';
-import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession } from '../types';
+import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift } from '../types';
 import { StorageService } from '../services/storageService';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeleteModal } from './DeleteModal';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
+import { AcademicSessionModal } from './AcademicSessionModal';
 import {
   Save,
   Trash2,
@@ -30,30 +32,44 @@ import {
   ShieldCheck,
   Filter,
   SlidersHorizontal,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface Props {
   onRecordSavedOrDeleted?: () => void;
   selectedDepartmentProp?: string;
   selectedProgramProp?: string;
+  selectedShiftProp?: AcademicShift;
+  selectedSessionProp?: string;
   currentUser?: ActiveUserSession;
   onOpenUserModal?: () => void;
+  onSessionChangedProp?: (session: string) => void;
 }
 
 export const HODEntryForm: React.FC<Props> = ({
   onRecordSavedOrDeleted,
   selectedDepartmentProp,
   selectedProgramProp,
+  selectedShiftProp,
+  selectedSessionProp,
   currentUser,
   onOpenUserModal,
+  onSessionChangedProp,
 }) => {
   // Master Selections
   const [department, setDepartment] = useState<string>(
     selectedDepartmentProp || UNIVERSITY_DEPARTMENTS[0].name
   );
 
-  // Filter to show only programs that belong to Session 2023
-  const [onlySession2023, setOnlySession2023] = useState<boolean>(true);
+  // Generic Session State
+  const [session, setSession] = useState<string>(
+    selectedSessionProp || StorageService.getSelectedSession()
+  );
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
+
+  // Filter to show only programs that belong to the selected session
+  const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(true);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
 
@@ -61,13 +77,13 @@ export const HODEntryForm: React.FC<Props> = ({
   const currentDeptPrograms = useMemo(() => {
     const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
     if (!dept) return [];
-    if (onlySession2023) {
-      const active2023Names = StorageService.getSession2023Programs(department);
-      const filtered = dept.programs.filter((p) => active2023Names.includes(p.name));
+    if (onlySessionFilter) {
+      const activeNames = StorageService.getSessionPrograms(department, session);
+      const filtered = dept.programs.filter((p) => activeNames.includes(p.name));
       return filtered.length > 0 ? filtered : dept.programs;
     }
     return dept.programs;
-  }, [department, onlySession2023, rosterVersion]);
+  }, [department, session, onlySessionFilter, rosterVersion]);
 
   const [program, setProgram] = useState<string>(
     selectedProgramProp || (currentDeptPrograms[0]?.name || '')
@@ -79,8 +95,10 @@ export const HODEntryForm: React.FC<Props> = ({
     return progInfo?.degreeLevel || 'BS';
   }, [currentDeptPrograms, program]);
 
-  // Session & Semester fixed to institutional cycle
-  const [session, setSession] = useState<string>('2023');
+  // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
+  const [shift, setShift] = useState<AcademicShift>(selectedShiftProp || 'Morning');
+
+  // Semester fixed to institutional cycle
   const [semester, setSemester] = useState<string>('1');
 
   // Metadata manual fields - initialized with current user name & designation
@@ -102,7 +120,7 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [currentUser]);
 
   // Rows state: starts with only active rows (not forced 8 rows)
-  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1));
+  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning'));
 
   // State flags
   const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
@@ -129,14 +147,26 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   }, [selectedProgramProp]);
 
+  useEffect(() => {
+    if (selectedShiftProp && selectedShiftProp !== shift) {
+      setShift(selectedShiftProp);
+    }
+  }, [selectedShiftProp]);
+
+  useEffect(() => {
+    if (selectedSessionProp && selectedSessionProp !== session) {
+      setSession(selectedSessionProp);
+    }
+  }, [selectedSessionProp]);
+
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
     setDepartment(newDept);
     const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
     if (targetDept && targetDept.programs.length > 0) {
-      const active2023Names = StorageService.getSession2023Programs(newDept);
-      const available = onlySession2023
-        ? targetDept.programs.filter((p) => active2023Names.includes(p.name))
+      const activeNames = StorageService.getSessionPrograms(newDept, session);
+      const available = onlySessionFilter
+        ? targetDept.programs.filter((p) => activeNames.includes(p.name))
         : targetDept.programs;
       const pick = available[0] || targetDept.programs[0];
       setProgram(pick ? pick.name : '');
@@ -145,7 +175,7 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   };
 
-  // LOAD / CHECK EXISTING RECORD whenever Department or Program or Degree Level changes
+  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, or Session changes
   useEffect(() => {
     if (!department || !program) return;
 
@@ -153,12 +183,13 @@ export const HODEntryForm: React.FC<Props> = ({
       department,
       program,
       degreeLevel,
+      shift,
       session,
       semester
     );
 
     if (existing) {
-      // Existing record exists -> LOAD EXACT SAVED ROWS ONLY (not padded to 8)
+      // Existing record exists -> LOAD EXACT SAVED ROWS ONLY
       setIsExistingRecord(true);
       setLastSavedTime(existing.updatedAt);
       if (existing.hodCoordinator) setHodCoordinator(existing.hodCoordinator);
@@ -168,20 +199,23 @@ export const HODEntryForm: React.FC<Props> = ({
       const validRows = existing.subjects.filter(
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
       );
-      setSubjects(validRows.length > 0 ? validRows : createInitialBlankRows(1));
+      setSubjects(validRows.length > 0 ? validRows : createInitialBlankRows(1, shift));
 
       showFeedback(
         'info',
-        `Database record loaded for ${program}: ${validRows.length} subject(s) retrieved.`
+        `Database record loaded for ${program} [${shift} Shift]: ${validRows.length} subject(s) retrieved.`
       );
     } else {
-      // No record exists -> Start with 1 clean row (not 8)
+      // No record exists -> Start with 1 clean row
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(1));
-      showFeedback('info', `New form initialized for ${program}. Click '+ Add Row' to add courses.`);
+      setSubjects(createInitialBlankRows(1, shift));
+      showFeedback(
+        'info',
+        `New form initialized for ${program} (${shift} Shift). Click '+ Add Course Row' to add courses.`
+      );
     }
-  }, [department, program, degreeLevel, session, semester]);
+  }, [department, program, degreeLevel, shift, session, semester]);
 
   const showFeedback = (type: 'success' | 'info' | 'warning', text: string) => {
     setFeedbackMessage({ type, text });
@@ -213,7 +247,7 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('warning', 'Maximum 20 subject rows reached for this sheet.');
       return;
     }
-    const newRow = createEmptySubjectRow(subjects.length + 1);
+    const newRow = createEmptySubjectRow(subjects.length + 1, shift);
     if (currentUser?.name) {
       newRow.uploadedBy = currentUser.name;
     }
@@ -253,6 +287,7 @@ export const HODEntryForm: React.FC<Props> = ({
       department,
       program,
       degreeLevel,
+      shift,
       session,
       semester,
       hodCoordinator,
@@ -274,8 +309,8 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback(
         'success',
         result.isUpdate
-          ? `Record updated successfully for ${program} (${activeRows.length} subjects). Changes saved to database.`
-          : `New record saved successfully for ${program} (${activeRows.length} subjects) in database.`
+          ? `Record updated successfully for ${program} [${shift} Shift] (${activeRows.length} subjects). Changes saved to database.`
+          : `New record saved successfully for ${program} [${shift} Shift] (${activeRows.length} subjects) in database.`
       );
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     }
@@ -283,19 +318,20 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Clear Form (Requirement 11: Clear Form clears screen ONLY, does NOT delete database data)
   const handleClearForm = () => {
-    setSubjects(createInitialBlankRows(1));
+    setSubjects(createInitialBlankRows(1, shift));
     showFeedback(
       'info',
-      'Visible form cleared on screen. Previously saved database records remain untouched.'
+      `Visible form cleared on screen for ${shift} shift. Previously saved database records remain untouched.`
     );
   };
 
-  // Delete Record (Requirement 10: Prompts confirmation, then deletes only that program)
+  // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift program)
   const handleDeleteConfirm = () => {
     const success = StorageService.deleteSubmission(
       department,
       program,
       degreeLevel,
+      shift,
       session,
       semester
     );
@@ -305,8 +341,8 @@ export const HODEntryForm: React.FC<Props> = ({
     if (success) {
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(8));
-      showFeedback('success', `Record permanently deleted from database for ${program}.`);
+      setSubjects(createInitialBlankRows(1, shift));
+      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift].`);
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     } else {
       showFeedback('warning', 'No saved database record was found to delete.');
@@ -320,6 +356,7 @@ export const HODEntryForm: React.FC<Props> = ({
       department,
       program,
       degreeLevel,
+      shift,
       session,
       semester,
       hodCoordinator,
@@ -331,7 +368,12 @@ export const HODEntryForm: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
     StorageService.exportCSV([currentRec]);
-    showFeedback('success', `Exported CSV sheet for ${program}.`);
+    showFeedback('success', `Exported CSV sheet for ${program} [${shift} Shift].`);
+  };
+
+  const handleSessionChangeFromModal = (newSess: string) => {
+    setSession(newSess);
+    if (onSessionChangedProp) onSessionChangedProp(newSess);
   };
 
   return (
@@ -413,25 +455,41 @@ export const HODEntryForm: React.FC<Props> = ({
             <span className="text-xs font-bold tracking-wider uppercase bg-emerald-700 px-2 py-0.5 rounded text-white">
               Section 01
             </span>
-            <h3 className="font-semibold text-sm tracking-wide">SUBMISSION DETAILS</h3>
+            <h3 className="font-semibold text-sm tracking-wide">SUBMISSION DETAILS &amp; ACADEMIC HIERARCHY</h3>
           </div>
           <span className="text-xs text-slate-300 hidden sm:inline">
-            Department → Dependent Program → Auto Degree Level
+            Department → Program → Level → Shift → LMS Result Status
           </span>
         </div>
 
         {/* Informative Guidance Banner */}
-        <div className="bg-emerald-50/70 border-b border-emerald-100 px-4 py-2 text-xs text-emerald-900 flex items-center gap-2">
-          <Info className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>
-            Choose the Department first – the Program list then shows only that department's
-            programs, and the Degree Level appears on its own. If you change the Department, select the Program again.
-          </span>
+        <div className="bg-emerald-50/70 border-b border-emerald-100 px-4 py-2 text-xs text-emerald-900 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Academic Hierarchy: <strong>Department</strong> → <strong>Program</strong> → <strong>Degree Level</strong> → <strong>Shift (Morning / Evening)</strong>.
+              Morning and Evening datasets remain strictly isolated for the same program.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-600 font-semibold text-[11px]">Academic Session:</span>
+            <button
+              id="btn-switch-academic-session"
+              type="button"
+              onClick={() => setIsSessionModalOpen(true)}
+              className="px-2.5 py-1 bg-white border border-emerald-400 hover:border-emerald-600 text-emerald-950 font-bold rounded text-xs shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Click to switch or create a different Academic Session"
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Session {session}</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-medium">Switch</span>
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Primary Dropdowns Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Primary Dropdowns Row - 4 Hierarchy Steps */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* 01: Department / School */}
             <div>
               <label
@@ -439,7 +497,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
               >
                 <Building2 className="w-3.5 h-3.5 text-emerald-700" />
-                01 DEPARTMENT / SCHOOL <span className="text-rose-600">*</span>
+                01 DEPARTMENT <span className="text-rose-600">*</span>
               </label>
               <select
                 id="select-department"
@@ -463,31 +521,31 @@ export const HODEntryForm: React.FC<Props> = ({
                   className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5"
                 >
                   <GraduationCap className="w-3.5 h-3.5 text-emerald-700" />
-                  02 PROGRAM (Dependent) <span className="text-rose-600">*</span>
+                  02 PROGRAM <span className="text-rose-600">*</span>
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     id="btn-open-session-roster"
                     type="button"
                     onClick={() => setIsRosterModalOpen(true)}
-                    className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100/90 hover:bg-emerald-200 border border-emerald-300 px-2 py-0.5 rounded flex items-center gap-1 transition-colors shadow-2xs"
-                    title="Select which programs were enrolled in Session 2023 for this department"
+                    className="text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors shadow-2xs"
+                    title={`Select which programs were enrolled in Session ${session} for this department`}
                   >
                     <SlidersHorizontal className="w-3 h-3 text-emerald-700" />
-                    <span>Select 2023 Programs</span>
+                    <span>Roster</span>
                   </button>
-                  <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-slate-700 font-semibold bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-300 transition-colors">
+                  <label className="inline-flex items-center gap-1 cursor-pointer text-[10px] text-slate-700 font-semibold bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 transition-colors">
                     <input
                       type="checkbox"
-                      checked={onlySession2023}
+                      checked={onlySessionFilter}
                       onChange={(e) => {
                         const checked = e.target.checked;
-                        setOnlySession2023(checked);
+                        setOnlySessionFilter(checked);
                         const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
                         if (dept) {
-                          const active2023Names = StorageService.getSession2023Programs(department);
+                          const activeNames = StorageService.getSessionPrograms(department, session);
                           const valid = checked
-                            ? dept.programs.filter((p) => active2023Names.includes(p.name))
+                            ? dept.programs.filter((p) => activeNames.includes(p.name))
                             : dept.programs;
                           if (valid.length > 0 && !valid.some((p) => p.name === program)) {
                             setProgram(valid[0].name);
@@ -496,7 +554,7 @@ export const HODEntryForm: React.FC<Props> = ({
                       }}
                       className="rounded text-emerald-700 focus:ring-emerald-600 w-3 h-3"
                     />
-                    <span>2023 Only</span>
+                    <span>{session} Only</span>
                   </label>
                 </div>
               </div>
@@ -512,19 +570,19 @@ export const HODEntryForm: React.FC<Props> = ({
                   </option>
                 ))}
               </select>
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <div className="mt-1 flex items-center justify-between text-[11px]">
                 <span className="text-emerald-800 font-medium flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>
-                    <strong>{currentDeptPrograms.length}</strong> {currentDeptPrograms.length === 1 ? 'program' : 'programs'} active in Session 2023
+                    <strong>{currentDeptPrograms.length}</strong> active in {session}
                   </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsRosterModalOpen(true)}
-                  className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold text-[11px] flex items-center gap-0.5"
+                  className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold text-[11px]"
                 >
-                  <span>Configure Roster</span>
+                  Configure
                 </button>
               </div>
             </div>
@@ -536,7 +594,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
               >
                 <Layers className="w-3.5 h-3.5 text-emerald-700" />
-                03 DEGREE LEVEL (Automatic)
+                03 DEGREE LEVEL
               </label>
               <div
                 id="input-degree-level"
@@ -547,6 +605,53 @@ export const HODEntryForm: React.FC<Props> = ({
                   Auto-Filled
                 </span>
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">Derived from program credentials</p>
+            </div>
+
+            {/* 04: Shift Selection (Morning vs Evening) */}
+            <div>
+              <label
+                htmlFor="select-shift"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5"
+              >
+                {shift === 'Morning' ? (
+                  <Sun className="w-3.5 h-3.5 text-amber-600" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                )}
+                04 ACADEMIC SHIFT <span className="text-rose-600">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-slate-100 rounded-md border border-slate-300">
+                <button
+                  id="btn-shift-morning"
+                  type="button"
+                  onClick={() => setShift('Morning')}
+                  className={`py-1.5 px-3 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    shift === 'Morning'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Morning</span>
+                </button>
+                <button
+                  id="btn-shift-evening"
+                  type="button"
+                  onClick={() => setShift('Evening')}
+                  className={`py-1.5 px-3 rounded text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    shift === 'Evening'
+                      ? 'bg-indigo-700 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Moon className="w-3.5 h-3.5" />
+                  <span>Evening</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {shift === 'Morning' ? '☀️ Morning roster (separate data)' : '🌙 Evening roster (separate data)'}
+              </p>
             </div>
           </div>
 
@@ -554,18 +659,33 @@ export const HODEntryForm: React.FC<Props> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
             {/* Session / Semester */}
             <div>
-              <label
-                htmlFor="input-session-semester"
-                className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5"
-              >
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                SESSION / SEMESTER
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="input-session-semester"
+                  className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  SESSION / SEMESTER
+                </label>
+                <button
+                  id="btn-change-session-inline"
+                  type="button"
+                  onClick={() => setIsSessionModalOpen(true)}
+                  className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold underline decoration-emerald-500 cursor-pointer"
+                >
+                  Change Session
+                </button>
+              </div>
               <div
                 id="input-session-semester"
-                className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-sm font-semibold text-slate-800"
+                className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-sm font-semibold text-slate-800 flex items-center justify-between"
               >
-                Session {session} – Semester {semester}
+                <span>Session {session} – Semester {semester}</span>
+                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                  shift === 'Morning' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'
+                }`}>
+                  {shift} Shift
+                </span>
               </div>
             </div>
 
@@ -996,17 +1116,27 @@ export const HODEntryForm: React.FC<Props> = ({
         isOpen={isDeleteModalOpen}
         department={department}
         program={program}
+        shift={shift}
         session={session}
         semester={semester}
         onCancel={() => setIsDeleteModalOpen(false)}
         onConfirm={handleDeleteConfirm}
       />
 
-      {/* Session 2023 Program Roster Selector Modal */}
+      {/* Dynamic Academic Session Selector & Creator Modal */}
+      <AcademicSessionModal
+        isOpen={isSessionModalOpen}
+        onClose={() => setIsSessionModalOpen(false)}
+        currentSession={session}
+        onSessionSelect={handleSessionChangeFromModal}
+      />
+
+      {/* Program Roster Selector Modal for current Academic Session */}
       <Session2023SelectorModal
         isOpen={isRosterModalOpen}
         onClose={() => setIsRosterModalOpen(false)}
         departmentName={department}
+        sessionName={session}
         onRosterUpdated={(activeProgs) => {
           setRosterVersion((v) => v + 1);
           if (activeProgs.length > 0 && !activeProgs.includes(program)) {

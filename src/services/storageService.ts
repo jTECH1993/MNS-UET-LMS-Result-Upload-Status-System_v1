@@ -4,20 +4,79 @@ import {
   ExecutiveSummary,
   ActiveUserSession,
   AccessLogEntry,
+  AcademicShift,
 } from '../types';
-import { UNIVERSITY_DEPARTMENTS, INITIAL_SEED_RECORDS, getRecordKey } from '../data/departmentsData';
+import {
+  UNIVERSITY_DEPARTMENTS,
+  INITIAL_SEED_RECORDS,
+  DEFAULT_ACADEMIC_SESSIONS,
+  getRecordKey,
+} from '../data/departmentsData';
 
-const STORAGE_KEY = 'mnsuet_lms_result_records_v2';
+const STORAGE_KEY = 'mnsuet_lms_result_records_v3';
 const USER_KEY = 'mnsuet_lms_active_user_v2';
 const ACCESS_LOG_KEY = 'mnsuet_lms_access_logs_v2';
-const SESSION_2023_ROSTER_KEY = 'mnsuet_session_2023_active_roster_v3';
+const SESSION_ROSTER_KEY = 'mnsuet_session_active_roster_v4';
+const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v1';
+const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v1';
 
 export class StorageService {
-  // Session 2023 Enrolled Programs Management
-  // Allows HODs and VC to select exactly which programs were offered in Session 2023
-  public static getSession2023Programs(departmentName: string): string[] {
+  // Generic Academic Sessions Management (e.g. 2023, 2024, 2025, or custom added)
+  public static getAvailableSessions(): string[] {
     try {
-      const stored = localStorage.getItem(SESSION_2023_ROSTER_KEY);
+      const stored = localStorage.getItem(AVAILABLE_SESSIONS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read available sessions', e);
+    }
+    return DEFAULT_ACADEMIC_SESSIONS;
+  }
+
+  public static addAcademicSession(newSession: string): string[] {
+    const trimmed = newSession.trim();
+    if (!trimmed) return this.getAvailableSessions();
+    const current = this.getAvailableSessions();
+    if (!current.includes(trimmed)) {
+      const updated = [trimmed, ...current];
+      try {
+        localStorage.setItem(AVAILABLE_SESSIONS_KEY, JSON.stringify(updated));
+        this.logAccess(`Added new academic session: Session ${trimmed}`);
+      } catch (e) {
+        console.error('Could not save new academic session', e);
+      }
+      return updated;
+    }
+    return current;
+  }
+
+  public static getSelectedSession(): string {
+    try {
+      const stored = localStorage.getItem(CURRENT_SESSION_KEY);
+      if (stored && stored.trim()) return stored.trim();
+    } catch (e) {
+      // fallback
+    }
+    return '2023';
+  }
+
+  public static setSelectedSession(session: string): void {
+    try {
+      localStorage.setItem(CURRENT_SESSION_KEY, session);
+      this.logAccess(`Switched active academic session to Session ${session}`);
+    } catch (e) {
+      console.error('Could not save selected session', e);
+    }
+  }
+
+  // Session Enrolled Programs Management (Generic per session or department)
+  public static getSessionPrograms(departmentName: string, sessionName: string = '2023'): string[] {
+    try {
+      const stored = localStorage.getItem(`${SESSION_ROSTER_KEY}__${sessionName}`);
       if (stored) {
         const roster: Record<string, string[]> = JSON.parse(stored);
         if (roster[departmentName] && Array.isArray(roster[departmentName])) {
@@ -25,16 +84,25 @@ export class StorageService {
         }
       }
     } catch (e) {
-      console.warn('Could not read session 2023 roster', e);
+      console.warn('Could not read session roster', e);
     }
     const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === departmentName);
     if (!dept) return [];
-    return dept.programs.filter((p) => p.session2023).map((p) => p.name);
+    // Default fallback: if 2023, return session2023 flag; else return all department programs
+    if (sessionName === '2023') {
+      return dept.programs.filter((p) => p.session2023).map((p) => p.name);
+    }
+    return dept.programs.map((p) => p.name);
   }
 
-  public static getAllSession2023Roster(): Record<string, string[]> {
+  // Backward compatibility alias
+  public static getSession2023Programs(departmentName: string): string[] {
+    return this.getSessionPrograms(departmentName, '2023');
+  }
+
+  public static getAllSessionRoster(sessionName: string = '2023'): Record<string, string[]> {
     try {
-      const stored = localStorage.getItem(SESSION_2023_ROSTER_KEY);
+      const stored = localStorage.getItem(`${SESSION_ROSTER_KEY}__${sessionName}`);
       if (stored) {
         return JSON.parse(stored);
       }
@@ -43,33 +111,42 @@ export class StorageService {
     }
     const defaultRoster: Record<string, string[]> = {};
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
-      defaultRoster[dept.name] = dept.programs
-        .filter((p) => p.session2023)
-        .map((p) => p.name);
+      defaultRoster[dept.name] =
+        sessionName === '2023'
+          ? dept.programs.filter((p) => p.session2023).map((p) => p.name)
+          : dept.programs.map((p) => p.name);
     });
     return defaultRoster;
   }
 
-  public static setSession2023Programs(departmentName: string, programNames: string[]): void {
+  public static getAllSession2023Roster(): Record<string, string[]> {
+    return this.getAllSessionRoster('2023');
+  }
+
+  public static setSessionPrograms(departmentName: string, programNames: string[], sessionName: string = '2023'): void {
     try {
-      const currentRoster = this.getAllSession2023Roster();
+      const currentRoster = this.getAllSessionRoster(sessionName);
       currentRoster[departmentName] = programNames;
-      localStorage.setItem(SESSION_2023_ROSTER_KEY, JSON.stringify(currentRoster));
+      localStorage.setItem(`${SESSION_ROSTER_KEY}__${sessionName}`, JSON.stringify(currentRoster));
       this.logAccess(
-        `Configured Session 2023 programs for ${departmentName} (${programNames.length} selected)`,
+        `Configured Session ${sessionName} programs for ${departmentName} (${programNames.length} selected)`,
         departmentName
       );
     } catch (e) {
-      console.error('Could not save session 2023 roster', e);
+      console.error('Could not save session roster', e);
     }
+  }
+
+  public static setSession2023Programs(departmentName: string, programNames: string[]): void {
+    this.setSessionPrograms(departmentName, programNames, '2023');
   }
 
   public static resetSession2023Roster(): void {
     try {
-      localStorage.removeItem(SESSION_2023_ROSTER_KEY);
+      localStorage.removeItem(`${SESSION_ROSTER_KEY}__2023`);
       this.logAccess('Reset Session 2023 program roster to defaults');
     } catch (e) {
-      console.error('Could not reset session 2023 roster', e);
+      console.error('Could not reset session roster', e);
     }
   }
 
@@ -162,10 +239,11 @@ export class StorageService {
     department: string,
     program: string,
     degreeLevel: string,
+    shift: AcademicShift = 'Morning',
     session: string = '2023',
     semester: string = '1'
   ): SubmissionRecord | null {
-    const key = getRecordKey(department, program, degreeLevel, session, semester);
+    const key = getRecordKey(department, program, degreeLevel, shift, session, semester);
     const store = this.getStore();
     return store[key] || null;
   }
@@ -178,6 +256,7 @@ export class StorageService {
         record.department,
         record.program,
         record.degreeLevel,
+        record.shift || 'Morning',
         record.session,
         record.semester
       );
@@ -187,6 +266,7 @@ export class StorageService {
     const recordToSave: SubmissionRecord = {
       ...record,
       id: key,
+      shift: record.shift || 'Morning',
       accessedBy: activeUser.name || record.accessedBy || 'University HOD',
       userDesignation: activeUser.designation || record.userDesignation || 'HOD / Coordinator',
       updatedAt: new Date().toISOString(),
@@ -201,8 +281,8 @@ export class StorageService {
     // Audit log
     this.logAccess(
       isUpdate
-        ? `Updated result upload status for ${record.program} (${record.subjects.length} courses)`
-        : `Submitted new LMS record for ${record.program} (${record.subjects.length} courses)`,
+        ? `Updated result upload status for ${record.program} [${record.shift}] (${record.subjects.length} courses)`
+        : `Submitted new LMS record for ${record.program} [${record.shift}] (${record.subjects.length} courses)`,
       record.department,
       record.program
     );
@@ -214,15 +294,16 @@ export class StorageService {
     department: string,
     program: string,
     degreeLevel: string,
+    shift: AcademicShift = 'Morning',
     session: string = '2023',
     semester: string = '1'
   ): boolean {
-    const key = getRecordKey(department, program, degreeLevel, session, semester);
+    const key = getRecordKey(department, program, degreeLevel, shift, session, semester);
     const store = this.getStore();
     if (store[key]) {
       delete store[key];
       this.setStore(store);
-      this.logAccess(`Permanently deleted LMS record for ${program}`, department, program);
+      this.logAccess(`Permanently deleted LMS record for ${program} [${shift}]`, department, program);
       return true;
     }
     return false;
@@ -285,6 +366,7 @@ export class StorageService {
       'Department',
       'Program',
       'Degree Level',
+      'Shift',
       'Session',
       'Semester',
       'HOD / Coordinator',
@@ -314,6 +396,7 @@ export class StorageService {
           `"${rec.department}"`,
           `"${rec.program}"`,
           `"${rec.degreeLevel}"`,
+          `"${rec.shift || 'Morning'}"`,
           `"${rec.session}"`,
           `"${rec.semester}"`,
           `"${rec.hodCoordinator}"`,
@@ -336,6 +419,7 @@ export class StorageService {
             `"${rec.department}"`,
             `"${rec.program}"`,
             `"${rec.degreeLevel}"`,
+            `"${rec.shift || 'Morning'}"`,
             `"${rec.session}"`,
             `"${rec.semester}"`,
             `"${rec.hodCoordinator}"`,
@@ -346,7 +430,7 @@ export class StorageService {
             `"${sub.courseCode}"`,
             `"${sub.subjectTitle}"`,
             `"${sub.creditHours}"`,
-            `"${sub.sectionShift}"`,
+            `"${sub.sectionShift || rec.shift}"`,
             `"${sub.status}"`,
             `"${sub.dateUploaded}"`,
             `"${sub.uploadedBy}"`,

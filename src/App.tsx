@@ -5,7 +5,7 @@ import { VCDashboard } from './components/VCDashboard';
 import { FirebaseSchemaModal } from './components/FirebaseSchemaModal';
 import { UserIdentificationModal } from './components/UserIdentificationModal';
 import { StorageService } from './services/storageService';
-import { SubmissionRecord, ActiveUserSession } from './types';
+import { SubmissionRecord, ActiveUserSession, AcademicShift } from './types';
 import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
 import {
   CheckCircle2,
@@ -26,9 +26,11 @@ export default function App() {
     StorageService.getActiveUser()
   );
 
-  // Program selection state to coordinate between VC and HOD view
+  // Program and Shift selection state to coordinate between VC and HOD view
   const [targetDept, setTargetDept] = useState<string>('Department of Computer Science');
   const [targetProg, setTargetProg] = useState<string>('BS Computer Science');
+  const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
+  const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
 
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
@@ -41,9 +43,11 @@ export default function App() {
     StorageService.logAccess('Accessed MNS-UET Result Portal', targetDept);
   }, []);
 
-  const handleInspectProgramFromVC = (dept: string, prog: string) => {
+  const handleInspectProgramFromVC = (dept: string, prog: string, shift?: AcademicShift, session?: string) => {
     setTargetDept(dept);
     setTargetProg(prog);
+    if (shift) setTargetShift(shift);
+    if (session) setTargetSession(session);
     setActiveView('HOD');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -56,7 +60,8 @@ export default function App() {
     targetDept,
     targetProg,
     targetDegreeLevel,
-    '2023',
+    targetShift,
+    targetSession,
     '1'
   );
 
@@ -140,6 +145,9 @@ export default function App() {
             onRecordSavedOrDeleted={reloadRecords}
             selectedDepartmentProp={targetDept}
             selectedProgramProp={targetProg}
+            selectedShiftProp={targetShift}
+            selectedSessionProp={targetSession}
+            onSessionChangedProp={(newSess) => setTargetSession(newSess)}
             currentUser={currentUser}
             onOpenUserModal={() => setIsUserModalOpen(true)}
           />

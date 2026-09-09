@@ -1,5 +1,7 @@
 export type LMSStatus = 'Uploaded' | 'Pending' | 'In Progress' | 'Not Applicable' | '';
 
+export type AcademicShift = 'Morning' | 'Evening';
+
 export interface SubjectRow {
   id: string;
   courseCode: string;
@@ -17,6 +19,7 @@ export interface ProgramInfo {
   degreeLevel: string;
   department: string;
   session2023: boolean; // Indicates if this program has an active batch in Session 2023
+  supportedShifts?: AcademicShift[];
 }
 
 export interface AccessLogEntry {
@@ -26,6 +29,7 @@ export interface AccessLogEntry {
   department: string;
   action: string;
   program?: string;
+  shift?: AcademicShift;
   timestamp: string;
 }
 
@@ -36,11 +40,12 @@ export interface ActiveUserSession {
 }
 
 export interface SubmissionRecord {
-  id: string; // key: department__program__degreeLevel__session__semester
+  id: string; // key: department__program__degreeLevel__shift__session__semester
   department: string;
   program: string;
   degreeLevel: string;
-  session: string; // e.g. "2023"
+  shift: AcademicShift; // 'Morning' | 'Evening'
+  session: string; // e.g. "2023", "2024"
   semester: string; // e.g. "1"
   hodCoordinator: string;
   submissionDate: string;
