@@ -11,6 +11,24 @@ export const ACADEMIC_SHIFTS: { id: AcademicShift; label: string; description: s
   { id: 'Evening', label: 'Evening', description: 'Replica / Evening Session' },
 ];
 
+export interface SemesterOption {
+  id: string; // '1' - '8'
+  label: string; // '1st Semester'
+  shortLabel: string; // 'Sem 1'
+  roman: string; // 'I'
+}
+
+export const ACADEMIC_SEMESTERS: SemesterOption[] = [
+  { id: '1', label: '1st Semester', shortLabel: 'Sem 1', roman: 'I' },
+  { id: '2', label: '2nd Semester', shortLabel: 'Sem 2', roman: 'II' },
+  { id: '3', label: '3rd Semester', shortLabel: 'Sem 3', roman: 'III' },
+  { id: '4', label: '4th Semester', shortLabel: 'Sem 4', roman: 'IV' },
+  { id: '5', label: '5th Semester', shortLabel: 'Sem 5', roman: 'V' },
+  { id: '6', label: '6th Semester', shortLabel: 'Sem 6', roman: 'VI' },
+  { id: '7', label: '7th Semester', shortLabel: 'Sem 7', roman: 'VII' },
+  { id: '8', label: '8th Semester', shortLabel: 'Sem 8', roman: 'VIII' },
+];
+
 export const DEFAULT_ACADEMIC_SESSIONS: string[] = ['2023', '2024', '2022', '2025'];
 
 // Official Departments and Academic Programs from MNS-UET Multan (https://mnsuet.edu.pk/)
@@ -117,13 +135,17 @@ export function getRecordKey(
   return `${sanitize(department)}__${sanitize(program)}__${sanitize(degreeLevel)}__${sanitize(shift)}__${session}__${semester}`;
 }
 
-export function createEmptySubjectRow(index: number = 1, defaultShift: AcademicShift = 'Morning') {
+export function createEmptySubjectRow(
+  index: number = 1,
+  defaultShift: AcademicShift = 'Morning',
+  semester: string = '1'
+) {
   return {
     id: `row_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
     courseCode: '',
     subjectTitle: '',
     creditHours: '',
-    sectionShift: `${defaultShift} - Sec A`,
+    sectionShift: `${defaultShift} - Sem ${semester}`,
     status: '' as const,
     dateUploaded: '',
     uploadedBy: '',
@@ -131,8 +153,12 @@ export function createEmptySubjectRow(index: number = 1, defaultShift: AcademicS
   };
 }
 
-export function createInitialBlankRows(count: number = 8, defaultShift: AcademicShift = 'Morning') {
-  return Array.from({ length: count }, (_, i) => createEmptySubjectRow(i + 1, defaultShift));
+export function createInitialBlankRows(
+  count: number = 1,
+  defaultShift: AcademicShift = 'Morning',
+  semester: string = '1'
+) {
+  return Array.from({ length: count }, (_, i) => createEmptySubjectRow(i + 1, defaultShift, semester));
 }
 
 // Clean Database initialization: ZERO DUMMY DATA.

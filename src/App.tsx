@@ -26,11 +26,12 @@ export default function App() {
     StorageService.getActiveUser()
   );
 
-  // Program and Shift selection state to coordinate between VC and HOD view
+  // Program, Shift, and Semester selection state to coordinate between VC and HOD view
   const [targetDept, setTargetDept] = useState<string>('Department of Computer Science');
   const [targetProg, setTargetProg] = useState<string>('BS Computer Science');
   const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
   const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
+  const [targetSemester, setTargetSemester] = useState<string>('1');
 
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
@@ -43,11 +44,18 @@ export default function App() {
     StorageService.logAccess('Accessed MNS-UET Result Portal', targetDept);
   }, []);
 
-  const handleInspectProgramFromVC = (dept: string, prog: string, shift?: AcademicShift, session?: string) => {
+  const handleInspectProgramFromVC = (
+    dept: string,
+    prog: string,
+    shift?: AcademicShift,
+    session?: string,
+    semester?: string
+  ) => {
     setTargetDept(dept);
     setTargetProg(prog);
     if (shift) setTargetShift(shift);
     if (session) setTargetSession(session);
+    if (semester) setTargetSemester(semester);
     setActiveView('HOD');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -62,7 +70,7 @@ export default function App() {
     targetDegreeLevel,
     targetShift,
     targetSession,
-    '1'
+    targetSemester
   );
 
   return (
@@ -147,7 +155,9 @@ export default function App() {
             selectedProgramProp={targetProg}
             selectedShiftProp={targetShift}
             selectedSessionProp={targetSession}
+            selectedSemesterProp={targetSemester}
             onSessionChangedProp={(newSess) => setTargetSession(newSess)}
+            onSemesterChangedProp={(newSem) => setTargetSemester(newSem)}
             currentUser={currentUser}
             onOpenUserModal={() => setIsUserModalOpen(true)}
           />

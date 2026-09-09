@@ -3,6 +3,7 @@ import {
   DepartmentGroup,
   UNIVERSITY_DEPARTMENTS,
   ACADEMIC_SHIFTS,
+  ACADEMIC_SEMESTERS,
   createEmptySubjectRow,
   createInitialBlankRows,
 } from '../data/departmentsData';
@@ -42,9 +43,11 @@ interface Props {
   selectedProgramProp?: string;
   selectedShiftProp?: AcademicShift;
   selectedSessionProp?: string;
+  selectedSemesterProp?: string;
   currentUser?: ActiveUserSession;
   onOpenUserModal?: () => void;
   onSessionChangedProp?: (session: string) => void;
+  onSemesterChangedProp?: (semester: string) => void;
 }
 
 export const HODEntryForm: React.FC<Props> = ({
@@ -53,9 +56,11 @@ export const HODEntryForm: React.FC<Props> = ({
   selectedProgramProp,
   selectedShiftProp,
   selectedSessionProp,
+  selectedSemesterProp,
   currentUser,
   onOpenUserModal,
   onSessionChangedProp,
+  onSemesterChangedProp,
 }) => {
   // Master Selections
   const [department, setDepartment] = useState<string>(
@@ -98,8 +103,47 @@ export const HODEntryForm: React.FC<Props> = ({
   // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
   const [shift, setShift] = useState<AcademicShift>(selectedShiftProp || 'Morning');
 
-  // Semester fixed to institutional cycle
-  const [semester, setSemester] = useState<string>('1');
+  // Semester selection (1 to 8) - strictly isolated institutional semester cycle
+  const [semester, setSemester] = useState<string>(selectedSemesterProp || '1');
+
+  // State flags
+  const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    type: 'success' | 'info' | 'warning';
+    text: string;
+  } | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+
+  // Status of each semester (1 to 8) for the current department + program + shift + session
+  const semesterStatuses = useMemo(() => {
+    return ACADEMIC_SEMESTERS.map((sem) => {
+      const existing = StorageService.getSubmission(
+        department,
+        program,
+        degreeLevel,
+        shift,
+        session,
+        sem.id
+      );
+      const hasRecord = Boolean(existing);
+      let summaryInfo = null;
+      if (existing) {
+        summaryInfo = StorageService.calculateSummary(existing.subjects);
+      }
+      return {
+        ...sem,
+        hasRecord,
+        summary: summaryInfo,
+      };
+    });
+  }, [department, program, degreeLevel, shift, session, lastSavedTime, isExistingRecord]);
+
+  const handleSemesterChange = (newSem: string) => {
+    setSemester(newSem);
+    if (onSemesterChangedProp) onSemesterChangedProp(newSem);
+  };
 
   // Metadata manual fields - initialized with current user name & designation
   const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
@@ -121,18 +165,6 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Rows state: starts with only active rows (not forced 8 rows)
   const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning'));
-
-  // State flags
-  const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
-  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [feedbackMessage, setFeedbackMessage] = useState<{
-    type: 'success' | 'info' | 'warning';
-    text: string;
-  } | null>(null);
-
-  // Delete modal state
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record")
   useEffect(() => {
@@ -159,6 +191,12 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   }, [selectedSessionProp]);
 
+  useEffect(() => {
+    if (selectedSemesterProp && selectedSemesterProp !== semester) {
+      setSemester(selectedSemesterProp);
+    }
+  }, [selectedSemesterProp]);
+
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
     setDepartment(newDept);
@@ -175,7 +213,7 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   };
 
-  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, or Session changes
+  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, or Semester changes
   useEffect(() => {
     if (!department || !program) return;
 
@@ -199,20 +237,20 @@ export const HODEntryForm: React.FC<Props> = ({
       const validRows = existing.subjects.filter(
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
       );
-      setSubjects(validRows.length > 0 ? validRows : createInitialBlankRows(1, shift));
+      setSubjects(validRows.length > 0 ? validRows : createInitialBlankRows(1, shift, semester));
 
       showFeedback(
         'info',
-        `Database record loaded for ${program} [${shift} Shift]: ${validRows.length} subject(s) retrieved.`
+        `Database record loaded for ${program} [${shift} Shift – Semester ${semester}]: ${validRows.length} subject(s) retrieved.`
       );
     } else {
       // No record exists -> Start with 1 clean row
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(1, shift));
+      setSubjects(createInitialBlankRows(1, shift, semester));
       showFeedback(
         'info',
-        `New form initialized for ${program} (${shift} Shift). Click '+ Add Course Row' to add courses.`
+        `New form initialized for ${program} (${shift} Shift – Semester ${semester}). Click '+ Add Course Row' to add courses.`
       );
     }
   }, [department, program, degreeLevel, shift, session, semester]);
@@ -247,12 +285,12 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('warning', 'Maximum 20 subject rows reached for this sheet.');
       return;
     }
-    const newRow = createEmptySubjectRow(subjects.length + 1, shift);
+    const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester);
     if (currentUser?.name) {
       newRow.uploadedBy = currentUser.name;
     }
     setSubjects((prev) => [...prev, newRow]);
-    showFeedback('info', `Added subject row #${subjects.length + 1}.`);
+    showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester}.`);
   };
 
   // Delete a specific row
@@ -309,8 +347,8 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback(
         'success',
         result.isUpdate
-          ? `Record updated successfully for ${program} [${shift} Shift] (${activeRows.length} subjects). Changes saved to database.`
-          : `New record saved successfully for ${program} [${shift} Shift] (${activeRows.length} subjects) in database.`
+          ? `Record updated successfully for ${program} [${shift} Shift – Semester ${semester}] (${activeRows.length} subjects). Changes saved to database.`
+          : `New record saved successfully for ${program} [${shift} Shift – Semester ${semester}] (${activeRows.length} subjects) in database.`
       );
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     }
@@ -318,10 +356,10 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Clear Form (Requirement 11: Clear Form clears screen ONLY, does NOT delete database data)
   const handleClearForm = () => {
-    setSubjects(createInitialBlankRows(1, shift));
+    setSubjects(createInitialBlankRows(1, shift, semester));
     showFeedback(
       'info',
-      `Visible form cleared on screen for ${shift} shift. Previously saved database records remain untouched.`
+      `Visible form cleared on screen for ${shift} shift – Semester ${semester}. Previously saved database records remain untouched.`
     );
   };
 
@@ -341,8 +379,8 @@ export const HODEntryForm: React.FC<Props> = ({
     if (success) {
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(1, shift));
-      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift].`);
+      setSubjects(createInitialBlankRows(1, shift, semester));
+      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift – Semester ${semester}].`);
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     } else {
       showFeedback('warning', 'No saved database record was found to delete.');
@@ -655,6 +693,85 @@ export const HODEntryForm: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* 05: Academic Semester Selection (Semesters 1 to 8) */}
+          <div className="pt-3 border-t border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <label
+                htmlFor="section-semester-picker"
+                className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                05 ACADEMIC SEMESTER (SEMESTERS 1 TO 8) <span className="text-rose-600">*</span>
+              </label>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-slate-500">Active Selection:</span>
+                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Semester {semester} ({ACADEMIC_SEMESTERS.find((s) => s.id === semester)?.label || '1st Semester'})
+                </span>
+              </div>
+            </div>
+
+            {/* 8-Semester Tab Grid */}
+            <div id="section-semester-picker" className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              {semesterStatuses.map((sem) => {
+                const isSelected = sem.id === semester;
+                return (
+                  <button
+                    key={sem.id}
+                    id={`btn-select-semester-${sem.id}`}
+                    type="button"
+                    onClick={() => handleSemesterChange(sem.id)}
+                    className={`p-2 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-between min-h-[58px] ${
+                      isSelected
+                        ? 'bg-emerald-800 text-white border-emerald-900 shadow-xs ring-2 ring-emerald-500/50'
+                        : sem.hasRecord
+                        ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="text-xs font-black">{sem.shortLabel}</span>
+                    <span
+                      className={`text-[10px] tracking-tight ${
+                        isSelected ? 'text-emerald-100 font-semibold' : 'text-slate-500'
+                      }`}
+                    >
+                      {sem.label}
+                    </span>
+                    {sem.hasRecord && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold mt-1 flex items-center gap-0.5 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-200 text-emerald-900'
+                        }`}
+                        title={`LMS status saved: ${sem.summary?.uploaded || 0}/${sem.summary?.totalSubjects || 0} uploaded`}
+                      >
+                        <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+                        Saved
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center justify-between gap-1">
+              <span>
+                Each semester holds an isolated course sheet. Click any semester (1–8) to load or create its results for <strong>{shift} Shift</strong>.
+              </span>
+              {isExistingRecord ? (
+                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Database Record Active for Semester {semester}
+                </span>
+              ) : (
+                <span className="text-amber-700 font-semibold flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  New / Unsaved Sheet for Semester {semester}
+                </span>
+              )}
+            </p>
+          </div>
+
           {/* Secondary Metadata Row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
             {/* Session / Semester */}
@@ -665,7 +782,7 @@ export const HODEntryForm: React.FC<Props> = ({
                   className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5"
                 >
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  SESSION / SEMESTER
+                  SESSION & SEMESTER
                 </label>
                 <button
                   id="btn-change-session-inline"
@@ -684,7 +801,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
                   shift === 'Morning' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'
                 }`}>
-                  {shift} Shift
+                  {shift} • Sem {semester}
                 </span>
               </div>
             </div>
