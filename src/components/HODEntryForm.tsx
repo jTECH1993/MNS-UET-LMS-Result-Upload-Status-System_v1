@@ -47,7 +47,23 @@ import {
   FileSpreadsheet,
   CheckCheck,
   Wand2,
+  MessageSquare,
+  Edit3,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
+
+// Standard institutional delay reasons for academic compliance
+const STANDARD_DELAY_REASONS = [
+  'Exam Moderation Committee Review Ongoing',
+  'Practical / Lab Viva Evaluation Ongoing',
+  'Awaiting External Examiner Marks Submission',
+  'Visiting Faculty Marks Tabulation Delayed',
+  'Scrutiny & Re-checking Requests in Process',
+  'Extenuating / Medical Cases Under Evaluation',
+  'Awaiting Departmental Board of Studies Approval',
+  'Grades Under Clarification with Subject Teacher',
+];
 
 interface Props {
   onRecordSavedOrDeleted?: () => void;
@@ -136,6 +152,22 @@ export const HODEntryForm: React.FC<Props> = ({
   // Course search query & advanced columns toggle
   const [courseFilterQuery, setCourseFilterQuery] = useState<string>('');
   const [showAdvancedColumns, setShowAdvancedColumns] = useState<boolean>(false);
+
+  // Row selection & Quick Tool Scope state
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [applyScope, setApplyScope] = useState<'selected' | 'all'>('selected');
+
+  // Custom remarks / delay reasons state
+  const [isCustomReasonOpen, setIsCustomReasonOpen] = useState<boolean>(false);
+  const [customReasonInput, setCustomReasonInput] = useState<string>('');
+  const [recentCustomReasons, setRecentCustomReasons] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('mnsuet_custom_delay_reasons');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // State flags
   const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
@@ -296,6 +328,7 @@ export const HODEntryForm: React.FC<Props> = ({
         rows.push(createEmptySubjectRow(rows.length + 1, shift, semester));
       }
       setSubjects(rows);
+      setSelectedRowIds(new Set());
 
       showFeedback(
         'info',
@@ -306,6 +339,7 @@ export const HODEntryForm: React.FC<Props> = ({
       setIsExistingRecord(false);
       setLastSavedTime(null);
       setSubjects(createInitialBlankRows(8, shift, semester));
+      setSelectedRowIds(new Set());
       showFeedback(
         'info',
         `Ready to enter courses for ${program} (${shift} Shift – Semester ${semester}). Fill course details and click 'Submit Result Status'.`
@@ -401,14 +435,101 @@ export const HODEntryForm: React.FC<Props> = ({
   // Delete row by ID
   const handleDeleteRowById = (rowId: string) => {
     setSubjects((prev) => prev.filter((item) => item.id !== rowId));
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      next.delete(rowId);
+      return next;
+    });
     showFeedback('info', 'Course row removed.');
   };
 
-  // Enterprise Batch Operations
+  // Row Selection Helpers
+  const isAnySelected = selectedRowIds.size > 0;
+  const selectedCount = selectedRowIds.size;
+
+  const handleToggleSelectRow = (rowId: string) => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+      }
+      return next;
+    });
+    setApplyScope('selected');
+  };
+
+  const allFilteredSelected =
+    filteredSubjects.length > 0 &&
+    filteredSubjects.every((s) => selectedRowIds.has(s.id));
+
+  const someFilteredSelected =
+    filteredSubjects.some((s) => selectedRowIds.has(s.id)) && !allFilteredSelected;
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        filteredSubjects.forEach((s) => next.delete(s.id));
+        return next;
+      });
+    } else {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        filteredSubjects.forEach((s) => next.add(s.id));
+        return next;
+      });
+      setApplyScope('selected');
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRowIds(new Set());
+  };
+
+  const handleSelectByStatus = (targetStatus: LMSStatus) => {
+    const matching = filteredSubjects.filter((s) => s.status === targetStatus);
+    if (matching.length === 0) {
+      showFeedback('info', `No courses found with status "${targetStatus}".`);
+      return;
+    }
+    setSelectedRowIds(new Set(matching.map((s) => s.id)));
+    setApplyScope('selected');
+    showFeedback('info', `Selected ${matching.length} course(s) with status "${targetStatus}".`);
+  };
+
+  // Helper to determine target courses for Quick Tools (Selected vs All)
+  const getTargetSubjectRows = () => {
+    const isSelectionActive = isAnySelected && applyScope === 'selected';
+    if (isSelectionActive) {
+      const targets = subjects.filter((s) => selectedRowIds.has(s.id));
+      return {
+        targetIds: new Set(targets.map((s) => s.id)),
+        count: targets.length,
+        isSelection: true,
+      };
+    }
+    return {
+      targetIds: new Set(subjects.map((s) => s.id)),
+      count: subjects.length,
+      isSelection: false,
+    };
+  };
+
+  // Enterprise Quick Tool Operations (Selective or Global)
   const handleBatchMarkStatus = (newStatus: LMSStatus) => {
     const today = new Date().toISOString().split('T')[0];
+    const { targetIds, count, isSelection } = getTargetSubjectRows();
+
+    if (count === 0) {
+      showFeedback('warning', 'Please select at least one course row.');
+      return;
+    }
+
     setSubjects((prev) =>
       prev.map((s) => {
+        if (!targetIds.has(s.id)) return s;
         return {
           ...s,
           status: newStatus,
@@ -417,42 +538,103 @@ export const HODEntryForm: React.FC<Props> = ({
         };
       })
     );
-    showFeedback('info', `Batch operation: Marked all courses as "${newStatus}".`);
+
+    const scopeLabel = isSelection ? `${count} selected course(s)` : `all ${count} courses`;
+    showFeedback('info', `Quick Tool: Marked ${scopeLabel} as "${newStatus}".`);
   };
 
   const handleBatchSetTodayDate = () => {
     const today = new Date().toISOString().split('T')[0];
+    const { targetIds, count, isSelection } = getTargetSubjectRows();
+
+    if (count === 0) {
+      showFeedback('warning', 'Please select at least one course row.');
+      return;
+    }
+
     setSubjects((prev) =>
-      prev.map((s) => ({
-        ...s,
-        dateUploaded: today,
-      }))
+      prev.map((s) => {
+        if (!targetIds.has(s.id)) return s;
+        return {
+          ...s,
+          dateUploaded: today,
+        };
+      })
     );
-    showFeedback('info', `Batch operation: Set today's date (${today}) for all courses.`);
+
+    const scopeLabel = isSelection ? `${count} selected course(s)` : `all courses`;
+    showFeedback('info', `Quick Tool: Set today's date (${today}) for ${scopeLabel}.`);
   };
 
   const handleBatchFillUploader = () => {
     const defaultName = currentUser?.name || 'Department Faculty';
+    const { targetIds, count, isSelection } = getTargetSubjectRows();
+
+    if (count === 0) {
+      showFeedback('warning', 'Please select at least one course row.');
+      return;
+    }
+
     setSubjects((prev) =>
-      prev.map((s) => ({
-        ...s,
-        uploadedBy: s.uploadedBy?.trim() ? s.uploadedBy : defaultName,
-      }))
+      prev.map((s) => {
+        if (!targetIds.has(s.id)) return s;
+        return {
+          ...s,
+          uploadedBy: s.uploadedBy?.trim() ? s.uploadedBy : defaultName,
+        };
+      })
     );
-    showFeedback('info', `Batch operation: Applied "${defaultName}" as instructor/uploader to empty rows.`);
+
+    const scopeLabel = isSelection ? `${count} selected course(s)` : `empty course rows`;
+    showFeedback('info', `Quick Tool: Applied "${defaultName}" as instructor/uploader to ${scopeLabel}.`);
   };
 
   const handleBatchApplyDelayReason = (reason: string) => {
-    if (!reason) return;
+    const trimmed = reason.trim();
+    if (!trimmed) return;
+
+    // Persist custom reasons to localStorage if not standard
+    if (!STANDARD_DELAY_REASONS.includes(trimmed)) {
+      setRecentCustomReasons((prev) => {
+        const filtered = prev.filter((r) => r.toLowerCase() !== trimmed.toLowerCase());
+        const updated = [trimmed, ...filtered].slice(0, 8);
+        try {
+          localStorage.setItem('mnsuet_custom_delay_reasons', JSON.stringify(updated));
+        } catch (err) {
+          console.error('Failed to save custom reasons', err);
+        }
+        return updated;
+      });
+    }
+
+    const { targetIds, count, isSelection } = getTargetSubjectRows();
+    let updatedCount = 0;
+
     setSubjects((prev) =>
       prev.map((s) => {
-        if (s.status === 'Pending' || s.status === 'In Progress') {
-          return { ...s, remarks: reason };
+        if (isSelection) {
+          if (targetIds.has(s.id)) {
+            updatedCount++;
+            return { ...s, remarks: trimmed };
+          }
+          return s;
+        }
+        // If applying globally: apply to Pending, In Progress, or rows without remarks
+        if (s.status === 'Pending' || s.status === 'In Progress' || !s.remarks?.trim()) {
+          updatedCount++;
+          return { ...s, remarks: trimmed };
         }
         return s;
       })
     );
-    showFeedback('info', `Applied institutional delay remark: "${reason}".`);
+
+    setIsCustomReasonOpen(false);
+    setCustomReasonInput('');
+
+    const scopeLabel = isSelection
+      ? `${count} selected course(s)`
+      : `all pending/in-progress courses (${updatedCount} updated)`;
+    showFeedback('info', `Quick Tool: Applied delay remark "${trimmed}" to ${scopeLabel}.`);
   };
 
   const handleImportCourses = (imported: Partial<SubjectRow>[], mode: 'replace' | 'append') => {
@@ -1054,82 +1236,227 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Enterprise Quick-Fill Toolbar */}
-        <div className="bg-emerald-950/90 text-white px-5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-emerald-800">
+        {/* Enterprise Quick-Fill & Selective Operations Toolbar */}
+        <div className="bg-emerald-950/95 text-white px-4 py-2.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-xs border-b border-emerald-800 shadow-inner">
+          {/* Left: Quick Tool actions and Target Scope indicator */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase font-bold text-emerald-300 flex items-center gap-1">
-              <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
-              Quick Fill:
-            </span>
-            <button
-              type="button"
-              onClick={() => handleBatchMarkStatus('Uploaded')}
-              className="px-2.5 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold rounded border border-emerald-600/70 transition-colors flex items-center gap-1 cursor-pointer"
-              title="Set all active courses to Uploaded status and apply today's date"
-            >
-              <CheckCheck className="w-3 h-3 text-emerald-300" />
-              <span>All Uploaded</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchMarkStatus('In Progress')}
-              className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 text-blue-200 text-[11px] font-bold rounded border border-blue-700/60 transition-colors cursor-pointer"
-              title="Set all courses to In Progress"
-            >
-              <span>All In Progress</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchMarkStatus('Pending')}
-              className="px-2.5 py-1 bg-amber-950 hover:bg-amber-900 text-amber-200 text-[11px] font-bold rounded border border-amber-700/60 transition-colors cursor-pointer"
-              title="Set all courses to Pending"
-            >
-              <span>All Pending</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleBatchSetTodayDate}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors cursor-pointer"
-              title="Apply today's date to all courses"
-            >
-              <span>Today&apos;s Date</span>
-            </button>
-            {currentUser?.name && (
+            <div className="flex items-center gap-1.5 mr-1">
+              <span className="text-[11px] uppercase font-bold text-emerald-300 flex items-center gap-1">
+                <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
+                Quick Tool:
+              </span>
+
+              {/* Selection Status Badge */}
+              {isAnySelected ? (
+                <div className="flex items-center bg-emerald-900 text-emerald-200 border border-emerald-500/80 rounded-full px-2.5 py-0.5 text-[11px] font-semibold gap-1.5 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>
+                    Target: <strong>{selectedCount} Selected {selectedCount === 1 ? 'Course' : 'Courses'}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="text-emerald-400 hover:text-white font-bold ml-0.5 cursor-pointer text-xs"
+                    title="Clear selection"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <span className="bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 rounded-full px-2.5 py-0.5 text-[10px] font-medium">
+                  Target: <strong>All {subjects.length} Courses</strong>
+                </span>
+              )}
+            </div>
+
+            {/* Scope Switcher when courses are selected */}
+            {isAnySelected && (
+              <div className="flex items-center bg-emerald-900/80 p-0.5 rounded border border-emerald-700/80 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setApplyScope('selected')}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    applyScope === 'selected'
+                      ? 'bg-emerald-500 text-emerald-950'
+                      : 'text-emerald-300 hover:text-white'
+                  }`}
+                  title="Apply changes only to the selected row(s)"
+                >
+                  Selected Only ({selectedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setApplyScope('all')}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    applyScope === 'all'
+                      ? 'bg-emerald-500 text-emerald-950'
+                      : 'text-emerald-300 hover:text-white'
+                  }`}
+                  title="Apply changes to all courses in the sheet"
+                >
+                  All Courses ({subjects.length})
+                </button>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={handleBatchFillUploader}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors cursor-pointer"
-                title={`Set instructor/uploader to "${currentUser.name}" for blank rows`}
+                onClick={() => handleBatchMarkStatus('Uploaded')}
+                className="px-2.5 py-1 bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 text-white text-[11px] font-bold rounded border border-emerald-600/70 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                title={isAnySelected && applyScope === 'selected' ? `Set ${selectedCount} selected course(s) to Uploaded` : "Set all courses to Uploaded"}
               >
-                <span>Fill My Name</span>
+                <CheckCheck className="w-3 h-3 text-emerald-300" />
+                <span>{isAnySelected && applyScope === 'selected' ? `Selected Uploaded (${selectedCount})` : 'All Uploaded'}</span>
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={() => handleBatchMarkStatus('In Progress')}
+                className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 text-blue-200 text-[11px] font-bold rounded border border-blue-700/60 transition-colors cursor-pointer shadow-2xs"
+                title={isAnySelected && applyScope === 'selected' ? `Set ${selectedCount} selected course(s) to In Progress` : "Set all courses to In Progress"}
+              >
+                <span>{isAnySelected && applyScope === 'selected' ? `Selected In Progress (${selectedCount})` : 'All In Progress'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBatchMarkStatus('Pending')}
+                className="px-2.5 py-1 bg-amber-950 hover:bg-amber-900 text-amber-200 text-[11px] font-bold rounded border border-amber-700/60 transition-colors cursor-pointer shadow-2xs"
+                title={isAnySelected && applyScope === 'selected' ? `Set ${selectedCount} selected course(s) to Pending` : "Set all courses to Pending"}
+              >
+                <span>{isAnySelected && applyScope === 'selected' ? `Selected Pending (${selectedCount})` : 'All Pending'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBatchSetTodayDate}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors cursor-pointer"
+                title={isAnySelected && applyScope === 'selected' ? `Apply today's date to ${selectedCount} selected course(s)` : "Apply today's date to all courses"}
+              >
+                <span>Today&apos;s Date</span>
+              </button>
+
+              {currentUser?.name && (
+                <button
+                  type="button"
+                  onClick={handleBatchFillUploader}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium rounded border border-slate-700 transition-colors cursor-pointer"
+                  title={`Set instructor/uploader to "${currentUser.name}"`}
+                >
+                  <span>Fill My Name</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-emerald-300 font-semibold">Standard Delay Reason:</span>
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  handleBatchApplyDelayReason(e.target.value);
-                  e.target.value = '';
-                }
-              }}
-              className="bg-emerald-900 text-emerald-100 text-[11px] rounded border border-emerald-700 px-2 py-1 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400"
-            >
-              <option value="">Apply to Pending Courses...</option>
-              <option value="Exam Moderation Committee Review Ongoing">Exam Moderation Committee Review Ongoing</option>
-              <option value="Practical / Lab Viva Evaluation Ongoing">Practical / Lab Viva Evaluation Ongoing</option>
-              <option value="Awaiting External Examiner Marks Submission">Awaiting External Examiner Marks Submission</option>
-              <option value="Visiting Faculty Marks Tabulation Delayed">Visiting Faculty Marks Tabulation Delayed</option>
-              <option value="Scrutiny & Re-checking Requests in Process">Scrutiny & Re-checking Requests in Process</option>
-              <option value="Extenuating / Medical Cases Under Evaluation">Extenuating / Medical Cases Under Evaluation</option>
-            </select>
+          {/* Right: Remarks / Delay Reason & Custom Reason Tool */}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isCustomReasonOpen ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3 text-emerald-400" />
+                  <span>Delay Reason:</span>
+                </span>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '__CUSTOM__') {
+                      setIsCustomReasonOpen(true);
+                    } else if (val) {
+                      handleBatchApplyDelayReason(val);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="bg-emerald-900 text-emerald-100 text-[11px] rounded border border-emerald-700 px-2 py-1 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400 max-w-[240px] md:max-w-[280px] truncate font-medium"
+                >
+                  <option value="">
+                    {isAnySelected && applyScope === 'selected'
+                      ? `Apply Reason to Selected (${selectedCount})...`
+                      : 'Apply to Pending Courses...'}
+                  </option>
+                  <option value="__CUSTOM__" className="font-bold text-amber-300 bg-emerald-950">
+                    ✍️ + Enter Custom Reason...
+                  </option>
+                  <optgroup label="Standard Institutional Reasons">
+                    {STANDARD_DELAY_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {recentCustomReasons.length > 0 && (
+                    <optgroup label="Recent Custom Reasons">
+                      {recentCustomReasons.map((reason) => (
+                        <option key={reason} value={reason}>
+                          {reason}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+
+                {/* Direct Custom Reason Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomReasonOpen(true)}
+                  className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/50 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  title="Write a custom remarks / delay reason"
+                >
+                  <Edit3 className="w-3 h-3 text-amber-300" />
+                  <span>Custom Reason</span>
+                </button>
+              </div>
+            ) : (
+              /* Inline Custom Reason Input */
+              <div className="flex items-center gap-1.5 bg-emerald-900/95 p-1 rounded-lg border border-amber-500/80 shadow-md animate-in fade-in">
+                <Edit3 className="w-3.5 h-3.5 text-amber-300 ml-1.5 shrink-0" />
+                <input
+                  type="text"
+                  value={customReasonInput}
+                  onChange={(e) => setCustomReasonInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleBatchApplyDelayReason(customReasonInput);
+                    } else if (e.key === 'Escape') {
+                      setIsCustomReasonOpen(false);
+                      setCustomReasonInput('');
+                    }
+                  }}
+                  placeholder="Type custom reason (e.g. Visiting faculty out of city, re-tabulation)..."
+                  className="bg-emerald-950 text-white text-xs px-2.5 py-1 rounded border border-emerald-700 placeholder-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-amber-400 min-w-[240px] sm:min-w-[290px]"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => handleBatchApplyDelayReason(customReasonInput)}
+                  disabled={!customReasonInput.trim()}
+                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded cursor-pointer transition-colors shrink-0 shadow-xs"
+                >
+                  {isAnySelected && applyScope === 'selected'
+                    ? `Apply to Selected (${selectedCount})`
+                    : 'Apply to Pending'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomReasonOpen(false);
+                    setCustomReasonInput('');
+                  }}
+                  className="px-1.5 py-1 text-emerald-300 hover:text-white text-xs cursor-pointer"
+                  title="Cancel"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Legend / Status Key & Quick Actions Banner */}
+        {/* Legend / Status Key & Quick Row Selection Toolbar */}
         <div className="bg-slate-50/80 border-b border-slate-200 px-5 py-2.5 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-bold text-slate-700">Status Legend:</span>
@@ -1151,7 +1478,49 @@ export const HODEntryForm: React.FC<Props> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Row Selection controls */}
+            <div className="flex items-center gap-1 text-[11px] text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">
+              <span className="font-medium text-slate-600">Select:</span>
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                className="px-1.5 py-0.5 hover:bg-slate-100 text-slate-700 rounded font-semibold cursor-pointer transition-colors"
+              >
+                {allFilteredSelected ? 'Deselect All' : 'All'}
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => handleSelectByStatus('Pending')}
+                className="px-1.5 py-0.5 hover:bg-amber-50 text-amber-800 rounded font-semibold cursor-pointer transition-colors"
+                title="Select all Pending courses"
+              >
+                Pending
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => handleSelectByStatus('In Progress')}
+                className="px-1.5 py-0.5 hover:bg-blue-50 text-blue-800 rounded font-semibold cursor-pointer transition-colors"
+                title="Select all In Progress courses"
+              >
+                In Progress
+              </button>
+              {isAnySelected && (
+                <>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="px-1.5 py-0.5 text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
+                  >
+                    Clear ({selectedCount})
+                  </button>
+                </>
+              )}
+            </div>
+
             <span className="text-[11px] text-slate-500">
               Showing <strong>{filteredSubjects.length}</strong> of <strong>{subjects.length}</strong> courses
             </span>
@@ -1163,16 +1532,40 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Global Datalist for Delay Reason Autocomplete on row inputs */}
+        <datalist id="datalist-delay-reasons">
+          {STANDARD_DELAY_REASONS.map((reason) => (
+            <option key={reason} value={reason} />
+          ))}
+          {recentCustomReasons.map((reason) => (
+            <option key={reason} value={reason} />
+          ))}
+        </datalist>
+
         {/* Table Content */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          <table className="w-full text-left border-collapse min-w-[980px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
-                <th className="py-2.5 px-3 text-center w-12">#</th>
+                {/* Master Checkbox Column */}
+                <th className="py-2.5 px-3 text-center w-10">
+                  <input
+                    id="chk-master-select-all"
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someFilteredSelected;
+                    }}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                    title={allFilteredSelected ? 'Deselect all rows' : 'Select all visible rows'}
+                  />
+                </th>
+                <th className="py-2.5 px-2 text-center w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3 w-32">Course Code</th>
-                <th className="py-2.5 px-3 min-w-[220px]">Course Title *</th>
+                <th className="py-2.5 px-3 min-w-[200px]">Course Title *</th>
                 <th className="py-2.5 px-2 text-center w-24">Credit Hours</th>
-                <th className="py-2.5 px-3 min-w-[180px]">Teacher / Instructor</th>
+                <th className="py-2.5 px-3 min-w-[170px]">Teacher / Instructor</th>
                 <th className="py-2.5 px-3 w-48">LMS Upload Status *</th>
                 {showAdvancedColumns && (
                   <th className="py-2.5 px-3 w-36">Section / Shift</th>
@@ -1180,9 +1573,13 @@ export const HODEntryForm: React.FC<Props> = ({
                 {showAdvancedColumns && (
                   <th className="py-2.5 px-3 w-36">Date Uploaded</th>
                 )}
-                {showAdvancedColumns && (
-                  <th className="py-2.5 px-3 min-w-[150px]">LMS Ref / Remarks</th>
-                )}
+                {/* Remarks / Delay Reason is always visible so user can see and enter custom reasons */}
+                <th className="py-2.5 px-3 min-w-[220px]">
+                  <div className="flex items-center gap-1">
+                    <span>Remarks / Delay Reason</span>
+                    <span className="text-[9px] font-normal text-slate-500 normal-case">(Custom or preset)</span>
+                  </div>
+                </th>
                 <th className="py-2.5 px-2 text-center w-14">Action</th>
               </tr>
             </thead>
@@ -1190,7 +1587,7 @@ export const HODEntryForm: React.FC<Props> = ({
               {filteredSubjects.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showAdvancedColumns ? 10 : 7}
+                    colSpan={showAdvancedColumns ? 11 : 9}
                     className="py-12 text-center text-slate-400 bg-white"
                   >
                     <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -1213,22 +1610,41 @@ export const HODEntryForm: React.FC<Props> = ({
                   const isPending = subject.status === 'Pending';
                   const isInProgress = subject.status === 'In Progress';
                   const isNotApplicable = subject.status === 'Not Applicable';
+                  const isRowSelected = selectedRowIds.has(subject.id);
 
                   return (
                     <tr
                       key={subject.id}
-                      className={`hover:bg-slate-50 transition-colors ${
-                        isUploaded
-                          ? 'bg-emerald-50/20'
+                      className={`transition-colors ${
+                        isRowSelected
+                          ? 'bg-emerald-50/90 ring-1 ring-inset ring-emerald-500'
+                          : isUploaded
+                          ? 'bg-emerald-50/20 hover:bg-slate-50'
                           : isPending
-                          ? 'bg-amber-50/20'
+                          ? 'bg-amber-50/20 hover:bg-slate-50'
                           : isInProgress
-                          ? 'bg-blue-50/20'
-                          : ''
+                          ? 'bg-blue-50/20 hover:bg-slate-50'
+                          : 'hover:bg-slate-50'
                       }`}
                     >
+                      {/* Selection Checkbox */}
+                      <td className="py-2.5 px-3 text-center">
+                        <input
+                          id={`chk-row-${subject.id}`}
+                          type="checkbox"
+                          checked={isRowSelected}
+                          onChange={() => handleToggleSelectRow(subject.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                          title={isRowSelected ? 'Deselect this course' : 'Select this course for Quick Tool'}
+                        />
+                      </td>
+
                       {/* Row index */}
-                      <td className="py-2.5 px-3 text-center text-slate-400 font-semibold">
+                      <td
+                        className="py-2.5 px-2 text-center text-slate-400 font-semibold cursor-pointer"
+                        onClick={() => handleToggleSelectRow(subject.id)}
+                        title="Click to select/deselect row"
+                      >
                         {idx + 1}
                       </td>
 
@@ -1338,20 +1754,61 @@ export const HODEntryForm: React.FC<Props> = ({
                         </td>
                       )}
 
-                      {/* LMS Ref / Remarks (Advanced column) */}
-                      {showAdvancedColumns && (
-                        <td className="py-2 px-3">
+                      {/* Remarks / Delay Reason (Always visible, free-text with custom reason support & preset picker) */}
+                      <td className="py-2 px-3">
+                        <div className="relative flex items-center gap-1">
                           <input
                             type="text"
+                            list="datalist-delay-reasons"
                             value={subject.remarks || ''}
                             onChange={(e) =>
                               handleRowChangeById(subject.id, 'remarks', e.target.value)
                             }
-                            placeholder="Optional notes / link"
-                            className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs text-slate-600 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                            placeholder={
+                              isPending
+                                ? 'Delay reason required (type or pick)...'
+                                : isInProgress
+                                ? 'Progress notes / reason...'
+                                : 'Optional remarks / notes'
+                            }
+                            className={`w-full bg-transparent border rounded px-2 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-colors ${
+                              isPending && !subject.remarks?.trim()
+                                ? 'border-amber-300 bg-amber-50/40'
+                                : 'border-slate-200'
+                            }`}
                           />
-                        </td>
-                      )}
+                          {/* Quick Preset Reason Picker for this row */}
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleRowChangeById(subject.id, 'remarks', e.target.value);
+                                e.target.value = '';
+                              }
+                            }}
+                            className="w-6 h-6 p-0 text-slate-400 hover:text-emerald-700 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 text-[10px] cursor-pointer shrink-0 focus:outline-none"
+                            title="Insert preset delay reason into this row"
+                          >
+                            <option value="">⚡</option>
+                            <optgroup label="Standard Reasons">
+                              {STANDARD_DELAY_REASONS.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
+                            </optgroup>
+                            {recentCustomReasons.length > 0 && (
+                              <optgroup label="Recent Custom Reasons">
+                                {recentCustomReasons.map((r) => (
+                                  <option key={r} value={r}>
+                                    {r}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                      </td>
 
                       {/* Action (Delete row) */}
                       <td className="py-2 px-2 text-center">
