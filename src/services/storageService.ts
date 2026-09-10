@@ -187,6 +187,9 @@ export class StorageService {
       // fallback
     }
     return {
+      id: 'default_hod',
+      username: 'hod_coordinator',
+      role: 'HOD',
       name: 'Dr. HOD / Coordinator',
       designation: 'HOD / Program Coordinator',
       department: 'Department of Computer Science',
@@ -529,7 +532,7 @@ export class StorageService {
   public static exportCSV(customRecords?: SubmissionRecord[], filename?: string): void {
     const records = customRecords || this.getAllSubmissions();
     if (records.length === 0) {
-      alert('No records found to export. Please enter and save at least one program.');
+      console.warn('No records found to export. Please enter and save at least one program.');
       return;
     }
 

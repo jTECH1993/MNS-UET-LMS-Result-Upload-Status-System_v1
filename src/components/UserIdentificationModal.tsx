@@ -38,6 +38,9 @@ export const UserIdentificationModal: React.FC<Props> = ({
     if (!name.trim()) return;
 
     const session: ActiveUserSession = {
+      id: currentUser.id || 'usr_' + Date.now(),
+      username: currentUser.username || 'user',
+      role: currentUser.role || 'HOD',
       name: name.trim(),
       designation: designation.trim(),
       department: department.trim(),

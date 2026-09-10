@@ -33,10 +33,28 @@ export interface AccessLogEntry {
   timestamp: string;
 }
 
+export type UserRole = 'ADMIN' | 'VC' | 'HOD';
+
+export interface UserAccount {
+  id: string;
+  username: string; // e.g. "admin", "VC", or "hod_cs"
+  password: string; // plain text / hash for demo persistence
+  name: string;
+  department: string; // e.g. "Department of Computer Science" or "ALL"
+  designation: string;
+  role: UserRole;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
 export interface ActiveUserSession {
+  id: string;
+  username: string;
   name: string;
   designation: string;
   department: string;
+  role: UserRole;
+  token?: string;
 }
 
 export interface AuditChangeDetail {
@@ -74,9 +92,9 @@ export interface SubmissionRecord {
   createdAt: string;
 
   // Security credentials (No Login + Reference Number + Edit PIN)
-  referenceNumber: string; // e.g. "MNSUET-CS-BSCS-S1-M-7F4K92"
-  editPin: string; // e.g. "58392174"
-  auditTrail: AuditLogEntry[];
+  referenceNumber?: string; // e.g. "MNSUET-CS-BSCS-S1-M-7F4K92"
+  editPin?: string; // e.g. "58392174"
+  auditTrail?: AuditLogEntry[];
 }
 
 export interface ExecutiveSummary {

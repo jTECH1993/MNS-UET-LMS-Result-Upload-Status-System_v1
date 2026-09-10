@@ -42,6 +42,7 @@ import {
   Search,
   FileText,
   X,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -221,6 +222,15 @@ export const HODEntryForm: React.FC<Props> = ({
       setSemester(selectedSemesterProp);
     }
   }, [selectedSemesterProp]);
+
+  // Strict Department Isolation for HOD role
+  useEffect(() => {
+    if (currentUser?.role === 'HOD' && currentUser.department) {
+      if (department !== currentUser.department) {
+        handleDepartmentChange(currentUser.department);
+      }
+    }
+  }, [currentUser, department]);
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
@@ -577,8 +587,8 @@ export const HODEntryForm: React.FC<Props> = ({
             <span>SEMESTER {semester}</span>
           </span>
 
-          {/* VC View Link */}
-          {onSwitchToVC && (
+          {/* VC View Link: Only for Admin or VC */}
+          {onSwitchToVC && currentUser?.role !== 'HOD' && (
             <button
               id="btn-switch-vc-view"
               type="button"
@@ -646,18 +656,30 @@ export const HODEntryForm: React.FC<Props> = ({
             >
               Department <span className="text-rose-600">*</span>
             </label>
-            <select
-              id="select-department"
-              value={department}
-              onChange={(e) => handleDepartmentChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
-            >
-              {UNIVERSITY_DEPARTMENTS.map((dept) => (
-                <option key={dept.name} value={dept.name}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
+            {currentUser?.role === 'HOD' ? (
+              <div
+                className="w-full bg-emerald-50 border border-emerald-300 rounded-lg px-3 py-2 text-xs font-bold text-emerald-950 flex items-center justify-between shadow-2xs"
+                title={`Department locked to ${department}`}
+              >
+                <span className="truncate">{department}</span>
+                <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 flex items-center gap-1 ml-1">
+                  <Lock className="w-2.5 h-2.5" /> Locked
+                </span>
+              </div>
+            ) : (
+              <select
+                id="select-department"
+                value={department}
+                onChange={(e) => handleDepartmentChange(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
+              >
+                {UNIVERSITY_DEPARTMENTS.map((dept) => (
+                  <option key={dept.name} value={dept.name}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Program */}

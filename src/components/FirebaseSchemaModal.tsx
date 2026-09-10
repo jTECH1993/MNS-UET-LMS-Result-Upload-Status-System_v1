@@ -24,6 +24,7 @@ interface Props {
   onClose: () => void;
   currentRecord?: SubmissionRecord | null;
   allRecords: SubmissionRecord[];
+  isAdmin?: boolean;
 }
 
 export const FirebaseSchemaModal: React.FC<Props> = ({
@@ -31,6 +32,7 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
   onClose,
   currentRecord,
   allRecords,
+  isAdmin = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'status' | 'diagnostic' | 'logs' | 'current' | 'all' | 'rules'>('status');
@@ -38,9 +40,35 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [showConfirmClearDb, setShowConfirmClearDb] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  // Strict role security: Only admin can access database management and danger zone
+  if (!isAdmin) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+        <div className="bg-white rounded-xl shadow-2xl border border-rose-200 max-w-md w-full p-6 text-center space-y-4">
+          <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
+          <p className="text-xs text-slate-600">
+            Database schema and cloud management operations are restricted strictly to the
+            System Administrator (<code className="bg-slate-100 px-1 py-0.5 rounded font-bold font-mono">admin</code>).
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleRunDiagnostic = () => {
     setIsTesting(true);
@@ -75,15 +103,10 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
   };
 
   const handleClearDatabase = () => {
-    if (
-      window.confirm(
-        'Are you sure you want to completely clear all saved submissions? This will wipe the database to a completely clean state (zero records, zero dummy data).'
-      )
-    ) {
-      StorageService.clearAllData();
-      setAccessLogs(StorageService.getAccessLogs());
-      window.location.reload();
-    }
+    StorageService.clearAllData();
+    setAccessLogs(StorageService.getAccessLogs());
+    setShowConfirmClearDb(false);
+    window.location.reload();
   };
 
   const currentPayload = currentRecord
@@ -368,13 +391,33 @@ service cloud.firestore {
                   />
                 </label>
 
-                <button
-                  type="button"
-                  onClick={handleClearDatabase}
-                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  Clear Database (Zero Records)
-                </button>
+                {showConfirmClearDb ? (
+                  <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-300 p-1.5 rounded-lg text-xs">
+                    <span className="text-rose-800 font-bold">Wipe all records to zero?</span>
+                    <button
+                      type="button"
+                      onClick={handleClearDatabase}
+                      className="px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded font-bold cursor-pointer transition-colors"
+                    >
+                      Yes, Wipe All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmClearDb(false)}
+                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-semibold cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmClearDb(true)}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    Clear Database (Zero Records)
+                  </button>
+                )}
               </div>
             </div>
           ) : activeTab === 'diagnostic' ? (

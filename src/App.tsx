@@ -4,7 +4,11 @@ import { HODEntryForm } from './components/HODEntryForm';
 import { VCDashboard } from './components/VCDashboard';
 import { FirebaseSchemaModal } from './components/FirebaseSchemaModal';
 import { UserIdentificationModal } from './components/UserIdentificationModal';
+import { UserAccountsModal } from './components/UserAccountsModal';
+import { SplashScreen } from './components/SplashScreen';
+import { AuthScreen } from './components/AuthScreen';
 import { StorageService } from './services/storageService';
+import { AuthService } from './services/authService';
 import { SubmissionRecord, ActiveUserSession, AcademicShift } from './types';
 import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
 import {
@@ -15,19 +19,33 @@ import {
   ShieldCheck,
   GraduationCap,
   Layers,
+  Lock,
 } from 'lucide-react';
 
 export default function App() {
+  // Splash screen state: show once on fresh launch
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+
+  // Authenticated user session
+  const [currentUser, setCurrentUser] = useState<ActiveUserSession | null>(() =>
+    AuthService.getCurrentSession()
+  );
+
   const [activeView, setActiveView] = useState<'HOD' | 'VC'>('HOD');
   const [allRecords, setAllRecords] = useState<SubmissionRecord[]>([]);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<ActiveUserSession>(() =>
-    StorageService.getActiveUser()
-  );
+  const [isUserAccountsModalOpen, setIsUserAccountsModalOpen] = useState<boolean>(false);
 
-  // Program, Shift, and Semester selection state to coordinate between VC and HOD view
-  const [targetDept, setTargetDept] = useState<string>('Department of Computer Science');
+  // Program, Shift, and Semester selection state
+  const [targetDept, setTargetDept] = useState<string>(() => {
+    const session = AuthService.getCurrentSession();
+    if (session?.role === 'HOD' && session.department) {
+      return session.department;
+    }
+    return 'Department of Computer Science';
+  });
+
   const [targetProg, setTargetProg] = useState<string>('BS Computer Science');
   const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
   const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
@@ -40,9 +58,73 @@ export default function App() {
 
   useEffect(() => {
     reloadRecords();
-    // Log application visit
     StorageService.logAccess('Accessed MNS-UET Result Portal', targetDept);
   }, []);
+
+  // Listen for storage changes across tabs
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      reloadRecords();
+    };
+    const handleAuthUpdate = () => {
+      const session = AuthService.getCurrentSession();
+      setCurrentUser(session);
+    };
+    window.addEventListener('mnsuet_storage_updated', handleStorageUpdate);
+    window.addEventListener('mnsuet_auth_changed', handleAuthUpdate);
+    return () => {
+      window.removeEventListener('mnsuet_storage_updated', handleStorageUpdate);
+      window.removeEventListener('mnsuet_auth_changed', handleAuthUpdate);
+    };
+  }, []);
+
+  // Set default view depending on user role
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === 'VC') {
+        setActiveView('VC');
+      } else if (currentUser.role === 'HOD') {
+        setActiveView('HOD');
+        if (currentUser.department) {
+          setTargetDept(currentUser.department);
+          const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === currentUser.department);
+          if (deptObj && deptObj.programs.length > 0) {
+            setTargetProg(deptObj.programs[0].name);
+          }
+        }
+      }
+    }
+  }, [currentUser]);
+
+  const handleAuthenticated = (session: ActiveUserSession) => {
+    setCurrentUser(session);
+    if (session.role === 'VC') {
+      setActiveView('VC');
+    } else if (session.role === 'HOD') {
+      setActiveView('HOD');
+      if (session.department) {
+        setTargetDept(session.department);
+        const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === session.department);
+        if (deptObj && deptObj.programs.length > 0) {
+          setTargetProg(deptObj.programs[0].name);
+        }
+      }
+    } else {
+      setActiveView('HOD');
+    }
+  };
+
+  const handleLogout = () => {
+    AuthService.logout();
+    try {
+      localStorage.removeItem('mnsuet_active_user_v2');
+    } catch (e) {
+      // ignore
+    }
+    setCurrentUser(null);
+  };
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleInspectProgramFromVC = (
     dept: string,
@@ -51,6 +133,13 @@ export default function App() {
     session?: string,
     semester?: string
   ) => {
+    // Only Admin can jump to HOD entry for other departments from VC dashboard
+    if (currentUser?.role === 'HOD' && currentUser.department !== dept) {
+      setToastMessage('Department Isolation: You can only edit results for your assigned department.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
     setTargetDept(dept);
     setTargetProg(prog);
     if (shift) setTargetShift(shift);
@@ -59,6 +148,16 @@ export default function App() {
     setActiveView('HOD');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // If splash screen is still active, show it
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
+  // If no user is logged in, show the Authentication screen
+  if (!currentUser) {
+    return <AuthScreen onAuthenticated={handleAuthenticated} />;
+  }
 
   const selectedDeptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === targetDept);
   const selectedProgObj = selectedDeptObj?.programs.find((p) => p.name === targetProg);
@@ -73,6 +172,10 @@ export default function App() {
     targetSemester
   );
 
+  const isAdmin = currentUser.role === 'ADMIN';
+  const isVC = currentUser.role === 'VC';
+  const isHOD = currentUser.role === 'HOD';
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
       {/* Institutional Top Navigation Header */}
@@ -80,7 +183,8 @@ export default function App() {
         activeView={activeView}
         onViewChange={setActiveView}
         onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
-        onOpenUserModal={() => setIsUserModalOpen(true)}
+        onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
+        onLogout={handleLogout}
         currentUser={currentUser}
         savedCount={allRecords.length}
         currentSession={targetSession}
@@ -89,63 +193,97 @@ export default function App() {
 
       {/* Main Container */}
       <main className="max-w-7xl w-full mx-auto px-4 py-6 flex-1 space-y-6">
+        {toastMessage && (
+          <div className="bg-rose-50 border border-rose-300 text-rose-800 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+            <span>{toastMessage}</span>
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              className="text-rose-700 hover:text-rose-900 font-bold ml-2 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Department Quick Switcher Bar */}
         <div className="bg-white p-3 rounded-lg border border-slate-300 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-800 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
-              Session 2023 Departments
-            </span>
-            <span className="hidden md:inline text-slate-500">
-              Quick navigate department forms:
-            </span>
-          </div>
+          {/* If HOD: Show isolated single department */}
+          {isHOD ? (
+            <div className="flex items-center gap-2">
+              <span className="bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                <Lock className="w-3 h-3 text-emerald-300" />
+                Department Isolation Active
+              </span>
+              <span className="text-slate-800 font-bold text-xs bg-slate-100 px-3 py-1 rounded border border-slate-300">
+                {currentUser.department}
+              </span>
+            </div>
+          ) : (
+            /* If Admin or VC: Show quick switcher buttons */
+            <>
+              <div className="flex items-center gap-2">
+                <span className="bg-slate-900 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
+                  {isAdmin ? 'Admin Department Switcher' : 'University Departments'}
+                </span>
+                <span className="hidden md:inline text-slate-500">
+                  Switch department:
+                </span>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {UNIVERSITY_DEPARTMENTS.map((dept) => {
-              const isActive = targetDept === dept.name;
-              const session2023Prog =
-                dept.programs.find((p) => p.session2023) || dept.programs[0];
+              <div className="flex flex-wrap items-center gap-1.5">
+                {UNIVERSITY_DEPARTMENTS.map((dept) => {
+                  const isActive = targetDept === dept.name;
+                  const session2023Prog =
+                    dept.programs.find((p) => p.session2023) || dept.programs[0];
 
-              return (
-                <button
-                  key={dept.name}
-                  type="button"
-                  onClick={() => {
-                    setTargetDept(dept.name);
-                    if (session2023Prog) setTargetProg(session2023Prog.name);
-                    setActiveView('HOD');
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                    isActive && activeView === 'HOD'
-                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
-                  }`}
-                >
-                  {dept.code}
-                </button>
-              );
-            })}
-          </div>
+                  return (
+                    <button
+                      key={dept.name}
+                      type="button"
+                      onClick={() => {
+                        setTargetDept(dept.name);
+                        if (session2023Prog) setTargetProg(session2023Prog.name);
+                        setActiveView('HOD');
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                        isActive && activeView === 'HOD'
+                          ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                      }`}
+                    >
+                      {dept.code}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
+          {/* Database indicator */}
           <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
             <span className="flex items-center gap-1">
               <Database className="w-3.5 h-3.5 text-emerald-700" />
-              Database:{' '}
-              {allRecords.length === 0 ? (
-                <strong className="text-slate-500">Fresh (Clean, 0 records)</strong>
+              <span>Database: </span>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setIsFirebaseModalOpen(true)}
+                  className="font-bold text-red-700 hover:underline cursor-pointer"
+                >
+                  {allRecords.length} Saved Record(s) (Manage)
+                </button>
               ) : (
-                <strong className="text-emerald-700">{allRecords.length} Saved Record(s)</strong>
+                <strong className="text-emerald-800 font-bold">
+                  {allRecords.length} Total Saved
+                </strong>
               )}
             </span>
             <span className="text-slate-300">|</span>
-            <button
-              type="button"
-              onClick={() => setIsUserModalOpen(true)}
-              className="flex items-center gap-1 text-slate-700 hover:text-emerald-900 underline cursor-pointer"
-            >
+            <span className="flex items-center gap-1 text-slate-700">
               <User className="w-3.5 h-3.5 text-slate-500" />
-              {currentUser.name}
-            </button>
+              <strong>{currentUser.name}</strong>
+            </span>
           </div>
         </div>
 
@@ -191,41 +329,54 @@ export default function App() {
               Academic Session {targetSession} – Semester {targetSemester} Portal
             </span>
             <span>•</span>
-            <button
-              onClick={() => setIsUserModalOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold underline cursor-pointer"
-            >
-              Access Identity Traceability
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsFirebaseModalOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold underline cursor-pointer"
-            >
-              Database Status & Schema
-            </button>
+            <span className="text-slate-400">
+              Role: <strong className="text-white">{currentUser.role}</strong>
+            </span>
+            {/* ONLY ADMIN SEES DATABASE LINK */}
+            {isAdmin && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={() => setIsFirebaseModalOpen(true)}
+                  className="text-red-400 hover:text-red-300 font-semibold underline cursor-pointer"
+                >
+                  Admin Database Control & Danger Zone
+                </button>
+              </>
+            )}
           </div>
         </div>
       </footer>
 
-      {/* User Identification / Traceability Modal */}
+      {/* User Identification / Profile View Modal */}
       <UserIdentificationModal
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
         currentUser={currentUser}
-        onUserSaved={(user) => {
-          setCurrentUser(user);
+        onUserSaved={(updatedUser) => {
+          setCurrentUser(updatedUser);
           reloadRecords();
         }}
       />
 
-      {/* Database Schema & Audit Modal */}
-      <FirebaseSchemaModal
-        isOpen={isFirebaseModalOpen}
-        onClose={() => setIsFirebaseModalOpen(false)}
-        currentRecord={currentRecord}
-        allRecords={allRecords}
-      />
+      {/* Admin User Accounts Management Modal */}
+      {isAdmin && (
+        <UserAccountsModal
+          isOpen={isUserAccountsModalOpen}
+          onClose={() => setIsUserAccountsModalOpen(false)}
+        />
+      )}
+
+      {/* Database Schema & Danger Zone Modal (Admin only) */}
+      {isAdmin && (
+        <FirebaseSchemaModal
+          isOpen={isFirebaseModalOpen}
+          onClose={() => setIsFirebaseModalOpen(false)}
+          currentRecord={currentRecord}
+          allRecords={allRecords}
+          isAdmin={isAdmin}
+        />
+      )}
     </div>
   );
 }
