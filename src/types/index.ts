@@ -45,6 +45,8 @@ export interface UserAccount {
   role: UserRole;
   createdAt: string;
   lastLoginAt?: string;
+  avatarUrl?: string; // base64 or photo URL
+  themePreference?: 'light' | 'dark';
 }
 
 export interface ActiveUserSession {
@@ -55,6 +57,8 @@ export interface ActiveUserSession {
   department: string;
   role: UserRole;
   token?: string;
+  avatarUrl?: string;
+  themePreference?: 'light' | 'dark';
 }
 
 export interface AuditChangeDetail {

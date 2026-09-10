@@ -5,6 +5,7 @@ import { VCDashboard } from './components/VCDashboard';
 import { FirebaseSchemaModal } from './components/FirebaseSchemaModal';
 import { UserIdentificationModal } from './components/UserIdentificationModal';
 import { UserAccountsModal } from './components/UserAccountsModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import { SplashScreen } from './components/SplashScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { StorageService } from './services/storageService';
@@ -36,6 +37,12 @@ export default function App() {
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [isUserAccountsModalOpen, setIsUserAccountsModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+
+  // Initialize theme on app boot
+  useEffect(() => {
+    AuthService.initTheme();
+  }, []);
 
   // Program, Shift, and Semester selection state
   const [targetDept, setTargetDept] = useState<string>(() => {
@@ -177,13 +184,14 @@ export default function App() {
   const isHOD = currentUser.role === 'HOD';
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* Institutional Top Navigation Header */}
       <Header
         activeView={activeView}
         onViewChange={setActiveView}
         onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onLogout={handleLogout}
         currentUser={currentUser}
         savedCount={allRecords.length}
@@ -194,7 +202,7 @@ export default function App() {
       {/* Main Container */}
       <main className="max-w-7xl w-full mx-auto px-4 py-6 flex-1 space-y-6">
         {toastMessage && (
-          <div className="bg-rose-50 border border-rose-300 text-rose-800 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
             <span>{toastMessage}</span>
             <button
               type="button"
@@ -207,7 +215,7 @@ export default function App() {
         )}
 
         {/* Department Quick Switcher Bar */}
-        <div className="bg-white p-3 rounded-lg border border-slate-300 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* If HOD: Show isolated single department */}
           {isHOD ? (
             <div className="flex items-center gap-2">
@@ -215,7 +223,7 @@ export default function App() {
                 <Lock className="w-3 h-3 text-emerald-300" />
                 Department Isolation Active
               </span>
-              <span className="text-slate-800 font-bold text-xs bg-slate-100 px-3 py-1 rounded border border-slate-300">
+              <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
                 {currentUser.department}
               </span>
             </div>
@@ -223,10 +231,10 @@ export default function App() {
             /* If Admin or VC: Show quick switcher buttons */
             <>
               <div className="flex items-center gap-2">
-                <span className="bg-slate-900 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
+                <span className="bg-slate-900 dark:bg-slate-800 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
                   {isAdmin ? 'Admin Department Switcher' : 'University Departments'}
                 </span>
-                <span className="hidden md:inline text-slate-500">
+                <span className="hidden md:inline text-slate-500 dark:text-slate-400">
                   Switch department:
                 </span>
               </div>
@@ -249,7 +257,7 @@ export default function App() {
                       className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
                         isActive && activeView === 'HOD'
                           ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                          : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
                       }`}
                     >
                       {dept.code}
@@ -260,30 +268,46 @@ export default function App() {
             </>
           )}
 
-          {/* Database indicator */}
-          <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
+          {/* Database indicator & User profile quick trigger */}
+          <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
             <span className="flex items-center gap-1">
-              <Database className="w-3.5 h-3.5 text-emerald-700" />
+              <Database className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
               <span>Database: </span>
               {isAdmin ? (
                 <button
                   type="button"
                   onClick={() => setIsFirebaseModalOpen(true)}
-                  className="font-bold text-red-700 hover:underline cursor-pointer"
+                  className="font-bold text-red-700 dark:text-red-400 hover:underline cursor-pointer"
                 >
                   {allRecords.length} Saved Record(s) (Manage)
                 </button>
               ) : (
-                <strong className="text-emerald-800 font-bold">
+                <strong className="text-emerald-800 dark:text-emerald-400 font-bold">
                   {allRecords.length} Total Saved
                 </strong>
               )}
             </span>
-            <span className="text-slate-300">|</span>
-            <span className="flex items-center gap-1 text-slate-700">
-              <User className="w-3.5 h-3.5 text-slate-500" />
-              <strong>{currentUser.name}</strong>
-            </span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 hover:text-emerald-700 dark:hover:text-emerald-400 cursor-pointer font-bold transition-colors group"
+              title="Click to adjust your profile image, name, password, or theme"
+            >
+              {currentUser.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="w-4 h-4 rounded-full object-cover border border-emerald-500 shrink-0"
+                />
+              ) : (
+                <User className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600" />
+              )}
+              <span className="max-w-[150px] truncate">{currentUser.name}</span>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 underline font-normal hidden sm:inline">
+                (Edit Profile)
+              </span>
+            </button>
           </div>
         </div>
 
@@ -347,6 +371,17 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* User Profile Management Modal (Photo, Name, Password, Day/Night Theme) */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
+        onUserUpdated={(updatedSession) => {
+          setCurrentUser(updatedSession);
+          reloadRecords();
+        }}
+      />
 
       {/* User Identification / Profile View Modal */}
       <UserIdentificationModal

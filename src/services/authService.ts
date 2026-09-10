@@ -49,35 +49,33 @@ export class AuthService {
         modified = true;
       }
 
-      // Ensure required Admin and VC accounts always exist and have the exact user-specified passwords
+      // Ensure required Admin and VC accounts always exist
       const adminAcc = parsed.find(
         (a) => a.username.toLowerCase() === 'admin'
       );
       if (!adminAcc) {
-        parsed.push(DEFAULT_ACCOUNTS[0]);
+        parsed.push({ ...DEFAULT_ACCOUNTS[0] });
         modified = true;
       } else {
-        // Enforce the requested password
-        if (adminAcc.password !== 'Qwe12!@!@') {
+        if (!adminAcc.password) {
           adminAcc.password = 'Qwe12!@!@';
-          adminAcc.role = 'ADMIN';
           modified = true;
         }
+        adminAcc.role = 'ADMIN';
       }
 
       const vcAcc = parsed.find(
         (a) => a.username.toLowerCase() === 'vc'
       );
       if (!vcAcc) {
-        parsed.push(DEFAULT_ACCOUNTS[1]);
+        parsed.push({ ...DEFAULT_ACCOUNTS[1] });
         modified = true;
       } else {
-        // Enforce the requested password
-        if (vcAcc.password !== 'JHG45$%xz') {
+        if (!vcAcc.password) {
           vcAcc.password = 'JHG45$%xz';
-          vcAcc.role = 'VC';
           modified = true;
         }
+        vcAcc.role = 'VC';
       }
 
       if (modified) {
@@ -172,8 +170,14 @@ export class AuthService {
       designation: account.designation,
       department: account.department,
       role: account.role,
+      avatarUrl: account.avatarUrl,
+      themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     };
+
+    if (account.themePreference) {
+      this.applyTheme(account.themePreference);
+    }
 
     this.setCurrentSession(session);
     return {
@@ -272,6 +276,151 @@ export class AuthService {
     const filtered = accounts.filter((a) => a.id !== accountId);
     this.saveAccounts(filtered);
     return { success: true, message: `Account "${target.username}" deleted successfully.` };
+  }
+
+  // Update Profile: Name, Designation, Avatar, Password, Theme
+  public static updateProfile(
+    userId: string,
+    data: {
+      name?: string;
+      designation?: string;
+      avatarUrl?: string;
+      oldPassword?: string;
+      newPassword?: string;
+      themePreference?: 'light' | 'dark';
+    }
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+
+    if (!account) {
+      return { success: false, message: 'Account not found.' };
+    }
+
+    // If changing password, verify old password
+    if (data.newPassword !== undefined && data.newPassword.trim().length > 0) {
+      if (!data.oldPassword) {
+        return {
+          success: false,
+          message: 'Please enter your current password to set a new password.',
+        };
+      }
+      if (data.oldPassword.trim() !== account.password) {
+        return {
+          success: false,
+          message: 'Current password does not match. Please verify and try again.',
+        };
+      }
+      if (data.newPassword.trim().length < 4) {
+        return {
+          success: false,
+          message: 'New password must be at least 4 characters long.',
+        };
+      }
+      account.password = data.newPassword.trim();
+    }
+
+    // Update name
+    if (data.name !== undefined && data.name.trim().length > 0) {
+      account.name = data.name.trim();
+    }
+
+    // Update designation
+    if (data.designation !== undefined && data.designation.trim().length > 0) {
+      account.designation = data.designation.trim();
+    }
+
+    // Update avatarUrl (can be empty string to remove avatar)
+    if (data.avatarUrl !== undefined) {
+      account.avatarUrl = data.avatarUrl.trim();
+    }
+
+    // Update themePreference
+    if (data.themePreference) {
+      account.themePreference = data.themePreference;
+      this.applyTheme(data.themePreference);
+    }
+
+    this.saveAccounts(accounts);
+
+    // Update active session if this is the currently logged-in user
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined = undefined;
+
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        name: account.name,
+        designation: account.designation,
+        avatarUrl: account.avatarUrl,
+        themePreference: account.themePreference,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    return {
+      success: true,
+      message: 'Profile updated successfully!',
+      session: updatedSession || currentSession || undefined,
+    };
+  }
+
+  // Initialize theme mode
+  public static initTheme(): 'light' | 'dark' {
+    try {
+      const activeSession = this.getCurrentSession();
+      const stored = localStorage.getItem('mnsuet_theme_mode') as 'light' | 'dark' | null;
+      const theme: 'light' | 'dark' = activeSession?.themePreference || stored || 'light';
+      this.applyTheme(theme);
+      return theme;
+    } catch (e) {
+      return 'light';
+    }
+  }
+
+  // Apply theme to HTML root element
+  public static applyTheme(theme: 'light' | 'dark'): void {
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    try {
+      localStorage.setItem('mnsuet_theme_mode', theme);
+    } catch (e) {}
+  }
+
+  // Toggle theme mode for active user / guest
+  public static toggleTheme(userId?: string): 'light' | 'dark' {
+    const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+    const newTheme: 'light' | 'dark' = isDark ? 'light' : 'dark';
+    this.applyTheme(newTheme);
+
+    const accounts = this.getAccounts();
+    const session = this.getCurrentSession();
+    const targetId = userId || session?.id;
+
+    if (targetId) {
+      const user = accounts.find((a) => a.id === targetId);
+      if (user) {
+        user.themePreference = newTheme;
+        this.saveAccounts(accounts);
+      }
+      if (session && session.id === targetId) {
+        session.themePreference = newTheme;
+        this.setCurrentSession(session);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_theme_changed', { detail: { theme: newTheme } })
+      );
+    }
+
+    return newTheme;
   }
 
   // Remove all non-master accounts, leaving only official Admin and VC accounts

@@ -4,6 +4,7 @@ import { StorageService } from '../services/storageService';
 import { SubmissionRecord, AcademicShift } from '../types';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
+import { ExecutiveReportModal } from './ExecutiveReportModal';
 import { MnsUetLogo } from './MnsUetLogo';
 import {
   Building2,
@@ -24,6 +25,8 @@ import {
   Layers,
   Sparkles,
   X,
+  FileText,
+  Printer,
 } from 'lucide-react';
 
 interface Props {
@@ -77,6 +80,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
+  const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
 
   // Per-row shift selection state (allows user/VC to toggle Morning/Evening on an individual program row)
   const [rowShiftOverrides, setRowShiftOverrides] = useState<Record<string, AcademicShift>>({});
@@ -392,6 +396,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-open-executive-report"
+            type="button"
+            onClick={() => setIsExecutiveReportOpen(true)}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg border border-slate-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+            title="Generate print-ready executive compliance report or departmental reminder circular"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Official Report &amp; Notice</span>
+          </button>
+
           <button
             id="btn-export-university-master-csv"
             type="button"
@@ -1049,6 +1064,24 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         sessionName={currentSession}
         onRosterUpdated={() => {
           setRosterVersion((v) => v + 1);
+        }}
+      />
+
+      {/* Executive Report & Formal Compliance Notice Generator */}
+      <ExecutiveReportModal
+        isOpen={isExecutiveReportOpen}
+        onClose={() => setIsExecutiveReportOpen(false)}
+        allPrograms={allUniversityPrograms}
+        allRecords={allRecords}
+        currentSession={currentSession}
+        selectedSemester={selectedSemesterFilter}
+        stats={{
+          totalDegreePrograms: stats.totalPrograms,
+          submittedProgramsCount: stats.submittedSlots,
+          totalActiveSubjects: stats.totalSubjectsAcrossUni,
+          totalUploadedSubjects: stats.totalUploadedAcrossUni,
+          totalPendingSubjects: stats.totalPendingAcrossUni,
+          uploadPercentage: stats.uniUploadPercentage,
         }}
       />
     </div>
