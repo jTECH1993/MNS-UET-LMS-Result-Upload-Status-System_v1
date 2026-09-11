@@ -109,11 +109,12 @@ export const UserIdentificationModal: React.FC<Props> = ({
               onChange={(e) => setDesignation(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white font-medium"
             >
-              <option value="HOD / Chairman">HOD / Chairman</option>
               <option value="Program Coordinator">Program Coordinator</option>
-              <option value="Associate Professor">Associate Professor</option>
+              <option value="HOD / Chairman">HOD / Chairman</option>
+              <option value="Lecturer">Lecturer (Regular Faculty)</option>
+              <option value="Visiting Lecturer">Visiting Lecturer</option>
               <option value="Assistant Professor">Assistant Professor</option>
-              <option value="Lecturer / Teacher">Lecturer / Teacher</option>
+              <option value="Associate Professor">Associate Professor</option>
               <option value="Dean of Faculty">Dean of Faculty</option>
               <option value="Office of Controller Examinations">Office of Controller Examinations</option>
             </select>

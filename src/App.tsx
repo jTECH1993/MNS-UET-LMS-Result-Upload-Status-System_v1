@@ -21,6 +21,8 @@ import {
   GraduationCap,
   Layers,
   Lock,
+  BookOpen,
+  Briefcase,
 } from 'lucide-react';
 
 export default function App() {
@@ -90,10 +92,14 @@ export default function App() {
     if (currentUser) {
       if (currentUser.role === 'VC') {
         setActiveView('VC');
-      } else if (currentUser.role === 'HOD') {
+      } else {
         setActiveView('HOD');
         if (currentUser.department) {
           setTargetDept(currentUser.department);
+        }
+        if (currentUser.program) {
+          setTargetProg(currentUser.program);
+        } else if (currentUser.department) {
           const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === currentUser.department);
           if (deptObj && deptObj.programs.length > 0) {
             setTargetProg(deptObj.programs[0].name);
@@ -107,17 +113,19 @@ export default function App() {
     setCurrentUser(session);
     if (session.role === 'VC') {
       setActiveView('VC');
-    } else if (session.role === 'HOD') {
+    } else {
       setActiveView('HOD');
       if (session.department) {
         setTargetDept(session.department);
+      }
+      if (session.program) {
+        setTargetProg(session.program);
+      } else if (session.department) {
         const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === session.department);
         if (deptObj && deptObj.programs.length > 0) {
           setTargetProg(deptObj.programs[0].name);
         }
       }
-    } else {
-      setActiveView('HOD');
     }
   };
 
@@ -181,6 +189,9 @@ export default function App() {
 
   const isAdmin = currentUser.role === 'ADMIN';
   const isVC = currentUser.role === 'VC';
+  const isCoordinator = currentUser.role === 'COORDINATOR';
+  const isLecturer = currentUser.role === 'LECTURER';
+  const isVisitingLecturer = currentUser.role === 'VISITING_LECTURER';
   const isHOD = currentUser.role === 'HOD';
 
   return (
@@ -200,7 +211,7 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="max-w-7xl w-full mx-auto px-4 py-6 flex-1 space-y-6">
+      <main className="max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
         {toastMessage && (
           <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
             <span>{toastMessage}</span>
@@ -216,8 +227,38 @@ export default function App() {
 
         {/* Department Quick Switcher Bar */}
         <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
-          {/* If HOD: Show isolated single department */}
-          {isHOD ? (
+          {/* If Coordinator, Lecturer, Visiting Lecturer, or HOD */}
+          {isCoordinator ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-teal-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                <GraduationCap className="w-3.5 h-3.5 text-teal-300" />
+                Coordinated Program: {currentUser.program || targetProg}
+              </span>
+              <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
+                {currentUser.department}
+              </span>
+            </div>
+          ) : isLecturer ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-sky-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                <BookOpen className="w-3.5 h-3.5 text-sky-300" />
+                Lecturer: {currentUser.program || targetProg}
+              </span>
+              <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
+                {currentUser.department}
+              </span>
+            </div>
+          ) : isVisitingLecturer ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-amber-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                <Briefcase className="w-3.5 h-3.5 text-amber-300" />
+                Visiting Lecturer: {currentUser.program || targetProg}
+              </span>
+              <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
+                {currentUser.department}
+              </span>
+            </div>
+          ) : isHOD ? (
             <div className="flex items-center gap-2">
               <span className="bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                 <Lock className="w-3 h-3 text-emerald-300" />

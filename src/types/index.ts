@@ -33,7 +33,13 @@ export interface AccessLogEntry {
   timestamp: string;
 }
 
-export type UserRole = 'ADMIN' | 'VC' | 'HOD' | 'COORDINATOR';
+export type UserRole =
+  | 'ADMIN'
+  | 'VC'
+  | 'HOD'
+  | 'COORDINATOR'
+  | 'LECTURER'
+  | 'VISITING_LECTURER';
 
 export interface UserAccount {
   id: string;

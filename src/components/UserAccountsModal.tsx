@@ -149,14 +149,29 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             acc.role === 'ADMIN'
-                              ? 'bg-red-100 text-red-800'
+                              ? 'bg-rose-100 text-rose-800'
                               : acc.role === 'VC'
                               ? 'bg-indigo-100 text-indigo-800'
+                              : acc.role === 'COORDINATOR'
+                              ? 'bg-teal-100 text-teal-800'
+                              : acc.role === 'LECTURER'
+                              ? 'bg-sky-100 text-sky-800'
+                              : acc.role === 'VISITING_LECTURER'
+                              ? 'bg-amber-100 text-amber-800'
                               : 'bg-emerald-100 text-emerald-800'
                           }`}
                         >
-                          {acc.role}
+                          {acc.role === 'COORDINATOR'
+                            ? 'COORDINATOR'
+                            : acc.role === 'VISITING_LECTURER'
+                            ? 'VISITING'
+                            : acc.role}
                         </span>
+                        {acc.program && (
+                          <span className="block text-[9px] text-teal-700 font-semibold mt-0.5">
+                            {acc.program}
+                          </span>
+                        )}
                       </td>
                       <td className="p-2.5 text-slate-600">
                         <span className="line-clamp-1" title={acc.department}>

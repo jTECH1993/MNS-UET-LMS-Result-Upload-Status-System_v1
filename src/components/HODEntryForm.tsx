@@ -18,6 +18,7 @@ import { BulkCourseImportModal } from './BulkCourseImportModal';
 import {
   Save,
   Trash2,
+  Copy,
   RotateCcw,
   Plus,
   Minus,
@@ -449,6 +450,19 @@ export const HODEntryForm: React.FC<Props> = ({
       return next;
     });
     showFeedback('info', 'Course row removed.');
+  };
+
+  // Duplicate row by ID
+  const handleDuplicateRow = (rowId: string) => {
+    const existing = subjects.find((s) => s.id === rowId);
+    if (!existing) return;
+    const duplicated: SubjectRow = {
+      ...existing,
+      id: `row_${Date.now()}_dup_${Math.random().toString(36).substring(2, 6)}`,
+      subjectTitle: existing.subjectTitle ? `${existing.subjectTitle} (Copy)` : '',
+    };
+    setSubjects((prev) => [...prev, duplicated]);
+    showFeedback('success', `Duplicated course ${existing.courseCode || existing.subjectTitle}.`);
   };
 
   // Row Selection Helpers
@@ -1555,8 +1569,233 @@ export const HODEntryForm: React.FC<Props> = ({
           ))}
         </datalist>
 
-        {/* Table Content */}
-        <div className="overflow-x-auto">
+        {/* Mobile Course Cards (Visible on screens < 768px) */}
+        <div className="block md:hidden divide-y divide-slate-200 bg-white">
+          {filteredSubjects.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 px-4">
+              <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="font-semibold text-slate-600 text-sm">No matching courses found</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                No course matches &quot;{courseFilterQuery}&quot;. Clear the search or click &quot;Add Course&quot; below.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCourseFilterQuery('')}
+                className="mt-3 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold cursor-pointer"
+              >
+                Clear Search Filter
+              </button>
+            </div>
+          ) : (
+            filteredSubjects.map((subject, idx) => {
+              const isUploaded = subject.status === 'Uploaded';
+              const isPending = subject.status === 'Pending';
+              const isInProgress = subject.status === 'In Progress';
+              const isRowSelected = selectedRowIds.has(subject.id);
+
+              return (
+                <div
+                  key={`mob-course-${subject.id}`}
+                  className={`p-3.5 space-y-2.5 transition-colors ${
+                    isRowSelected
+                      ? 'bg-emerald-50/90 ring-1 ring-inset ring-emerald-500'
+                      : isUploaded
+                      ? 'bg-emerald-50/20'
+                      : isPending
+                      ? 'bg-amber-50/20'
+                      : isInProgress
+                      ? 'bg-blue-50/20'
+                      : ''
+                  }`}
+                >
+                  {/* Card Header: Checkbox, Row #, Course Code, and Action buttons */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isRowSelected}
+                        onChange={() => handleToggleSelectRow(subject.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                      />
+                      <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                    </div>
+
+                    <div className="flex-1 max-w-[140px]">
+                      <input
+                        type="text"
+                        value={subject.courseCode || ''}
+                        onChange={(e) =>
+                          handleRowChangeById(subject.id, 'courseCode', e.target.value.toUpperCase())
+                        }
+                        placeholder="CODE (CS-101)"
+                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateRow(subject.id)}
+                        className="p-1 text-slate-400 hover:text-emerald-700 rounded cursor-pointer"
+                        title="Duplicate course"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRowById(subject.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                        title="Delete course"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Course Title */}
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-0.5">
+                      Course Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={subject.subjectTitle || ''}
+                      onChange={(e) =>
+                        handleRowChangeById(subject.id, 'subjectTitle', e.target.value)
+                      }
+                      placeholder="e.g. Programming Fundamentals"
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-semibold"
+                    />
+                  </div>
+
+                  {/* Instructor & Credit Hours */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-0.5">
+                        Teacher / Instructor
+                      </label>
+                      <input
+                        type="text"
+                        value={subject.uploadedBy || ''}
+                        onChange={(e) =>
+                          handleRowChangeById(subject.id, 'uploadedBy', e.target.value)
+                        }
+                        placeholder="Instructor Name"
+                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-0.5 text-center">
+                        Credits
+                      </label>
+                      <input
+                        type="text"
+                        value={subject.creditHours || ''}
+                        onChange={(e) =>
+                          handleRowChangeById(subject.id, 'creditHours', e.target.value)
+                        }
+                        placeholder="3"
+                        className="w-full text-center bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Big Touch-Friendly Status Buttons */}
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-1">
+                      LMS Upload Status *
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRowChangeById(subject.id, 'status', 'Uploaded')}
+                        className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                          isUploaded
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>✓ Uploaded</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRowChangeById(subject.id, 'status', 'In Progress')}
+                        className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                          isInProgress
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>⏳ In Prog</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRowChangeById(subject.id, 'status', 'Pending')}
+                        className={`py-1.5 px-1 rounded-md text-[11px] font-bold flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                          isPending
+                            ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>⚠ Pending</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remarks / Delay Reason */}
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block mb-0.5">
+                      Remarks / Reason for Delay {isPending && <span className="text-amber-600 font-bold">*</span>}
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        list="datalist-delay-reasons"
+                        value={subject.remarks || ''}
+                        onChange={(e) =>
+                          handleRowChangeById(subject.id, 'remarks', e.target.value)
+                        }
+                        placeholder={
+                          isPending
+                            ? 'Specify delay reason (required)...'
+                            : 'Remarks / notes (optional)'
+                        }
+                        className={`w-full bg-slate-50 border rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white ${
+                          isPending && !subject.remarks?.trim()
+                            ? 'border-amber-400 bg-amber-50/40'
+                            : 'border-slate-200'
+                        }`}
+                      />
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleRowChangeById(subject.id, 'remarks', e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="w-7 h-7 p-0 text-slate-500 bg-slate-100 rounded border border-slate-300 text-xs cursor-pointer shrink-0 text-center"
+                        title="Insert quick preset delay reason"
+                      >
+                        <option value="">⚡</option>
+                        <optgroup label="Standard Reasons">
+                          {STANDARD_DELAY_REASONS.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table Content (Visible on screens >= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[980px]">
             <thead>
               <tr className="bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">

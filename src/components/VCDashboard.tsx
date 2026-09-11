@@ -27,6 +27,8 @@ import {
   X,
   FileText,
   Printer,
+  AlertTriangle,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Props {
@@ -254,6 +256,54 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       totalGenuineSubmissionsCount,
     };
   }, [allUniversityPrograms, onlySessionFilter, selectedShiftFilter, selectedSemesterFilter]);
+
+  // Department-level metrics for Vice Chancellor executive monitoring
+  const departmentStats = useMemo(() => {
+    return UNIVERSITY_DEPARTMENTS.map((dept) => {
+      const deptPrograms = allUniversityPrograms.filter((p) => p.department === dept.name);
+      let totalSubjects = 0;
+      let totalUploaded = 0;
+      let totalPending = 0;
+      let submittedCohorts = 0;
+      let totalCohorts = 0;
+
+      deptPrograms.forEach((prog) => {
+        const shifts = [prog.shifts.Morning, prog.shifts.Evening];
+        shifts.forEach((shift) => {
+          totalCohorts += 1;
+          if (selectedSemesterFilter === 'ALL') {
+            totalSubjects += shift.totalSubjects;
+            totalUploaded += shift.totalUploaded;
+            totalPending += shift.totalPending;
+            if (shift.hasSubmission) submittedCohorts += 1;
+          } else {
+            const rec = shift.semesterRecords[selectedSemesterFilter];
+            if (rec) {
+              submittedCohorts += 1;
+              const s = StorageService.calculateSummary(rec.subjects);
+              totalSubjects += s.totalSubjects;
+              totalUploaded += s.uploaded;
+              totalPending += s.pending;
+            }
+          }
+        });
+      });
+
+      const percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
+
+      return {
+        deptName: dept.name,
+        deptCode: dept.code,
+        programsCount: deptPrograms.length,
+        totalSubjects,
+        totalUploaded,
+        totalPending,
+        submittedCohorts,
+        totalCohorts,
+        percentage,
+      };
+    });
+  }, [allUniversityPrograms, selectedSemesterFilter]);
 
   // Filtered program list (Single Row Per Program)
   const filteredPrograms = useMemo(() => {
@@ -570,6 +620,143 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
+      {/* Vice Chancellor Executive Productivity Suite: Department Performance & Compliance Matrix */}
+      <div className="bg-white rounded-lg border border-slate-300 shadow-2xs overflow-hidden">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-indigo-700" />
+            <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight uppercase">
+              Department Compliance &amp; Accountability Matrix
+            </h3>
+            <span className="text-[10px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+              Executive Oversight
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500">
+            Click any department card to filter results instantly
+          </span>
+        </div>
+
+        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+          {departmentStats.map((dept) => {
+            const isSelected = selectedDeptFilter === dept.deptName;
+            const hasData = dept.totalSubjects > 0;
+            const isFull = hasData && dept.percentage === 100;
+            const isPartial = hasData && dept.percentage > 0 && dept.percentage < 100;
+
+            return (
+              <div
+                key={dept.deptCode}
+                onClick={() =>
+                  setSelectedDeptFilter(isSelected ? 'ALL' : dept.deptName)
+                }
+                className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between group ${
+                  isSelected
+                    ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'
+                    : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors">
+                      {dept.deptCode}
+                    </span>
+                    {isFull ? (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-1 border border-emerald-300">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                        100% Complete
+                      </span>
+                    ) : isPartial ? (
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded flex items-center gap-1 border border-amber-300">
+                        <Clock className="w-2.5 h-2.5 text-amber-700" />
+                        {dept.totalPending} Pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                        {dept.programsCount} Programs
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-[11px] font-semibold text-slate-700 line-clamp-1" title={dept.deptName}>
+                    {dept.deptName}
+                  </h4>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-200/80">
+                  <div className="flex items-baseline justify-between text-[11px] mb-1">
+                    <span className="text-slate-500">
+                      {dept.totalUploaded}/{dept.totalSubjects} Uploaded
+                    </span>
+                    <span
+                      className={`font-black ${
+                        isFull
+                          ? 'text-emerald-700'
+                          : dept.percentage > 50
+                          ? 'text-indigo-700'
+                          : 'text-slate-700'
+                      }`}
+                    >
+                      {dept.percentage}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isFull
+                          ? 'bg-emerald-600'
+                          : dept.percentage > 50
+                          ? 'bg-indigo-600'
+                          : dept.percentage > 0
+                          ? 'bg-amber-500'
+                          : 'bg-slate-300'
+                      }`}
+                      style={{ width: `${dept.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Urgent Vice Chancellor Executive Action Directive (If Pending Courses Exist) */}
+      {stats.totalPendingAcrossUni > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-full bg-amber-100 text-amber-700 shrink-0 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-amber-900 flex items-center gap-1.5">
+                Executive Action Directive: {stats.totalPendingAcrossUni} Course Result(s) Pending Upload
+              </h4>
+              <p className="text-xs text-amber-800 mt-0.5">
+                {stats.totalUploadedAcrossUni} of {stats.totalSubjectsAcrossUni} courses verified ({stats.uniUploadPercentage}% completion). Course instructors must finalize mark sheets before academic deadlines.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('PENDING')}
+              className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-md shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter Pending Only</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExecutiveReportOpen(true)}
+              className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-amber-100 text-amber-900 border border-amber-400 rounded-md shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-800" />
+              <span>Issue VC Circular</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Advanced Filters and Genuine Submissions Toggle */}
       <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -694,7 +881,185 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Responsive Program Cards (Visible on screens < 768px) */}
+        <div className="block md:hidden divide-y divide-slate-200 bg-white">
+          {filteredPrograms.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-xs px-4">
+              {onlyGenuineSubmissions
+                ? 'No departments have submitted LMS result data for this selection yet.'
+                : 'No programs found matching the selected filters.'}
+            </div>
+          ) : (
+            filteredPrograms.map((progItem) => {
+              const effectiveShift: AcademicShift =
+                selectedShiftFilter !== 'ALL'
+                  ? selectedShiftFilter
+                  : rowShiftOverrides[progItem.program] || progItem.recommendedShift;
+
+              const shiftData = progItem.shifts[effectiveShift];
+              const isSpecificSem = selectedSemesterFilter !== 'ALL';
+
+              const activeSub = isSpecificSem
+                ? shiftData.semesterRecords[selectedSemesterFilter]
+                : shiftData.firstSubmittedSemester
+                ? shiftData.semesterRecords[shiftData.firstSubmittedSemester]
+                : null;
+
+              const activeSummary = activeSub
+                ? StorageService.calculateSummary(activeSub.subjects)
+                : null;
+
+              const displaySubjectsCount = isSpecificSem
+                ? activeSummary?.totalSubjects || 0
+                : shiftData.totalSubjects;
+
+              const displayUploadedCount = isSpecificSem
+                ? activeSummary?.uploaded || 0
+                : shiftData.totalUploaded;
+
+              const displayUploadPercentage =
+                displaySubjectsCount > 0
+                  ? Math.round((displayUploadedCount / displaySubjectsCount) * 100)
+                  : 0;
+
+              return (
+                <div key={`mob-${progItem.department}-${progItem.program}`} className="p-3.5 space-y-2.5">
+                  {/* Top Dept & Level Row */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                      {progItem.department}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                      {progItem.degreeLevel}
+                    </span>
+                  </div>
+
+                  {/* Program Title & Status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 leading-snug">
+                        {progItem.program}
+                      </h4>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {progItem.sessionActive && (
+                          <span className="text-[9px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
+                            Session {currentSession}
+                          </span>
+                        )}
+                        {progItem.hasAnySubmission && (
+                          <span className="text-[9px] text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded font-bold border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                            LMS Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Shift Toggle Buttons */}
+                    <div className="inline-flex p-0.5 bg-slate-100 rounded-md border border-slate-300 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRowShiftOverrides((prev) => ({
+                            ...prev,
+                            [progItem.program]: 'Morning',
+                          }))
+                        }
+                        className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 ${
+                          effectiveShift === 'Morning'
+                            ? 'bg-amber-500 text-white shadow-2xs'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        <Sun className="w-2.5 h-2.5" />
+                        <span>Morn</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRowShiftOverrides((prev) => ({
+                            ...prev,
+                            [progItem.program]: 'Evening',
+                          }))
+                        }
+                        className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 ${
+                          effectiveShift === 'Evening'
+                            ? 'bg-indigo-700 text-white shadow-2xs'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        <Moon className="w-2.5 h-2.5" />
+                        <span>Eve</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Progress & Upload Summary */}
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <div className="flex items-baseline justify-between text-xs mb-1.5">
+                      <span className="text-slate-600 font-medium text-[11px]">
+                        {displaySubjectsCount > 0
+                          ? `${displayUploadedCount} of ${displaySubjectsCount} Courses Verified`
+                          : 'No Course Sheet Submitted'}
+                      </span>
+                      <span
+                        className={`font-black text-xs ${
+                          displayUploadPercentage === 100
+                            ? 'text-emerald-700'
+                            : displayUploadPercentage > 50
+                            ? 'text-indigo-700'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {displayUploadPercentage}% Uploaded
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          displayUploadPercentage === 100
+                            ? 'bg-emerald-600'
+                            : displayUploadPercentage > 50
+                            ? 'bg-indigo-600'
+                            : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${displayUploadPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSelectProgramToEdit(
+                        progItem.department,
+                        progItem.program,
+                        effectiveShift,
+                        currentSession,
+                        selectedSemesterFilter !== 'ALL'
+                          ? selectedSemesterFilter
+                          : shiftData.firstSubmittedSemester || '1'
+                      )
+                    }
+                    className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedSemesterFilter !== 'ALL'
+                        ? `Inspect Semester ${selectedSemesterFilter} Courses`
+                        : 'Inspect Program Result Sheet'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-auto text-emerald-700" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View (Visible on screens >= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <table id="vc-roster-table" className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 text-slate-700 font-bold tracking-wider border-b border-slate-300 text-[11px] uppercase">

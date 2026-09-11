@@ -17,6 +17,7 @@ import {
   Upload,
   GraduationCap,
   BookOpen,
+  Briefcase,
 } from 'lucide-react';
 import { ActiveUserSession, UserRole } from '../types';
 import { AuthService } from '../services/authService';
@@ -38,7 +39,7 @@ export const UserProfileModal: React.FC<Props> = ({
   const [name, setName] = useState<string>('');
   const [designation, setDesignation] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
-  const [academicRole, setAcademicRole] = useState<'COORDINATOR' | 'HOD' | 'FACULTY'>('COORDINATOR');
+  const [academicRole, setAcademicRole] = useState<'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER'>('COORDINATOR');
   const [program, setProgram] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [currentPassword, setCurrentPassword] = useState<string>('');
@@ -71,11 +72,15 @@ export const UserProfileModal: React.FC<Props> = ({
       setDepartment(initialDept);
 
       // Determine initial academic role
-      const isCoord =
-        currentUser.role === 'COORDINATOR' ||
-        Boolean(currentUser.program) ||
-        (currentUser.designation && currentUser.designation.toLowerCase().includes('coordinator'));
-      setAcademicRole(isCoord ? 'COORDINATOR' : currentUser.role === 'HOD' ? 'HOD' : 'COORDINATOR');
+      if (currentUser.role === 'LECTURER') {
+        setAcademicRole('LECTURER');
+      } else if (currentUser.role === 'VISITING_LECTURER') {
+        setAcademicRole('VISITING_LECTURER');
+      } else if (currentUser.role === 'HOD') {
+        setAcademicRole('HOD');
+      } else {
+        setAcademicRole('COORDINATOR');
+      }
 
       // Determine initial program
       const deptGroup = UNIVERSITY_DEPARTMENTS.find((d) => d.name === initialDept) || UNIVERSITY_DEPARTMENTS[0];
@@ -109,21 +114,29 @@ export const UserProfileModal: React.FC<Props> = ({
       setProgram(newDefaultProg);
       if (academicRole === 'COORDINATOR') {
         setDesignation(`Program Coordinator - ${newDefaultProg}`);
+      } else if (academicRole === 'LECTURER') {
+        setDesignation(`Lecturer - ${newDefaultProg}`);
+      } else if (academicRole === 'VISITING_LECTURER') {
+        setDesignation(`Visiting Lecturer - ${newDefaultProg}`);
       }
     }
   };
 
   // Handle role change in modal
-  const handleRoleChange = (newRole: 'COORDINATOR' | 'HOD' | 'FACULTY') => {
+  const handleRoleChange = (newRole: 'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER') => {
     setAcademicRole(newRole);
+    const targetProg = program || activeDeptGroup?.programs[0]?.name || 'BS Artificial Intelligence';
     if (newRole === 'COORDINATOR') {
-      const targetProg = program || activeDeptGroup?.programs[0]?.name || 'BS Artificial Intelligence';
       setProgram(targetProg);
       setDesignation(`Program Coordinator - ${targetProg}`);
     } else if (newRole === 'HOD') {
       setDesignation(`Head of Department (${activeDeptGroup?.code || 'HOD'})`);
-    } else {
-      setDesignation('Faculty Member / Course Incharge');
+    } else if (newRole === 'LECTURER') {
+      setProgram(targetProg);
+      setDesignation(`Lecturer - ${targetProg} (${activeDeptGroup?.code || 'Faculty'})`);
+    } else if (newRole === 'VISITING_LECTURER') {
+      setProgram(targetProg);
+      setDesignation(`Visiting Lecturer - ${targetProg} (${activeDeptGroup?.code || 'Visiting Faculty'})`);
     }
   };
 
@@ -132,6 +145,10 @@ export const UserProfileModal: React.FC<Props> = ({
     setProgram(newProg);
     if (academicRole === 'COORDINATOR') {
       setDesignation(`Program Coordinator - ${newProg}`);
+    } else if (academicRole === 'LECTURER') {
+      setDesignation(`Lecturer - ${newProg}`);
+    } else if (academicRole === 'VISITING_LECTURER') {
+      setDesignation(`Visiting Lecturer - ${newProg}`);
     }
   };
 
@@ -207,9 +224,9 @@ export const UserProfileModal: React.FC<Props> = ({
       oldPassword: isAttemptingPasswordChange ? currentPassword.trim() : undefined,
       newPassword: isAttemptingPasswordChange ? newPassword.trim() : undefined,
       themePreference: themePreference,
-      role: !isMasterAccount ? (academicRole === 'COORDINATOR' ? 'COORDINATOR' : 'HOD') : undefined,
+      role: !isMasterAccount ? (academicRole as UserRole) : undefined,
       department: !isMasterAccount ? department : undefined,
-      program: !isMasterAccount && academicRole === 'COORDINATOR' ? program : undefined,
+      program: !isMasterAccount && academicRole !== 'HOD' ? program : undefined,
     });
 
     setIsSaving(false);
@@ -419,7 +436,7 @@ export const UserProfileModal: React.FC<Props> = ({
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                     Your Institutional Academic Role <span className="text-rose-600">*</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       id="btn-role-coordinator"
                       type="button"
@@ -461,6 +478,48 @@ export const UserProfileModal: React.FC<Props> = ({
                         </span>
                       </div>
                     </button>
+
+                    <button
+                      id="btn-role-lecturer"
+                      type="button"
+                      onClick={() => handleRoleChange('LECTURER')}
+                      className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        academicRole === 'LECTURER'
+                          ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-500 ring-2 ring-sky-500/30 text-sky-950 dark:text-sky-100 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-md shrink-0 ${academicRole === 'LECTURER' ? 'bg-sky-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                        <BookOpen className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs block">Lecturer (Regular)</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight block mt-0.5">
+                          Permanent faculty member & course incharge
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      id="btn-role-visiting"
+                      type="button"
+                      onClick={() => handleRoleChange('VISITING_LECTURER')}
+                      className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        academicRole === 'VISITING_LECTURER'
+                          ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-500 ring-2 ring-amber-500/30 text-amber-950 dark:text-amber-100 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-md shrink-0 ${academicRole === 'VISITING_LECTURER' ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                        <Briefcase className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs block">Visiting Lecturer</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight block mt-0.5">
+                          Visiting faculty & contracted course instructor
+                        </span>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
@@ -488,15 +547,21 @@ export const UserProfileModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Coordinated Program (Only for Coordinator) */}
-                {academicRole === 'COORDINATOR' && (
-                  <div className="p-3 bg-teal-50/70 dark:bg-teal-950/40 rounded-lg border border-teal-200 dark:border-teal-800 space-y-2 animate-in fade-in">
+                {/* Program Selector (for Coordinator, Lecturer, Visiting Lecturer) */}
+                {academicRole !== 'HOD' && (
+                  <div className={`p-3 rounded-lg border space-y-2 animate-in fade-in ${
+                    academicRole === 'COORDINATOR'
+                      ? 'bg-teal-50/70 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800'
+                      : academicRole === 'LECTURER'
+                      ? 'bg-sky-50/70 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800'
+                      : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
+                  }`}>
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-teal-950 dark:text-teal-200 flex items-center gap-1.5">
-                        <BookOpen className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
-                        Coordinated Degree Program <span className="text-rose-600">*</span>
+                      <label className="block text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        {academicRole === 'COORDINATOR' ? 'Coordinated Degree Program' : 'Primary Teaching Program / Degree'} <span className="text-rose-600">*</span>
                       </label>
-                      <span className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
                         Programs in {activeDeptGroup.code}
                       </span>
                     </div>
@@ -505,7 +570,7 @@ export const UserProfileModal: React.FC<Props> = ({
                       id="select-profile-program"
                       value={program}
                       onChange={(e) => handleProgramSelect(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 rounded-lg text-xs font-bold text-teal-950 dark:text-teal-100 focus:ring-2 focus:ring-teal-600 focus:outline-none shadow-2xs"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-2xs"
                     >
                       {availablePrograms.map((prog) => (
                         <option key={prog.name} value={prog.name}>
@@ -514,10 +579,15 @@ export const UserProfileModal: React.FC<Props> = ({
                       ))}
                     </select>
 
-                    <div className="flex items-start gap-1.5 text-[11px] text-teal-800 dark:text-teal-300 leading-snug pt-0.5">
-                      <Check className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 leading-snug pt-0.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                       <span>
-                        Assigned as <strong>Program Coordinator of {program}</strong>. The university header badge, status bar, and result upload forms will display your coordinated program.
+                        {academicRole === 'COORDINATOR'
+                          ? <>Assigned as <strong>Program Coordinator of {program}</strong>. The university header badge, status bar, and result upload forms will display your coordinated program.</>
+                          : academicRole === 'LECTURER'
+                          ? <>Configured as <strong>Lecturer ({program})</strong> in {department}. You can filter and manage your assigned LMS course uploads.</>
+                          : <>Configured as <strong>Visiting Lecturer ({program})</strong> in {department}. You can filter and update your assigned LMS results.</>
+                        }
                       </span>
                     </div>
                   </div>
