@@ -78,6 +78,25 @@ export class AuthService {
         vcAcc.role = 'VC';
       }
 
+      // Automatically normalize Coordinator accounts (e.g. Program Coordinator of BS AI)
+      for (const acc of parsed) {
+        const isCoord =
+          (acc.designation && acc.designation.toLowerCase().includes('coordinator')) ||
+          (acc.username && (acc.username.toLowerCase().includes('talha') || acc.username.toLowerCase().includes('coord'))) ||
+          (acc.name && acc.name.toLowerCase().includes('talha'));
+        
+        if (isCoord) {
+          if (acc.role === 'HOD') {
+            acc.role = 'COORDINATOR';
+            modified = true;
+          }
+          if (!acc.program) {
+            acc.program = 'BS Artificial Intelligence';
+            modified = true;
+          }
+        }
+      }
+
       if (modified) {
         localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(parsed));
       }
@@ -103,6 +122,20 @@ export class AuthService {
       const raw = localStorage.getItem(ACTIVE_AUTH_SESSION_KEY);
       if (!raw) return null;
       const session: ActiveUserSession = JSON.parse(raw);
+
+      // Keep session updated with any changes in accounts storage
+      const accounts = this.getAccounts();
+      const account = accounts.find((a) => a.id === session.id);
+      if (account) {
+        session.role = account.role;
+        session.program = account.program;
+        session.department = account.department;
+        session.designation = account.designation;
+        session.name = account.name;
+        session.avatarUrl = account.avatarUrl;
+        session.themePreference = account.themePreference;
+      }
+
       return session;
     } catch (e) {
       return null;
@@ -170,6 +203,7 @@ export class AuthService {
       designation: account.designation,
       department: account.department,
       role: account.role,
+      program: account.program,
       avatarUrl: account.avatarUrl,
       themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -182,7 +216,7 @@ export class AuthService {
     this.setCurrentSession(session);
     return {
       success: true,
-      message: `Welcome, ${account.name}! Authenticated as ${account.role}.`,
+      message: `Welcome, ${account.name}! Authenticated as ${account.role === 'COORDINATOR' ? `Coordinator (${account.program || 'Program'})` : account.role}.`,
       session,
     };
   }
@@ -195,12 +229,14 @@ export class AuthService {
     department: string;
     designation: string;
     role?: UserRole;
+    program?: string;
   }): { success: boolean; message: string; session?: ActiveUserSession } {
     const cleanUser = data.username.trim();
     const cleanPass = data.password.trim();
     const cleanName = data.name.trim();
     const cleanDept = data.department.trim();
     const cleanDesig = data.designation.trim() || 'HOD / Coordinator';
+    const assignedRole = data.role || (cleanDesig.toLowerCase().includes('coordinator') ? 'COORDINATOR' : 'HOD');
 
     if (!cleanUser || !cleanPass || !cleanName || !cleanDept) {
       return { success: false, message: 'All fields are required.' };
@@ -229,7 +265,8 @@ export class AuthService {
       name: cleanName,
       department: cleanDept,
       designation: cleanDesig,
-      role: data.role || 'HOD',
+      role: assignedRole,
+      program: data.program?.trim() || undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
     };
@@ -244,6 +281,7 @@ export class AuthService {
       designation: newAccount.designation,
       department: newAccount.department,
       role: newAccount.role,
+      program: newAccount.program,
       token: `auth_tok_${Date.now()}`,
     };
 
@@ -278,7 +316,7 @@ export class AuthService {
     return { success: true, message: `Account "${target.username}" deleted successfully.` };
   }
 
-  // Update Profile: Name, Designation, Avatar, Password, Theme
+  // Update Profile: Name, Designation, Avatar, Password, Theme, Role, Program, Department
   public static updateProfile(
     userId: string,
     data: {
@@ -288,6 +326,9 @@ export class AuthService {
       oldPassword?: string;
       newPassword?: string;
       themePreference?: 'light' | 'dark';
+      role?: UserRole;
+      department?: string;
+      program?: string;
     }
   ): { success: boolean; message: string; session?: ActiveUserSession } {
     const accounts = this.getAccounts();
@@ -326,8 +367,23 @@ export class AuthService {
     }
 
     // Update designation
-    if (data.designation !== undefined && data.designation.trim().length > 0) {
+    if (data.designation !== undefined) {
       account.designation = data.designation.trim();
+    }
+
+    // Update role (if not master admin or VC)
+    if (data.role !== undefined && account.role !== 'ADMIN' && account.role !== 'VC') {
+      account.role = data.role;
+    }
+
+    // Update department (if not master admin or VC)
+    if (data.department !== undefined && data.department.trim().length > 0 && account.role !== 'ADMIN' && account.role !== 'VC') {
+      account.department = data.department.trim();
+    }
+
+    // Update program (for Coordinator)
+    if (data.program !== undefined) {
+      account.program = data.program.trim() || undefined;
     }
 
     // Update avatarUrl (can be empty string to remove avatar)
@@ -352,6 +408,9 @@ export class AuthService {
         ...currentSession,
         name: account.name,
         designation: account.designation,
+        department: account.department,
+        role: account.role,
+        program: account.program,
         avatarUrl: account.avatarUrl,
         themePreference: account.themePreference,
       };

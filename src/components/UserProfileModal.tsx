@@ -15,9 +15,12 @@ import {
   Building,
   Sparkles,
   Upload,
+  GraduationCap,
+  BookOpen,
 } from 'lucide-react';
-import { ActiveUserSession } from '../types';
+import { ActiveUserSession, UserRole } from '../types';
 import { AuthService } from '../services/authService';
+import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 
 interface Props {
   isOpen: boolean;
@@ -34,6 +37,9 @@ export const UserProfileModal: React.FC<Props> = ({
 }) => {
   const [name, setName] = useState<string>('');
   const [designation, setDesignation] = useState<string>('');
+  const [department, setDepartment] = useState<string>('');
+  const [academicRole, setAcademicRole] = useState<'COORDINATOR' | 'HOD' | 'FACULTY'>('COORDINATOR');
+  const [program, setProgram] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -48,12 +54,38 @@ export const UserProfileModal: React.FC<Props> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isMasterAccount = currentUser.role === 'ADMIN' || currentUser.role === 'VC';
+
+  // Helper to retrieve programs list for currently selected department
+  const activeDeptGroup = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department) || UNIVERSITY_DEPARTMENTS[0];
+  const availablePrograms = activeDeptGroup?.programs || [];
+
   // Sync state whenever modal opens or currentUser changes
   useEffect(() => {
     if (isOpen) {
       setName(currentUser.name || '');
       setDesignation(currentUser.designation || '');
       setAvatarUrl(currentUser.avatarUrl || '');
+
+      const initialDept = currentUser.department || UNIVERSITY_DEPARTMENTS[0].name;
+      setDepartment(initialDept);
+
+      // Determine initial academic role
+      const isCoord =
+        currentUser.role === 'COORDINATOR' ||
+        Boolean(currentUser.program) ||
+        (currentUser.designation && currentUser.designation.toLowerCase().includes('coordinator'));
+      setAcademicRole(isCoord ? 'COORDINATOR' : currentUser.role === 'HOD' ? 'HOD' : 'COORDINATOR');
+
+      // Determine initial program
+      const deptGroup = UNIVERSITY_DEPARTMENTS.find((d) => d.name === initialDept) || UNIVERSITY_DEPARTMENTS[0];
+      const defaultProg =
+        currentUser.program ||
+        (initialDept === 'Department of Computer Science'
+          ? 'BS Artificial Intelligence'
+          : deptGroup?.programs[0]?.name || '');
+      setProgram(defaultProg);
+
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -67,6 +99,41 @@ export const UserProfileModal: React.FC<Props> = ({
       setThemePreference(currentUser.themePreference || (isDark ? 'dark' : 'light'));
     }
   }, [isOpen, currentUser]);
+
+  // Handle department change in modal
+  const handleDepartmentChange = (newDept: string) => {
+    setDepartment(newDept);
+    const group = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
+    if (group && group.programs.length > 0) {
+      const newDefaultProg = group.programs[0].name;
+      setProgram(newDefaultProg);
+      if (academicRole === 'COORDINATOR') {
+        setDesignation(`Program Coordinator - ${newDefaultProg}`);
+      }
+    }
+  };
+
+  // Handle role change in modal
+  const handleRoleChange = (newRole: 'COORDINATOR' | 'HOD' | 'FACULTY') => {
+    setAcademicRole(newRole);
+    if (newRole === 'COORDINATOR') {
+      const targetProg = program || activeDeptGroup?.programs[0]?.name || 'BS Artificial Intelligence';
+      setProgram(targetProg);
+      setDesignation(`Program Coordinator - ${targetProg}`);
+    } else if (newRole === 'HOD') {
+      setDesignation(`Head of Department (${activeDeptGroup?.code || 'HOD'})`);
+    } else {
+      setDesignation('Faculty Member / Course Incharge');
+    }
+  };
+
+  // Handle program selection
+  const handleProgramSelect = (newProg: string) => {
+    setProgram(newProg);
+    if (academicRole === 'COORDINATOR') {
+      setDesignation(`Program Coordinator - ${newProg}`);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -140,6 +207,9 @@ export const UserProfileModal: React.FC<Props> = ({
       oldPassword: isAttemptingPasswordChange ? currentPassword.trim() : undefined,
       newPassword: isAttemptingPasswordChange ? newPassword.trim() : undefined,
       themePreference: themePreference,
+      role: !isMasterAccount ? (academicRole === 'COORDINATOR' ? 'COORDINATOR' : 'HOD') : undefined,
+      department: !isMasterAccount ? department : undefined,
+      program: !isMasterAccount && academicRole === 'COORDINATOR' ? program : undefined,
     });
 
     setIsSaving(false);
@@ -328,11 +398,132 @@ export const UserProfileModal: React.FC<Props> = ({
           </div>
 
           {/* Section 3: Identity & Display Name */}
-          <div className="space-y-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              Interface Identity
-            </h4>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                Interface Identity & Academic Role
+              </h4>
+              {!isMasterAccount && (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Personalize Role & Program
+                </span>
+              )}
+            </div>
+
+            {/* If Not Master Admin/VC: Academic Role & Program Selector */}
+            {!isMasterAccount && (
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                {/* Role Switcher */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Your Institutional Academic Role <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      id="btn-role-coordinator"
+                      type="button"
+                      onClick={() => handleRoleChange('COORDINATOR')}
+                      className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        academicRole === 'COORDINATOR'
+                          ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 ring-2 ring-teal-500/30 text-teal-950 dark:text-teal-100 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-md shrink-0 ${academicRole === 'COORDINATOR' ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                        <GraduationCap className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs block">Program Coordinator</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight block mt-0.5">
+                          Incharge of specific degree program (e.g. BS AI)
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      id="btn-role-hod"
+                      type="button"
+                      onClick={() => handleRoleChange('HOD')}
+                      className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                        academicRole === 'HOD'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 ring-2 ring-emerald-500/30 text-emerald-950 dark:text-emerald-100 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-md shrink-0 ${academicRole === 'HOD' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                        <Building className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs block">Head of Department (HOD)</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight block mt-0.5">
+                          Department-wide oversight & all programs
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Academic Department Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Academic Department <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Building className="w-4 h-4" />
+                    </div>
+                    <select
+                      id="select-profile-department"
+                      value={department}
+                      onChange={(e) => handleDepartmentChange(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                    >
+                      {UNIVERSITY_DEPARTMENTS.map((dept) => (
+                        <option key={dept.name} value={dept.name}>
+                          {dept.name} ({dept.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Coordinated Program (Only for Coordinator) */}
+                {academicRole === 'COORDINATOR' && (
+                  <div className="p-3 bg-teal-50/70 dark:bg-teal-950/40 rounded-lg border border-teal-200 dark:border-teal-800 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-teal-950 dark:text-teal-200 flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                        Coordinated Degree Program <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="text-[10px] text-teal-700 dark:text-teal-400 font-semibold">
+                        Programs in {activeDeptGroup.code}
+                      </span>
+                    </div>
+
+                    <select
+                      id="select-profile-program"
+                      value={program}
+                      onChange={(e) => handleProgramSelect(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 rounded-lg text-xs font-bold text-teal-950 dark:text-teal-100 focus:ring-2 focus:ring-teal-600 focus:outline-none shadow-2xs"
+                    >
+                      {availablePrograms.map((prog) => (
+                        <option key={prog.name} value={prog.name}>
+                          {prog.name} ({prog.degreeLevel})
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="flex items-start gap-1.5 text-[11px] text-teal-800 dark:text-teal-300 leading-snug pt-0.5">
+                      <Check className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
+                      <span>
+                        Assigned as <strong>Program Coordinator of {program}</strong>. The university header badge, status bar, and result upload forms will display your coordinated program.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Display Name Input */}
             <div>
@@ -345,7 +536,7 @@ export const UserProfileModal: React.FC<Props> = ({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Prof. Dr. Vice Chancellor"
+                placeholder="e.g. Muhammad Talha Jahangir"
                 className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold"
               />
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -363,18 +554,18 @@ export const UserProfileModal: React.FC<Props> = ({
                 type="text"
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
-                placeholder="e.g. Vice Chancellor / Professor"
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                placeholder="e.g. Program Coordinator (BS AI)"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
               />
             </div>
 
-            {/* Department & Username (Informational) */}
+            {/* Department & Username Summary */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700/60">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold uppercase">
                   Username
                 </span>
-                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
+                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 truncate block">
                   @{currentUser.username}
                 </span>
               </div>
@@ -383,7 +574,7 @@ export const UserProfileModal: React.FC<Props> = ({
                   Assigned Department
                 </span>
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                  {currentUser.department}
+                  {!isMasterAccount ? department : currentUser.department}
                 </span>
               </div>
             </div>

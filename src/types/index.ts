@@ -33,16 +33,17 @@ export interface AccessLogEntry {
   timestamp: string;
 }
 
-export type UserRole = 'ADMIN' | 'VC' | 'HOD';
+export type UserRole = 'ADMIN' | 'VC' | 'HOD' | 'COORDINATOR';
 
 export interface UserAccount {
   id: string;
-  username: string; // e.g. "admin", "VC", or "hod_cs"
+  username: string; // e.g. "admin", "VC", "hod_cs", or "coordinator"
   password: string; // plain text / hash for demo persistence
   name: string;
   department: string; // e.g. "Department of Computer Science" or "ALL"
   designation: string;
   role: UserRole;
+  program?: string; // e.g. "BS Artificial Intelligence"
   createdAt: string;
   lastLoginAt?: string;
   avatarUrl?: string; // base64 or photo URL
@@ -56,6 +57,7 @@ export interface ActiveUserSession {
   designation: string;
   department: string;
   role: UserRole;
+  program?: string; // e.g. "BS Artificial Intelligence"
   token?: string;
   avatarUrl?: string;
   themePreference?: 'light' | 'dark';

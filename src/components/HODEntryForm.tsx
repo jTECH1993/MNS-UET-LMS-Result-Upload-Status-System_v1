@@ -260,14 +260,22 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   }, [selectedSemesterProp]);
 
-  // Strict Department Isolation for HOD role
+  // Strict Department & Program Isolation for HOD & Coordinator roles
   useEffect(() => {
-    if (currentUser?.role === 'HOD' && currentUser.department) {
+    const isRestricted = currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR';
+    if (isRestricted && currentUser.department) {
       if (department !== currentUser.department) {
         handleDepartmentChange(currentUser.department);
       }
     }
-  }, [currentUser, department]);
+    // If user is a Coordinator with an assigned program, auto-select it if not already set
+    if (currentUser?.role === 'COORDINATOR' && currentUser.program) {
+      if (program !== currentUser.program) {
+        setProgram(currentUser.program);
+        if (onProgramChangedProp) onProgramChangedProp(currentUser.program);
+      }
+    }
+  }, [currentUser, department, program]);
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
@@ -853,7 +861,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </span>
 
           {/* VC View Link: Only for Admin or VC */}
-          {onSwitchToVC && currentUser?.role !== 'HOD' && (
+          {onSwitchToVC && (currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') && (
             <button
               id="btn-switch-vc-view"
               type="button"
@@ -921,7 +929,7 @@ export const HODEntryForm: React.FC<Props> = ({
             >
               Department <span className="text-rose-600">*</span>
             </label>
-            {currentUser?.role === 'HOD' ? (
+            {currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR' ? (
               <div
                 className="w-full bg-emerald-50 border border-emerald-300 rounded-lg px-3 py-2 text-xs font-bold text-emerald-950 flex items-center justify-between shadow-2xs"
                 title={`Department locked to ${department}`}
@@ -952,9 +960,14 @@ export const HODEntryForm: React.FC<Props> = ({
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="select-program"
-                className="text-xs font-bold text-slate-700"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1"
               >
                 Program <span className="text-rose-600">*</span>
+                {currentUser?.role === 'COORDINATOR' && currentUser.program === program && (
+                  <span className="text-[9px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">
+                    My Program
+                  </span>
+                )}
               </label>
               <button
                 type="button"
@@ -973,7 +986,7 @@ export const HODEntryForm: React.FC<Props> = ({
             >
               {currentDeptPrograms.map((p) => (
                 <option key={p.name} value={p.name}>
-                  {p.name}
+                  {p.name} {currentUser?.program === p.name ? '★ (Coordinated)' : ''}
                 </option>
               ))}
             </select>

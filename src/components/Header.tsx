@@ -15,6 +15,7 @@ import {
   Moon,
   UserCheck,
   Camera,
+  GraduationCap,
 } from 'lucide-react';
 import { ActiveUserSession } from '../types';
 import { AuthService } from '../services/authService';
@@ -47,7 +48,45 @@ export const Header: React.FC<Props> = ({
 }) => {
   const isAdmin = currentUser.role === 'ADMIN';
   const isVC = currentUser.role === 'VC';
-  const isHOD = currentUser.role === 'HOD';
+  const isCoordinator =
+    currentUser.role === 'COORDINATOR' ||
+    Boolean(currentUser.program) ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('coordinator'));
+  const isHOD = !isAdmin && !isVC && !isCoordinator;
+
+  const getRoleBadge = () => {
+    if (isAdmin) {
+      return { label: 'Admin', cls: 'bg-rose-600 text-white' };
+    }
+    if (isVC) {
+      return { label: 'VC', cls: 'bg-indigo-600 text-white' };
+    }
+    if (isCoordinator) {
+      let shortLabel = 'Coordinator';
+      if (currentUser.program) {
+        const pLower = currentUser.program.toLowerCase();
+        if (pLower.includes('artificial intelligence') || pLower.includes('ai')) {
+          shortLabel = 'Coord • BS(AI)';
+        } else if (pLower.includes('computer science') || pLower.includes('cs')) {
+          shortLabel = 'Coord • BS(CS)';
+        } else if (pLower.includes('software engineering') || pLower.includes('se')) {
+          shortLabel = 'Coord • BS(SE)';
+        } else if (pLower.includes('data science') || pLower.includes('ds')) {
+          shortLabel = 'Coord • BS(DS)';
+        } else if (pLower.includes('cyber security')) {
+          shortLabel = 'Coord • BS(CYS)';
+        } else if (pLower.includes('information technology')) {
+          shortLabel = 'Coord • BS(IT)';
+        } else {
+          shortLabel = `Coord • ${currentUser.program.split(' ')[0]}`;
+        }
+      }
+      return { label: shortLabel, cls: 'bg-teal-600 text-white shadow-2xs' };
+    }
+    return { label: 'HOD', cls: 'bg-emerald-600 text-white' };
+  };
+
+  const badgeInfo = getRoleBadge();
 
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof document !== 'undefined') {
@@ -145,15 +184,9 @@ export const Header: React.FC<Props> = ({
               {currentUser.name}
             </strong>
             <span
-              className={`text-[9px] px-1.5 py-0.2 rounded-full font-extrabold uppercase ${
-                isAdmin
-                  ? 'bg-rose-600 text-white'
-                  : isVC
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-emerald-600 text-white'
-              }`}
+              className={`text-[9px] px-1.5 py-0.5 rounded-full font-extrabold uppercase ${badgeInfo.cls}`}
             >
-              {isAdmin ? 'Admin' : isVC ? 'VC' : 'HOD'}
+              {badgeInfo.label}
             </span>
           </button>
 
@@ -195,6 +228,22 @@ export const Header: React.FC<Props> = ({
                 SEMESTER {currentSemester}
               </span>
             </div>
+            {isCoordinator && (
+              <p className="text-[11px] text-teal-800 dark:text-teal-300 font-medium flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-950/80 text-teal-950 dark:text-teal-200 font-bold border border-teal-300 dark:border-teal-700">
+                  <GraduationCap className="w-3 h-3 text-teal-700 dark:text-teal-400" />
+                  Program Coordinator
+                </span>
+                {currentUser.program && (
+                  <span className="font-extrabold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700">
+                    {currentUser.program}
+                  </span>
+                )}
+                <span className="text-slate-600 dark:text-slate-400">
+                  • {currentUser.department}
+                </span>
+              </p>
+            )}
             {isHOD && (
               <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1 mt-0.5">
                 <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400 inline" />
