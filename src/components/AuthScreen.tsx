@@ -30,6 +30,16 @@ interface Props {
   onAuthenticated: (session: ActiveUserSession) => void;
 }
 
+const STANDARD_DESIGNATION_OPTIONS = [
+  'Lecturer',
+  'Assistant Professor',
+  'Associate Professor',
+  'Professor',
+  'Visiting Lecturer',
+  'Program Coordinator',
+  'Head of Department (HOD)',
+] as const;
+
 export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const [tab, setTab] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
 
@@ -48,8 +58,11 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     const dept0 = UNIVERSITY_DEPARTMENTS[0];
     return dept0.programs[0]?.name || 'BS Artificial Intelligence';
   });
-  const [regDesignation, setRegDesignation] = useState('Program Coordinator');
+  const [regDesignation, setRegDesignation] = useState('');
+  const [isCustomDesignation, setIsCustomDesignation] = useState(false);
+  const [customDesignation, setCustomDesignation] = useState('');
   const [regUsername, setRegUsername] = useState('');
+  const [useEmailAsUsername, setUseEmailAsUsername] = useState(true);
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
@@ -98,15 +111,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
   const handleRoleSelection = (newRole: 'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER') => {
     setRegRole(newRole);
-    if (newRole === 'COORDINATOR') {
-      setRegDesignation('Program Coordinator');
-    } else if (newRole === 'HOD') {
-      setRegDesignation('Head of Department (HOD)');
-    } else if (newRole === 'LECTURER') {
-      setRegDesignation('Lecturer');
-    } else if (newRole === 'VISITING_LECTURER') {
-      setRegDesignation('Visiting Lecturer');
-    }
+    // Do not force "Program Coordinator" as default
   };
 
   const handleDepartmentSelection = (newDept: string) => {
@@ -154,13 +159,28 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       return;
     }
 
+    const finalUsername = useEmailAsUsername
+      ? regEmail.trim()
+      : (regUsername.trim() || regEmail.trim());
+
+    if (!finalUsername) {
+      setErrorMessage('Please provide your email address or a valid username.');
+      return;
+    }
+
+    const finalDesignation = (isCustomDesignation ? customDesignation : regDesignation).trim();
+    if (!finalDesignation) {
+      setErrorMessage('Please select or specify your Designation Title (e.g. Lecturer, Assistant Professor, etc.).');
+      return;
+    }
+
     setIsSubmitting(true);
     const result = AuthService.registerAccount({
       name: regName,
       email: regEmail,
       department: regDepartment,
-      designation: regDesignation,
-      username: regUsername,
+      designation: finalDesignation,
+      username: finalUsername,
       password: regPassword,
       role: regRole,
       program: regRole !== 'HOD' ? regProgram : undefined,
@@ -196,14 +216,25 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     }
   };
 
-  // Forgot Password: Step 1 - Send Code to Email
+  // Forgot Password: Step 1 - Send Code to Email (Compulsory Email Verification)
   const handleForgotStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
-    setIsSubmitting(true);
 
-    const res = AuthService.initiatePasswordReset(forgotIdentifier);
+    const cleanEmail = forgotIdentifier.trim();
+    if (!cleanEmail) {
+      setErrorMessage('Email address is compulsory. Please enter your registered university email.');
+      return;
+    }
+
+    if (!cleanEmail.includes('@') || cleanEmail.indexOf('.') === -1) {
+      setErrorMessage('Email address is compulsory for password recovery. Please enter a valid email address (e.g. your_email@mnsuet.edu.pk).');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const res = AuthService.initiatePasswordReset(cleanEmail);
     setIsSubmitting(false);
 
     if (res.success && res.resetToken && res.otpCode && res.email) {
@@ -446,7 +477,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     type="button"
                     onClick={() => {
                       setTab('FORGOT_PASSWORD');
-                      setForgotIdentifier(loginUsername);
+                      setForgotIdentifier(loginUsername.includes('@') ? loginUsername : '');
                       setErrorMessage('');
                       setSuccessMessage('');
                     }}
@@ -627,17 +658,107 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Designation Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={regDesignation}
-                    onChange={(e) => setRegDesignation(e.target.value)}
-                    placeholder="e.g. Program Coordinator BS AI"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Designation Title *
+                    </label>
+                    {!isCustomDesignation ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomDesignation(true);
+                          setCustomDesignation(regDesignation || '');
+                        }}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                      >
+                        + Enter Custom
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomDesignation(false);
+                        }}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                      >
+                        &larr; Standard Options
+                      </button>
+                    )}
+                  </div>
+
+                  {!isCustomDesignation ? (
+                    <div className="space-y-1.5">
+                      <select
+                        required
+                        value={
+                          STANDARD_DESIGNATION_OPTIONS.includes(regDesignation as any)
+                            ? regDesignation
+                            : regDesignation
+                            ? 'CUSTOM'
+                            : ''
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'CUSTOM') {
+                            setIsCustomDesignation(true);
+                            setCustomDesignation(regDesignation || '');
+                          } else {
+                            setRegDesignation(val);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
+                      >
+                        <option value="">-- Select Designation Title --</option>
+                        <option value="Lecturer">Lecturer</option>
+                        <option value="Assistant Professor">Assistant Professor</option>
+                        <option value="Associate Professor">Associate Professor</option>
+                        <option value="Professor">Professor</option>
+                        <option value="Visiting Lecturer">Visiting Lecturer</option>
+                        <option value="Program Coordinator">Program Coordinator</option>
+                        <option value="Head of Department (HOD)">Head of Department (HOD)</option>
+                        <option value="CUSTOM">Other / Custom Designation...</option>
+                      </select>
+
+                      {/* Quick 1-click selection chips for academic ranks */}
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {['Lecturer', 'Assistant Professor', 'Associate Professor', 'Professor', 'Visiting Lecturer'].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              setRegDesignation(d);
+                              setIsCustomDesignation(false);
+                            }}
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                              regDesignation === d
+                                ? 'bg-emerald-700 text-white border-emerald-800 font-bold shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        required
+                        autoFocus
+                        value={customDesignation}
+                        onChange={(e) => {
+                          setCustomDesignation(e.target.value);
+                          setRegDesignation(e.target.value);
+                        }}
+                        placeholder="e.g. Lab Instructor, Dean, Adjunct Faculty"
+                        className="w-full px-3 py-2 bg-white border border-emerald-500 ring-2 ring-emerald-500/20 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Type any custom academic or administrative designation title.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -654,7 +775,13 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     type="email"
                     required
                     value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRegEmail(val);
+                      if (useEmailAsUsername) {
+                        setRegUsername(val);
+                      }
+                    }}
                     placeholder="e.g. your_email@mnsuet.edu.pk"
                     className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
                   />
@@ -700,18 +827,53 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                 </div>
               )}
 
+              {/* Username / Login ID */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Username *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={regUsername}
-                  onChange={(e) => setRegUsername(e.target.value)}
-                  placeholder="e.g. username or coordinator_ai"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-mono"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Username / Login ID *
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-emerald-800 select-none hover:text-emerald-950">
+                    <input
+                      type="checkbox"
+                      checked={useEmailAsUsername}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setUseEmailAsUsername(checked);
+                        if (checked && regEmail) {
+                          setRegUsername(regEmail);
+                        }
+                      }}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    />
+                    <span>Use Email as Username</span>
+                  </label>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    readOnly={useEmailAsUsername}
+                    value={useEmailAsUsername ? (regEmail || '') : regUsername}
+                    onChange={(e) => setRegUsername(e.target.value)}
+                    placeholder={useEmailAsUsername ? 'Using your official email as login username' : 'e.g. username or coordinator_ai'}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm font-mono outline-hidden transition-all ${
+                      useEmailAsUsername
+                        ? 'bg-slate-50 text-slate-700 border-slate-200 cursor-not-allowed font-medium'
+                        : 'bg-white text-slate-900 border-slate-300 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600'
+                    }`}
+                  />
+                  {useEmailAsUsername && (
+                    <span className="absolute right-2.5 top-2 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded">
+                      Email Synced
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {useEmailAsUsername
+                    ? 'Your official email address is used directly as your login username.'
+                    : 'Custom username for portal login. You can also sign in with your email anytime.'}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -797,7 +959,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                   1
                 </span>
                 <span className={`text-xs font-bold ${forgotStep === 1 ? 'text-emerald-900' : 'text-slate-500'}`}>
-                  Identify Account
+                  Enter Registered Email
                 </span>
               </div>
               <span className="text-slate-300">&rarr;</span>
@@ -824,26 +986,31 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               </div>
             </div>
 
-            {/* STEP 1: Enter email or username */}
+            {/* STEP 1: Enter email compulsory */}
             {forgotStep === 1 && (
               <form onSubmit={handleForgotStep1Submit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Registered Email or Username *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Registered Email Address (Compulsory) *
+                    </label>
+                    <span className="text-[10px] font-bold text-rose-600 uppercase bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                      Compulsory
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mb-2">
-                    Enter the email address or username associated with your MNS-UET portal account. A one-time verification code will be sent to your inbox.
+                    Email address is compulsory for password recovery. Enter the official institutional email address registered with your MNS-UET account to receive your 6-digit one-time verification code.
                   </p>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                       <Mail className="w-4 h-4" />
                     </div>
                     <input
-                      type="text"
+                      type="email"
                       required
                       value={forgotIdentifier}
                       onChange={(e) => setForgotIdentifier(e.target.value)}
-                      placeholder="e.g. your_email@mnsuet.edu.pk or username"
+                      placeholder="e.g. your_email@mnsuet.edu.pk"
                       className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
                     />
                   </div>

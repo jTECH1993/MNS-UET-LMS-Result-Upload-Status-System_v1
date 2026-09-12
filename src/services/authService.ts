@@ -398,7 +398,7 @@ export class AuthService {
   // ---------------------------------------------------------------------------
   // PASSWORD RECOVERY / FORGOT PASSWORD SYSTEM
   // ---------------------------------------------------------------------------
-  public static initiatePasswordReset(emailOrUsername: string): {
+  public static initiatePasswordReset(emailInput: string): {
     success: boolean;
     message: string;
     email?: string;
@@ -406,60 +406,48 @@ export class AuthService {
     resetToken?: string;
     otpCode?: string;
   } {
-    const clean = SecurityService.sanitizeInput(emailOrUsername).trim();
+    const clean = SecurityService.sanitizeInput(emailInput).trim();
     if (!clean) {
-      return { success: false, message: 'Please enter your registered email address or username.' };
+      return { success: false, message: 'Please enter your registered email address.' };
+    }
+
+    if (!clean.includes('@')) {
+      return {
+        success: false,
+        message: 'Email address is compulsory for password recovery. Please enter your valid registered email (e.g. name@mnsuet.edu.pk).',
+      };
     }
 
     const accounts = this.getAccounts();
-    const isEmailInput = clean.includes('@');
     const cleanLower = clean.toLowerCase();
 
-    let account: UserAccount | undefined;
+    // Must match registered account's email or username (if username is an email or matches)
+    let account = accounts.find(
+      (a) => a.email && a.email.trim().toLowerCase() === cleanLower
+    );
+    if (!account) {
+      account = accounts.find(
+        (a) => a.username.trim().toLowerCase() === cleanLower
+      );
+    }
+    if (!account) {
+      const userPrefix = cleanLower.split('@')[0];
+      account = accounts.find(
+        (a) => a.username.trim().toLowerCase() === userPrefix
+      );
+    }
 
-    if (isEmailInput) {
-      // User entered an email: search registered account's email or username prefix
-      account = accounts.find(
-        (a) => a.email && a.email.trim().toLowerCase() === cleanLower
-      );
-      if (!account) {
-        // Fallback: match by username if email prefix matches registered username
-        const userPrefix = cleanLower.split('@')[0];
-        account = accounts.find(
-          (a) => a.username.trim().toLowerCase() === userPrefix
-        );
-      }
-      if (!account) {
-        SecurityService.logSecurityEvent({
-          type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
-          severity: 'WARNING',
-          actor: clean,
-          details: `Password reset attempted with unregistered email: "${clean}".`,
-        });
-        return {
-          success: false,
-          message: 'Incorrect email. Please enter the correct email you used during account registration.',
-        };
-      }
-    } else {
-      // User entered a username: match by registered username or email
-      account = accounts.find(
-        (a) =>
-          a.username.trim().toLowerCase() === cleanLower ||
-          (a.email && a.email.trim().toLowerCase() === cleanLower)
-      );
-      if (!account) {
-        SecurityService.logSecurityEvent({
-          type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
-          severity: 'WARNING',
-          actor: clean,
-          details: `Password reset attempted with unregistered username: "${clean}".`,
-        });
-        return {
-          success: false,
-          message: 'Incorrect username or email. Please enter your correct registered credentials.',
-        };
-      }
+    if (!account) {
+      SecurityService.logSecurityEvent({
+        type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+        severity: 'WARNING',
+        actor: clean,
+        details: `Password reset attempted with unregistered email: "${clean}".`,
+      });
+      return {
+        success: false,
+        message: 'Incorrect email. Please enter the correct email you used during account registration.',
+      };
     }
 
     const targetEmail = account.email?.trim();
