@@ -7,6 +7,7 @@ import {
   AcademicShift,
   AuditLogEntry,
   AuditChangeDetail,
+  WorkOnDemandRequisition,
 } from '../types';
 import {
   UNIVERSITY_DEPARTMENTS,
@@ -22,6 +23,8 @@ const ACCESS_LOG_KEY = 'mnsuet_lms_access_logs_v2';
 const SESSION_ROSTER_KEY = 'mnsuet_session_active_roster_v4';
 const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v1';
 const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v1';
+const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v1';
+
 
 export class StorageService {
   // Generic Academic Sessions Management (e.g. 2023, 2024, 2025, or custom added)
@@ -629,4 +632,72 @@ export class StorageService {
     link.click();
     document.body.removeChild(link);
   }
+
+  // Work on Demand: Institutional Requisitions Management
+  public static getWorkOnDemandRequisitions(): WorkOnDemandRequisition[] {
+    try {
+      const stored = localStorage.getItem(WORK_ON_DEMAND_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Could not read work on demand requisitions', e);
+    }
+    return [
+      {
+        id: 'REQ-MNSUET-2024-001',
+        moduleName: 'Faculty Biometric Punch-In & Lecture Conduct Monitoring',
+        category: 'Faculty Oversight',
+        requestedBy: 'Vice Chancellor Secretariat',
+        requestorRole: 'Vice Chancellor',
+        department: 'All Engineering Departments',
+        targetSession: 'Session 2024-25',
+        priority: 'High (Immediate Session)',
+        status: 'Approved by VC',
+        submittedAt: '2024-08-15T09:30:00.000Z',
+        technicalRequirements: 'Integration with biometric thumb/RFID terminals at Departmental entry gates to verify lecture timetables automatically.',
+        hardwareOrApiNeeded: 'ZKTeco / Anviz Biometric Terminals + Central Timetable API',
+      },
+      {
+        id: 'REQ-MNSUET-2024-002',
+        moduleName: 'Outcome-Based Education (OBE) & Course File Washington Accord Audit',
+        category: 'OBE & Accreditation',
+        requestedBy: 'Directorate of Quality Enhancement (QEC)',
+        requestorRole: 'Director QEC',
+        department: 'All Engineering Departments',
+        targetSession: 'Session 2024',
+        priority: 'High (Immediate Session)',
+        status: 'Under Technical Review',
+        submittedAt: '2024-08-28T14:15:00.000Z',
+        technicalRequirements: 'Digitized course folders, CLO-PLO attainment calculations, and Continuous Quality Improvement (CQI) documentation for PEC Level-II re-accreditation.',
+        hardwareOrApiNeeded: 'MNS-UET Cloud Document Storage & OBE Calculation Engine',
+      },
+    ];
+  }
+
+  public static submitWorkOnDemandRequisition(
+    req: Omit<WorkOnDemandRequisition, 'id' | 'submittedAt' | 'status'>
+  ): WorkOnDemandRequisition {
+    const existing = this.getWorkOnDemandRequisitions();
+    const count = existing.length + 1;
+    const newId = `REQ-MNSUET-2024-${String(count).padStart(3, '0')}`;
+    const newReq: WorkOnDemandRequisition = {
+      ...req,
+      id: newId,
+      submittedAt: new Date().toISOString(),
+      status: 'Under Technical Review',
+    };
+    const updated = [newReq, ...existing];
+    try {
+      localStorage.setItem(WORK_ON_DEMAND_KEY, JSON.stringify(updated));
+      this.logAccess(
+        `Submitted formal Work on Demand Requisition for: ${req.moduleName} (${newId})`
+      );
+    } catch (e) {
+      console.error('Could not save work on demand requisition', e);
+    }
+    return newReq;
+  }
 }
+

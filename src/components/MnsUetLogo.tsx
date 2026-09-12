@@ -2,8 +2,16 @@ import React from 'react';
 
 interface Props {
   className?: string;
-  size?: number;
+  size?: number | 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 }
+
+const SIZE_PRESETS: Record<'xs' | 'sm' | 'md' | 'lg' | 'xl', number> = {
+  xs: 24,
+  sm: 32,
+  md: 48,
+  lg: 64,
+  xl: 80,
+};
 
 /**
  * Official Emblem of Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan.
@@ -12,7 +20,8 @@ interface Props {
  * and green landscape.
  */
 export const MnsUetLogo: React.FC<Props> = ({ className = 'w-12 h-12', size }) => {
-  const dimension = size ? `${size}px` : undefined;
+  const numericSize = typeof size === 'string' ? SIZE_PRESETS[size] : size;
+  const dimension = numericSize ? `${numericSize}px` : undefined;
 
   return (
     <svg

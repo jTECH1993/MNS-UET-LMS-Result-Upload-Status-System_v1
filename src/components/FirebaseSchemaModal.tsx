@@ -35,7 +35,7 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
   isAdmin = false,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'diagnostic' | 'logs' | 'current' | 'all' | 'rules'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'diagnostic' | 'logs' | 'current' | 'all' | 'schemas' | 'rules'>('status');
   const [accessLogs, setAccessLogs] = useState(() => StorageService.getAccessLogs());
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -153,6 +153,150 @@ service cloud.firestore {
   }
 }`;
 
+  const multiModuleSchemas = `/**
+ * MNS-UET Central Academic Monitoring Portal
+ * Multi-Module Institutional Database Schemas (TypeScript)
+ * Verified against Task #1: LMS Result Upload Status and future monitoring tasks
+ */
+
+// 1. Base Entity (Shared by all monitoring tasks)
+export interface BaseInstitutionalEntity {
+  id: string;                         // Primary Key: dept__program__shift__session__sem
+  department: string;                 // Department Name
+  program: string;                    // Degree Program
+  degreeLevel: string;                // "BS", "MS", "PhD"
+  shift: 'Morning' | 'Evening';       // Academic Shift
+  session: string;                    // e.g. "2023", "2024"
+  semester: string;                   // "1" to "8"
+  createdAt: string;                  // ISO 8601 Timestamp
+  updatedAt: string;
+  accessedBy: string;                 // User who last modified
+  userDesignation: string;
+}
+
+// 2. Active Task: LMS Result Upload Status
+export interface LMSResultRecord extends BaseInstitutionalEntity {
+  moduleId: 'LMS';
+  hodCoordinator: string;
+  submissionDate: string;
+  subjects: {
+    id: string;
+    courseCode: string;
+    subjectTitle: string;
+    creditHours: string;
+    sectionShift: string;
+    status: 'Submitted' | 'Pending' | 'In Progress';
+    dateUploaded: string;
+    uploadedBy: string;
+    remarks: string;
+  }[];
+  referenceNumber?: string;
+  editPin?: string;
+}
+
+// 3. Task: Faculty Biometric & Lecture Attendance (In Progress - Active After Demand)
+export interface FacultyAttendanceRecord extends BaseInstitutionalEntity {
+  moduleId: 'FACULTY_ATTENDANCE';
+  targetDate: string;
+  lectures: {
+    id: string;
+    teacherId: string;
+    teacherName: string;
+    designation: string;
+    courseCode: string;
+    scheduledTime: string;
+    punchInTime?: string;
+    conductStatus: 'Delivered' | 'Substitute' | 'Cancelled' | 'Pending';
+    remarks?: string;
+  }[];
+  totalScheduled: number;
+  totalDelivered: number;
+  biometricComplianceRate: number;
+}
+
+// 4. Task: Student Enrollment & 75% Attendance (In Progress - Active After Demand)
+export interface StudentAttendanceRecord extends BaseInstitutionalEntity {
+  moduleId: 'STUDENT_ATTENDANCE';
+  courseCode: string;
+  courseTitle: string;
+  students: {
+    rollNumber: string;
+    studentName: string;
+    classesHeld: number;
+    classesAttended: number;
+    percentage: number;
+    isEligible: boolean; // >= 75%
+    warningIssued: boolean;
+  }[];
+  totalEnrolled: number;
+  eligibleCount: number;
+  defaultersCount: number;
+}
+
+// 5. Task: Course File & OBE Accreditation Audit (In Progress - Active After Demand)
+export interface CourseFileRecord extends BaseInstitutionalEntity {
+  moduleId: 'COURSE_FILE';
+  courseCode: string;
+  instructorName: string;
+  sections: {
+    sectionName: string;
+    isCompleted: boolean;
+    auditedBy?: string;
+    auditDate?: string;
+  }[];
+  cloAttainmentRate: number;
+  isPecCompliant: boolean;
+}
+
+// 6. Task: QEC Institutional Audit (In Progress - Active After Demand)
+export interface QECAuditRecord extends BaseInstitutionalEntity {
+  moduleId: 'QEC_AUDIT';
+  sarSubmitted: boolean;
+  sarSubmissionDate?: string;
+  studentEvaluationAverage: number;
+  facultyCourseReviewSubmitted: boolean;
+  hecIpeRatingScore: number;
+}
+
+// 7. Task: Examination Secrecy & Moderation (In Progress - Active After Demand)
+export interface ExamSecrecyRecord extends BaseInstitutionalEntity {
+  moduleId: 'EXAM_SECRECY';
+  examType: 'Midterm' | 'Final';
+  paperModerated: boolean;
+  moderatedBy?: string;
+  scriptDeliveryDate?: string;
+  marksSubmittedDate?: string;
+  turnaroundDays: number;
+  isDelayed: boolean;
+}
+
+// 8. User Security & Password Recovery Schema
+export interface UserAccountSchema {
+  id: string;
+  username: string;
+  email: string;
+  password: string; // SHA-256 / bcrypt equivalent
+  name: string;
+  department: string;
+  designation: string;
+  role: 'VC' | 'ADMIN' | 'DEPT_HEAD' | 'FACULTY';
+  failedLoginAttempts: number;
+  isLocked: boolean;
+  lockoutUntil?: string;
+  createdAt: string;
+}
+
+export interface PasswordResetRequest {
+  id: string;
+  username: string;
+  email: string;
+  otpCode: string; // 6-digit numeric verification code
+  resetToken: string;
+  expiresAt: string; // 15-minute expiration
+  verified: boolean;
+  attempts: number;
+}`;
+
   const jsonText =
     activeTab === 'current'
       ? JSON.stringify(
@@ -182,6 +326,8 @@ service cloud.firestore {
           null,
           2
         )
+      : activeTab === 'schemas'
+      ? multiModuleSchemas
       : sampleRules;
 
   const handleCopy = () => {
@@ -302,6 +448,17 @@ service cloud.firestore {
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             Security Rules
+          </button>
+          <button
+            onClick={() => setActiveTab('schemas')}
+            className={`pb-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'schemas'
+                ? 'border-emerald-600 text-emerald-800 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            Multi-Module Schemas
           </button>
         </div>
 
@@ -549,6 +706,8 @@ service cloud.firestore {
                 <span className="text-xs text-slate-500">
                   {activeTab === 'rules'
                     ? 'Firestore rules file for database security'
+                    : activeTab === 'schemas'
+                    ? 'Institutional Multi-Module Database Schemas (Normalized TypeScript Models)'
                     : 'Target Firestore document representation'}
                 </span>
                 <button
@@ -564,7 +723,7 @@ service cloud.firestore {
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      Copy {activeTab === 'rules' ? 'Rules' : 'JSON'}
+                      Copy {activeTab === 'rules' ? 'Rules' : activeTab === 'schemas' ? 'Schemas' : 'JSON'}
                     </>
                   )}
                 </button>

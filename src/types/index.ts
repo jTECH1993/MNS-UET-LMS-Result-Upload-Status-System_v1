@@ -44,6 +44,7 @@ export type UserRole =
 export interface UserAccount {
   id: string;
   username: string; // e.g. "admin", "VC", "hod_cs", or "coordinator"
+  email?: string; // registered email for account recovery and notifications
   password: string; // plain text / hash for demo persistence
   name: string;
   department: string; // e.g. "Department of Computer Science" or "ALL"
@@ -52,6 +53,9 @@ export interface UserAccount {
   program?: string; // e.g. "BS Artificial Intelligence"
   createdAt: string;
   lastLoginAt?: string;
+  failedLoginAttempts?: number;
+  isLocked?: boolean;
+  lockoutUntil?: string;
   avatarUrl?: string; // base64 or photo URL
   themePreference?: 'light' | 'dark';
 }
@@ -59,6 +63,7 @@ export interface UserAccount {
 export interface ActiveUserSession {
   id: string;
   username: string;
+  email?: string;
   name: string;
   designation: string;
   department: string;
@@ -117,3 +122,24 @@ export interface ExecutiveSummary {
   notApplicable: number;
   uploadPercentage: number;
 }
+
+export type MonitoringModuleId = 'LMS' | 'WORK_ON_DEMAND';
+
+export interface WorkOnDemandRequisition {
+  id: string; // e.g. "REQ-MNSUET-2024-001"
+  moduleName: string;
+  category: 'Faculty Oversight' | 'Student Affairs' | 'OBE & Accreditation' | 'Quality Enhancement' | 'Examinations' | 'Other';
+  requestedBy: string; // e.g. "Vice Chancellor Secretariat"
+  requestorRole: string;
+  department?: string;
+  targetSession: string;
+  priority: 'High (Immediate Session)' | 'Medium (Next Academic Year)' | 'Standard';
+  status: 'Approved by VC' | 'Under Technical Review' | 'Scheduled for Integration';
+  submittedAt: string;
+  technicalRequirements: string;
+  hardwareOrApiNeeded: string;
+}
+
+export * from './schema';
+
+

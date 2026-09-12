@@ -13,17 +13,17 @@ export const SplashScreen: React.FC<Props> = ({ onFinish }) => {
   useEffect(() => {
     const timer1 = setTimeout(() => {
       setProgress(35);
-      setStatusText('Connecting to MNS-UET Cloud Storage & Encryption...');
+      setStatusText('Connecting to MNS-UET Cloud Storage & Security Gateway...');
     }, 400);
 
     const timer2 = setTimeout(() => {
       setProgress(75);
-      setStatusText('Verifying Department Security & Academic Rosters...');
+      setStatusText('Loading Academic Monitoring Modules (LMS Results, QEC, Rosters)...');
     }, 900);
 
     const timer3 = setTimeout(() => {
       setProgress(100);
-      setStatusText('Authentication & Department Isolation Ready.');
+      setStatusText('Central Academic Monitoring Portal Ready.');
     }, 1400);
 
     const finishTimer = setTimeout(() => {
@@ -56,9 +56,9 @@ export const SplashScreen: React.FC<Props> = ({ onFinish }) => {
         </div>
 
         {/* Institutional Titles */}
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div className="inline-flex items-center gap-1.5 bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase">
-            <span>Official Academic Gateway</span>
+            <span>University Institutional Oversight</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
             Muhammad Nawaz Sharif University of Engineering & Technology
@@ -66,12 +66,16 @@ export const SplashScreen: React.FC<Props> = ({ onFinish }) => {
           <p className="text-sm font-semibold text-emerald-400 tracking-wide">
             Multan, Punjab, Pakistan
           </p>
-          <div className="pt-2 border-t border-slate-800">
-            <h2 className="text-base font-bold text-slate-200">
-              LMS Result Upload Status System
+          <div className="pt-2.5 border-t border-slate-800 space-y-1.5">
+            <h2 className="text-base sm:text-lg font-black text-slate-100">
+              Central Academic &amp; Institutional Monitoring Portal
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Enterprise Role-Based Department Isolation & Executive Portal
+            <div className="inline-flex items-center gap-1.5 bg-emerald-950/90 text-emerald-300 text-[11px] font-semibold px-3 py-1 rounded-full border border-emerald-700/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Active Governance Task: LMS Result Upload Status</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Enterprise Role-Based Department Isolation &amp; Executive Oversight
             </p>
           </div>
         </div>
@@ -96,7 +100,7 @@ export const SplashScreen: React.FC<Props> = ({ onFinish }) => {
             onClick={onFinish}
             className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold rounded-lg shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
           >
-            <span>Enter University Portal</span>
+            <span>Enter Central Monitoring Portal</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

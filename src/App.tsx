@@ -10,8 +10,10 @@ import { SplashScreen } from './components/SplashScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { SubmissionRecord, ActiveUserSession, AcademicShift } from './types';
+import { SubmissionRecord, ActiveUserSession, AcademicShift, MonitoringModuleId } from './types';
 import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
+import { SidebarNavigation } from './components/SidebarNavigation';
+import { WorkOnDemandView } from './components/WorkOnDemandView';
 import {
   CheckCircle2,
   Database,
@@ -34,7 +36,16 @@ export default function App() {
     AuthService.getCurrentSession()
   );
 
-  const [activeView, setActiveView] = useState<'HOD' | 'VC'>('HOD');
+  const [activeModule, setActiveModule] = useState<MonitoringModuleId>('LMS');
+  const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isInspectionMode, setIsInspectionMode] = useState<boolean>(false);
+
+  const [activeView, setActiveView] = useState<'HOD' | 'VC'>(() => {
+    const session = AuthService.getCurrentSession();
+    if (session?.role === 'VC') return 'VC';
+    return 'HOD';
+  });
   const [allRecords, setAllRecords] = useState<SubmissionRecord[]>([]);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
@@ -111,10 +122,13 @@ export default function App() {
 
   const handleAuthenticated = (session: ActiveUserSession) => {
     setCurrentUser(session);
+    setActiveModule('LMS');
     if (session.role === 'VC') {
       setActiveView('VC');
+      setIsInspectionMode(false);
     } else {
       setActiveView('HOD');
+      setIsInspectionMode(false);
       if (session.department) {
         setTargetDept(session.department);
       }
@@ -160,7 +174,9 @@ export default function App() {
     if (shift) setTargetShift(shift);
     if (session) setTargetSession(session);
     if (semester) setTargetSemester(semester);
+    setIsInspectionMode(true);
     setActiveView('HOD');
+    setActiveModule('LMS');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -195,35 +211,85 @@ export default function App() {
   const isHOD = currentUser.role === 'HOD';
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-      {/* Institutional Top Navigation Header */}
-      <Header
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex font-sans transition-colors duration-200">
+      {/* Institutional Left-Side Monitoring Tabs Sidebar */}
+      <SidebarNavigation
+        activeModule={activeModule}
+        onSelectModule={(mod) => {
+          setActiveModule(mod);
+          if (mod === 'LMS') {
+            if (currentUser.role === 'VC') {
+              setActiveView('VC');
+              setIsInspectionMode(false);
+            }
+          }
+        }}
         activeView={activeView}
-        onViewChange={setActiveView}
-        onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
-        onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
-        onLogout={handleLogout}
+        onViewChange={(view) => {
+          setActiveView(view);
+          if (view === 'HOD' && currentUser.role === 'VC') {
+            setIsInspectionMode(true);
+          } else if (view === 'VC') {
+            setIsInspectionMode(false);
+          }
+        }}
         currentUser={currentUser}
-        savedCount={allRecords.length}
         currentSession={targetSession}
-        currentSemester={targetSemester}
+        isOpenMobile={isSidebarOpenMobile}
+        onCloseMobile={() => setIsSidebarOpenMobile(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapsed={() => setIsSidebarCollapsed((prev) => !prev)}
+        savedCount={allRecords.length}
       />
 
-      {/* Main Container */}
-      <main className="max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
-        {toastMessage && (
-          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
-            <span>{toastMessage}</span>
-            <button
-              type="button"
-              onClick={() => setToastMessage(null)}
-              className="text-rose-700 hover:text-rose-900 font-bold ml-2 cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+      {/* Main Workspace Column */}
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+        {/* Institutional Top Navigation Header */}
+        <Header
+          activeView={activeView}
+          onViewChange={(view) => {
+            setActiveView(view);
+            if (view === 'HOD' && currentUser.role === 'VC') {
+              setIsInspectionMode(true);
+            } else if (view === 'VC') {
+              setIsInspectionMode(false);
+            }
+          }}
+          onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+          onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+          onLogout={handleLogout}
+          currentUser={currentUser}
+          savedCount={allRecords.length}
+          currentSession={targetSession}
+          currentSemester={targetSemester}
+          onToggleMobileSidebar={() => setIsSidebarOpenMobile((prev) => !prev)}
+          activeModule={activeModule}
+        />
+
+        {/* Main Container */}
+        <main className="max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
+          {activeModule === 'WORK_ON_DEMAND' ? (
+            <WorkOnDemandView
+              currentUser={currentUser}
+              currentSession={targetSession}
+              onSwitchToLMS={() => setActiveModule('LMS')}
+              onOpenDatabaseModal={() => setIsFirebaseModalOpen(true)}
+            />
+          ) : (
+            <>
+              {toastMessage && (
+                <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-900 text-rose-800 dark:text-rose-200 px-4 py-3 rounded-lg text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+                  <span>{toastMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => setToastMessage(null)}
+                    className="text-rose-700 hover:text-rose-900 font-bold ml-2 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
         {/* Department Quick Switcher Bar */}
         <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -273,10 +339,10 @@ export default function App() {
             <>
               <div className="flex items-center gap-2">
                 <span className="bg-slate-900 dark:bg-slate-800 text-white px-2.5 py-0.5 rounded text-[11px] font-bold">
-                  {isAdmin ? 'Admin Department Switcher' : 'University Departments'}
+                  {isAdmin ? 'Admin Department Switcher' : 'University Departments (Audit Inspection)'}
                 </span>
                 <span className="hidden md:inline text-slate-500 dark:text-slate-400">
-                  Switch department:
+                  {isVC ? 'Click to inspect department:' : 'Switch department:'}
                 </span>
               </div>
 
@@ -293,7 +359,11 @@ export default function App() {
                       onClick={() => {
                         setTargetDept(dept.name);
                         if (session2023Prog) setTargetProg(session2023Prog.name);
+                        if (currentUser.role === 'VC') {
+                          setIsInspectionMode(true);
+                        }
                         setActiveView('HOD');
+                        setActiveModule('LMS');
                       }}
                       className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
                         isActive && activeView === 'HOD'
@@ -352,9 +422,10 @@ export default function App() {
           </div>
         </div>
 
-        {/* View Switching: HOD Entry Form or VC Dashboard */}
+        {/* View Switching: HOD Entry Form (Read-only for VC / Inspection) or VC Dashboard */}
         {activeView === 'HOD' ? (
           <HODEntryForm
+            readOnly={currentUser.role === 'VC' || isInspectionMode}
             onRecordSavedOrDeleted={reloadRecords}
             selectedDepartmentProp={targetDept}
             selectedProgramProp={targetProg}
@@ -368,7 +439,10 @@ export default function App() {
             onShiftChangedProp={(newShift) => setTargetShift(newShift)}
             currentUser={currentUser}
             onOpenUserModal={() => setIsUserModalOpen(true)}
-            onSwitchToVC={() => setActiveView('VC')}
+            onSwitchToVC={() => {
+              setIsInspectionMode(false);
+              setActiveView('VC');
+            }}
           />
         ) : (
           <VCDashboard
@@ -376,42 +450,46 @@ export default function App() {
             allRecords={allRecords}
           />
         )}
-      </main>
+            </>
+          )}
+        </main>
 
-      {/* Institutional Footer */}
-      <footer className="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-6 mt-12">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-slate-800 p-0.5 flex items-center justify-center">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+        {/* Institutional Footer */}
+        <footer className="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-6 mt-12">
+          <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-full bg-slate-800 p-0.5 flex items-center justify-center">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <span className="font-semibold text-slate-200">
+                Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan
+              </span>
             </div>
-            <span className="font-semibold text-slate-200">
-              Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan
-            </span>
+            <div className="flex flex-wrap items-center gap-4 text-slate-400">
+              <span className="text-emerald-300 font-medium">
+                Academic Session {targetSession} – Semester {targetSemester} Portal
+              </span>
+              <span>•</span>
+              <span className="text-slate-400">
+                Role: <strong className="text-white">{currentUser.role}</strong>
+              </span>
+              {/* ONLY ADMIN SEES DATABASE LINK */}
+              {isAdmin && (
+                <>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsFirebaseModalOpen(true)}
+                    className="text-red-400 hover:text-red-300 font-semibold underline cursor-pointer"
+                  >
+                    Admin Database Control & Danger Zone
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-slate-400">
-            <span className="text-emerald-300 font-medium">
-              Academic Session {targetSession} – Semester {targetSemester} Portal
-            </span>
-            <span>•</span>
-            <span className="text-slate-400">
-              Role: <strong className="text-white">{currentUser.role}</strong>
-            </span>
-            {/* ONLY ADMIN SEES DATABASE LINK */}
-            {isAdmin && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={() => setIsFirebaseModalOpen(true)}
-                  className="text-red-400 hover:text-red-300 font-semibold underline cursor-pointer"
-                >
-                  Admin Database Control & Danger Zone
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {/* User Profile Management Modal (Photo, Name, Password, Day/Night Theme) */}
       <UserProfileModal

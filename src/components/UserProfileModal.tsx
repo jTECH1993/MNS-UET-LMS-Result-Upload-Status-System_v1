@@ -18,6 +18,7 @@ import {
   GraduationCap,
   BookOpen,
   Briefcase,
+  Mail,
 } from 'lucide-react';
 import { ActiveUserSession, UserRole } from '../types';
 import { AuthService } from '../services/authService';
@@ -37,6 +38,7 @@ export const UserProfileModal: React.FC<Props> = ({
   onUserUpdated,
 }) => {
   const [name, setName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
   const [designation, setDesignation] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
   const [academicRole, setAcademicRole] = useState<'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER'>('COORDINATOR');
@@ -65,6 +67,7 @@ export const UserProfileModal: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen) {
       setName(currentUser.name || '');
+      setEmail(currentUser.email || '');
       setDesignation(currentUser.designation || '');
       setAvatarUrl(currentUser.avatarUrl || '');
 
@@ -219,6 +222,7 @@ export const UserProfileModal: React.FC<Props> = ({
 
     const result = AuthService.updateProfile(currentUser.id, {
       name: cleanName,
+      email: email.trim(),
       designation: designation.trim(),
       avatarUrl: avatarUrl,
       oldPassword: isAttemptingPasswordChange ? currentPassword.trim() : undefined,
@@ -627,6 +631,27 @@ export const UserProfileModal: React.FC<Props> = ({
                 placeholder="e.g. Program Coordinator (BS AI)"
                 className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
               />
+            </div>
+
+            {/* Official University Email */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Official Institutional Email</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Password recovery & notifications</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  id="input-profile-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. your_email@mnsuet.edu.pk"
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
+                />
+              </div>
             </div>
 
             {/* Department & Username Summary */}

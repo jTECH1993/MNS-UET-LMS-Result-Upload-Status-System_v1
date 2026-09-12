@@ -1,14 +1,16 @@
 import { UserAccount, ActiveUserSession, UserRole } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
+import { SecurityService } from './securityService';
 
 const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v2';
 const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v2';
 
-// Seed default official university accounts (Only official master accounts: Admin & VC)
+// Seed default official university accounts (Master accounts: Admin, VC, & Coordinator)
 const DEFAULT_ACCOUNTS: UserAccount[] = [
   {
     id: 'user_admin',
     username: 'admin',
+    email: 'admin@mnsuet.edu.pk',
     password: 'Qwe12!@!@',
     name: 'System Administrator',
     designation: 'Director IT / Administrator',
@@ -19,11 +21,24 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
   {
     id: 'user_vc',
     username: 'VC',
+    email: 'vc@mnsuet.edu.pk',
     password: 'JHG45$%xz',
     name: 'Prof. Dr. Vice Chancellor',
     designation: 'Vice Chancellor',
     department: 'Office of the Vice Chancellor',
     role: 'VC',
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'user_talha_coord',
+    username: 'mtalhajahangir',
+    email: 'mtalhajahangir@mnsuet.edu.pk',
+    password: 'Password123!',
+    name: 'Engr. Muhammad Talha Jahangir',
+    designation: 'Program Coordinator (BS AI) / Lecturer',
+    department: 'Department of Computer Science',
+    role: 'COORDINATOR',
+    program: 'BS Artificial Intelligence',
     createdAt: '2026-09-01T08:00:00.000Z',
   },
 ];
@@ -49,7 +64,7 @@ export class AuthService {
         modified = true;
       }
 
-      // Ensure required Admin and VC accounts always exist
+      // Ensure required Admin and VC master accounts always exist
       const adminAcc = parsed.find(
         (a) => a.username.toLowerCase() === 'admin'
       );
@@ -59,6 +74,10 @@ export class AuthService {
       } else {
         if (!adminAcc.password) {
           adminAcc.password = 'Qwe12!@!@';
+          modified = true;
+        }
+        if (!adminAcc.email) {
+          adminAcc.email = 'admin@mnsuet.edu.pk';
           modified = true;
         }
         adminAcc.role = 'ADMIN';
@@ -75,25 +94,43 @@ export class AuthService {
           vcAcc.password = 'JHG45$%xz';
           modified = true;
         }
+        if (!vcAcc.email) {
+          vcAcc.email = 'vc@mnsuet.edu.pk';
+          modified = true;
+        }
         vcAcc.role = 'VC';
       }
 
-      // Automatically normalize Coordinator accounts (e.g. Program Coordinator of BS AI)
+      // Ensure required Coordinator account exists for Engr. Muhammad Talha Jahangir
+      const talhaCoordAcc = parsed.find(
+        (a) =>
+          a.username.toLowerCase() === 'mtalhajahangir' ||
+          a.email?.toLowerCase() === 'mtalhajahangir@mnsuet.edu.pk'
+      );
+      if (!talhaCoordAcc) {
+        parsed.push({ ...DEFAULT_ACCOUNTS[2] });
+        modified = true;
+      } else {
+        if (!talhaCoordAcc.password) {
+          talhaCoordAcc.password = 'Password123!';
+          modified = true;
+        }
+        if (talhaCoordAcc.email !== 'mtalhajahangir@mnsuet.edu.pk') {
+          talhaCoordAcc.email = 'mtalhajahangir@mnsuet.edu.pk';
+          modified = true;
+        }
+        talhaCoordAcc.role = 'COORDINATOR';
+        if (!talhaCoordAcc.program) {
+          talhaCoordAcc.program = 'BS Artificial Intelligence';
+          modified = true;
+        }
+      }
+
+      // Ensure all accounts have a clean email and valid structure
       for (const acc of parsed) {
-        const isCoord =
-          (acc.designation && acc.designation.toLowerCase().includes('coordinator')) ||
-          (acc.username && (acc.username.toLowerCase().includes('talha') || acc.username.toLowerCase().includes('coord'))) ||
-          (acc.name && acc.name.toLowerCase().includes('talha'));
-        
-        if (isCoord) {
-          if (acc.role === 'HOD') {
-            acc.role = 'COORDINATOR';
-            modified = true;
-          }
-          if (!acc.program) {
-            acc.program = 'BS Artificial Intelligence';
-            modified = true;
-          }
+        if (!acc.email) {
+          acc.email = `${acc.username.toLowerCase().replace(/[^a-z0-9]/g, '')}@mnsuet.edu.pk`;
+          modified = true;
         }
       }
 
@@ -134,6 +171,7 @@ export class AuthService {
         session.name = account.name;
         session.avatarUrl = account.avatarUrl;
         session.themePreference = account.themePreference;
+        session.email = account.email;
       }
 
       return session;
@@ -161,36 +199,71 @@ export class AuthService {
     }
   }
 
-  // Login handler with username (case-insensitive) & password matching
+  // Login handler with anti-hacking lockout, rate limiting, and email/username matching
   public static login(
     usernameInput: string,
     passwordInput: string
-  ): { success: boolean; message: string; session?: ActiveUserSession } {
-    const cleanUser = usernameInput.trim().toLowerCase();
+  ): { success: boolean; message: string; session?: ActiveUserSession; isLocked?: boolean; remainingSeconds?: number } {
+    const cleanUser = SecurityService.sanitizeInput(usernameInput).trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
     if (!cleanUser || !cleanPass) {
       return { success: false, message: 'Please enter both username and password.' };
     }
 
+    // 1. Check Anti-Brute-Force Lockout
+    const lockout = SecurityService.checkLoginLockout(cleanUser);
+    if (lockout.isLocked) {
+      return {
+        success: false,
+        message: `Account is temporarily locked due to repeated failed login attempts. Please wait ${lockout.remainingSeconds} seconds before trying again.`,
+        isLocked: true,
+        remainingSeconds: lockout.remainingSeconds,
+      };
+    }
+
     const accounts = this.getAccounts();
+    // Allow login via username OR registered email address
     const account = accounts.find(
-      (a) => a.username.trim().toLowerCase() === cleanUser
+      (a) =>
+        a.username.trim().toLowerCase() === cleanUser ||
+        (a.email && a.email.trim().toLowerCase() === cleanUser)
     );
 
     if (!account) {
+      SecurityService.recordFailedLogin(cleanUser);
       return {
         success: false,
-        message: 'Account not found. Please check username or create a new account.',
+        message: 'Account not found. Please verify your credentials or register an account.',
       };
     }
 
+    // Verify password
     if (account.password !== cleanPass) {
+      const failResult = SecurityService.recordFailedLogin(account.username);
+      if (failResult.isLocked) {
+        return {
+          success: false,
+          message: `Security Lockout Triggered: 5 failed attempts detected. This account has been locked for 5 minutes.`,
+          isLocked: true,
+          remainingSeconds: failResult.remainingSeconds,
+        };
+      }
       return {
         success: false,
-        message: 'Incorrect password. Please verify and try again.',
+        message: `Incorrect password. ${failResult.remainingAttempts} attempt(s) remaining before account lockout.`,
       };
     }
+
+    // Successful login: reset failed attempts & log security event
+    SecurityService.resetFailedLogin(account.username);
+    SecurityService.logSecurityEvent({
+      type: 'LOGIN_SUCCESS',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Successful sign-in as ${account.role} (${account.name}).`,
+    });
 
     // Update last login timestamp
     account.lastLoginAt = new Date().toISOString();
@@ -199,6 +272,7 @@ export class AuthService {
     const session: ActiveUserSession = {
       id: account.id,
       username: account.username,
+      email: account.email,
       name: account.name,
       designation: account.designation,
       department: account.department,
@@ -221,9 +295,10 @@ export class AuthService {
     };
   }
 
-  // Register a new HOD / Coordinator account
+  // Register a new HOD / Coordinator account with security checks
   public static registerAccount(data: {
     username: string;
+    email: string;
     password: string;
     name: string;
     department: string;
@@ -231,42 +306,60 @@ export class AuthService {
     role?: UserRole;
     program?: string;
   }): { success: boolean; message: string; session?: ActiveUserSession } {
-    const cleanUser = data.username.trim();
+    const cleanUser = SecurityService.sanitizeInput(data.username).trim();
+    const cleanEmail = SecurityService.sanitizeInput(data.email || '').trim().toLowerCase();
     const cleanPass = data.password.trim();
-    const cleanName = data.name.trim();
-    const cleanDept = data.department.trim();
-    const cleanDesig = data.designation.trim() || 'HOD / Coordinator';
+    const cleanName = SecurityService.sanitizeInput(data.name).trim();
+    const cleanDept = SecurityService.sanitizeInput(data.department).trim();
+    const cleanDesig = SecurityService.sanitizeInput(data.designation).trim() || 'HOD / Coordinator';
     const assignedRole = data.role || (cleanDesig.toLowerCase().includes('coordinator') ? 'COORDINATOR' : 'HOD');
 
-    if (!cleanUser || !cleanPass || !cleanName || !cleanDept) {
-      return { success: false, message: 'All fields are required.' };
+    if (!cleanUser || !cleanPass || !cleanName || !cleanDept || !cleanEmail) {
+      return { success: false, message: 'All fields are required, including your official email address.' };
     }
 
-    if (cleanPass.length < 4) {
-      return { success: false, message: 'Password must be at least 4 characters long.' };
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      return { success: false, message: 'Please enter a valid email address (e.g. user@mnsuet.edu.pk).' };
+    }
+
+    // Password strength check
+    const strength = SecurityService.validatePasswordStrength(cleanPass);
+    if (!strength.isValid) {
+      return { success: false, message: strength.message };
     }
 
     const accounts = this.getAccounts();
-    const existing = accounts.find(
+    const existingUser = accounts.find(
       (a) => a.username.trim().toLowerCase() === cleanUser.toLowerCase()
     );
 
-    if (existing) {
+    if (existingUser) {
       return {
         success: false,
         message: `An account with username "${cleanUser}" already exists. Please choose a different username.`,
       };
     }
 
+    const existingEmail = accounts.find(
+      (a) => a.email && a.email.trim().toLowerCase() === cleanEmail
+    );
+    if (existingEmail) {
+      return {
+        success: false,
+        message: `An account with email "${cleanEmail}" is already registered. You can sign in or use "Forgot Password".`,
+      };
+    }
+
     const newAccount: UserAccount = {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: cleanUser,
+      email: cleanEmail,
       password: cleanPass,
       name: cleanName,
       department: cleanDept,
       designation: cleanDesig,
       role: assignedRole,
-      program: data.program?.trim() || undefined,
+      program: data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
     };
@@ -274,9 +367,18 @@ export class AuthService {
     accounts.push(newAccount);
     this.saveAccounts(accounts);
 
+    SecurityService.logSecurityEvent({
+      type: 'LOGIN_SUCCESS',
+      severity: 'INFO',
+      actor: newAccount.username,
+      targetAccount: newAccount.username,
+      details: `New account registered: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Email saved to database for recovery.`,
+    });
+
     const session: ActiveUserSession = {
       id: newAccount.id,
       username: newAccount.username,
+      email: newAccount.email,
       name: newAccount.name,
       designation: newAccount.designation,
       department: newAccount.department,
@@ -290,6 +392,147 @@ export class AuthService {
       success: true,
       message: `Account created successfully for ${newAccount.name} (${newAccount.department}).`,
       session,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // PASSWORD RECOVERY / FORGOT PASSWORD SYSTEM
+  // ---------------------------------------------------------------------------
+  public static initiatePasswordReset(emailOrUsername: string): {
+    success: boolean;
+    message: string;
+    email?: string;
+    username?: string;
+    resetToken?: string;
+    otpCode?: string;
+  } {
+    const clean = SecurityService.sanitizeInput(emailOrUsername).trim();
+    if (!clean) {
+      return { success: false, message: 'Please enter your registered email address or username.' };
+    }
+
+    const accounts = this.getAccounts();
+    const isEmailInput = clean.includes('@');
+    const cleanLower = clean.toLowerCase();
+
+    let account: UserAccount | undefined;
+
+    if (isEmailInput) {
+      // User entered an email: search registered account's email or username prefix
+      account = accounts.find(
+        (a) => a.email && a.email.trim().toLowerCase() === cleanLower
+      );
+      if (!account) {
+        // Fallback: match by username if email prefix matches registered username
+        const userPrefix = cleanLower.split('@')[0];
+        account = accounts.find(
+          (a) => a.username.trim().toLowerCase() === userPrefix
+        );
+      }
+      if (!account) {
+        SecurityService.logSecurityEvent({
+          type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+          severity: 'WARNING',
+          actor: clean,
+          details: `Password reset attempted with unregistered email: "${clean}".`,
+        });
+        return {
+          success: false,
+          message: 'Incorrect email. Please enter the correct email you used during account registration.',
+        };
+      }
+    } else {
+      // User entered a username: match by registered username or email
+      account = accounts.find(
+        (a) =>
+          a.username.trim().toLowerCase() === cleanLower ||
+          (a.email && a.email.trim().toLowerCase() === cleanLower)
+      );
+      if (!account) {
+        SecurityService.logSecurityEvent({
+          type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+          severity: 'WARNING',
+          actor: clean,
+          details: `Password reset attempted with unregistered username: "${clean}".`,
+        });
+        return {
+          success: false,
+          message: 'Incorrect username or email. Please enter your correct registered credentials.',
+        };
+      }
+    }
+
+    const targetEmail = account.email?.trim();
+    if (!targetEmail) {
+      return {
+        success: false,
+        message: 'No recovery email associated with this account. Please contact the administrator.',
+      };
+    }
+
+    const resetData = SecurityService.createPasswordResetRequest({
+      accountId: account.id,
+      username: account.username,
+      email: targetEmail,
+    });
+
+    return {
+      success: true,
+      message: `Password reset verification code dispatched to: ${targetEmail}`,
+      email: targetEmail,
+      username: account.username,
+      resetToken: resetData.resetToken,
+      otpCode: resetData.otpCode,
+    };
+  }
+
+  public static verifyPasswordResetCode(
+    resetToken: string,
+    otpCode: string
+  ): { success: boolean; message: string } {
+    return SecurityService.verifyResetOtp(resetToken, otpCode);
+  }
+
+  public static completePasswordReset(
+    resetToken: string,
+    newPassword: string
+  ): { success: boolean; message: string } {
+    const req = SecurityService.getActiveResetRequest();
+    if (!req || req.resetToken !== resetToken) {
+      return { success: false, message: 'Password reset session invalid or expired. Please start over.' };
+    }
+
+    if (!req.verified) {
+      return { success: false, message: 'Please verify the 6-digit email security code first.' };
+    }
+
+    const strength = SecurityService.validatePasswordStrength(newPassword);
+    if (!strength.isValid) {
+      return { success: false, message: strength.message };
+    }
+
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === req.accountId || a.username.toLowerCase() === req.username.toLowerCase());
+    if (!account) {
+      return { success: false, message: 'Target account could not be found.' };
+    }
+
+    account.password = newPassword.trim();
+    this.saveAccounts(accounts);
+    SecurityService.clearResetRequest();
+    SecurityService.resetFailedLogin(account.username);
+
+    SecurityService.logSecurityEvent({
+      type: 'PASSWORD_RESET_COMPLETED',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Password successfully updated via verified email recovery token.`,
+    });
+
+    return {
+      success: true,
+      message: `Password successfully updated for ${account.name}! You can now log in with your new password.`,
     };
   }
 
@@ -321,6 +564,7 @@ export class AuthService {
     userId: string,
     data: {
       name?: string;
+      email?: string;
       designation?: string;
       avatarUrl?: string;
       oldPassword?: string;
@@ -366,6 +610,11 @@ export class AuthService {
       account.name = data.name.trim();
     }
 
+    // Update email
+    if (data.email !== undefined && data.email.trim().length > 0) {
+      account.email = data.email.trim();
+    }
+
     // Update designation
     if (data.designation !== undefined) {
       account.designation = data.designation.trim();
@@ -407,6 +656,7 @@ export class AuthService {
       updatedSession = {
         ...currentSession,
         name: account.name,
+        email: account.email,
         designation: account.designation,
         department: account.department,
         role: account.role,

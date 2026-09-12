@@ -5,6 +5,7 @@ import { SubmissionRecord, AcademicShift } from '../types';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { ExecutiveReportModal } from './ExecutiveReportModal';
+import { VCAnalyticsCharts } from './VCAnalyticsCharts';
 import { MnsUetLogo } from './MnsUetLogo';
 import {
   Building2,
@@ -29,6 +30,8 @@ import {
   Printer,
   AlertTriangle,
   ArrowRight,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 
 interface Props {
@@ -83,6 +86,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
+  const [dashboardViewMode, setDashboardViewMode] = useState<'ANALYTICS' | 'ROSTER' | 'COMBINED'>('COMBINED');
 
   // Per-row shift selection state (allows user/VC to toggle Morning/Evening on an individual program row)
   const [rowShiftOverrides, setRowShiftOverrides] = useState<Record<string, AcademicShift>>({});
@@ -440,7 +444,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               Vice Chancellor &amp; Deans Executive Monitoring Dashboard
             </h2>
             <p className="text-xs text-slate-300">
-              Muhammad Nawaz Sharif University of Engineering &amp; Technology, Multan • LMS Result Uploads
+              Muhammad Nawaz Sharif UET Multan • Central Monitoring Portal • Task: LMS Result Upload Status &amp; Compliance
             </p>
           </div>
         </div>
@@ -558,8 +562,91 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
-      {/* Primary Semester Selection Tabs Strip (Requirement: When user selects Semester 1, show Semester 1 genuinely) */}
-      <div className="bg-white p-3 rounded-lg border border-slate-300 shadow-2xs">
+      {/* Executive View Selector (Analytics Graphs vs Roster Table vs Combined) */}
+      <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+          <BarChart3 className="w-4 h-4 text-emerald-600" />
+          <span>Dashboard Display Mode:</span>
+        </div>
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <button
+            id="btn-vc-mode-combined"
+            type="button"
+            onClick={() => setDashboardViewMode('COMBINED')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'COMBINED'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Executive Analytics &amp; Roster</span>
+          </button>
+          <button
+            id="btn-vc-mode-analytics"
+            type="button"
+            onClick={() => setDashboardViewMode('ANALYTICS')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'ANALYTICS'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Interactive Graphs Only</span>
+          </button>
+          <button
+            id="btn-vc-mode-roster"
+            type="button"
+            onClick={() => setDashboardViewMode('ROSTER')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'ROSTER'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Department Roster Only</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Analytics Charts Section (Rendered in COMBINED or ANALYTICS modes) */}
+      {(dashboardViewMode === 'COMBINED' || dashboardViewMode === 'ANALYTICS') && (
+        <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-emerald-600" />
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                  Executive Intelligence &amp; Multi-Graph Analytics
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Comprehensive performance charts: Departmental uploads, status breakdown, semester trajectory &amp; delay root-causes
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-md">
+              MNS-UET Central Analytics
+            </span>
+          </div>
+
+          <VCAnalyticsCharts
+            allRecords={allRecords}
+            currentSession={currentSession}
+            selectedSemesterFilter={selectedSemesterFilter}
+            selectedShiftFilter={selectedShiftFilter}
+            onFilterByDepartment={(dept) => setSelectedDeptFilter(dept)}
+            onFilterByStatus={(status) => setStatusFilter(status)}
+          />
+        </div>
+      )}
+
+      {/* Academic Programs LMS Roster Section (Rendered in COMBINED or ROSTER modes) */}
+      {(dashboardViewMode === 'COMBINED' || dashboardViewMode === 'ROSTER') && (
+        <>
+          {/* Primary Semester Selection Tabs Strip (Requirement: When user selects Semester 1, show Semester 1 genuinely) */}
+          <div className="bg-white p-3 rounded-lg border border-slate-300 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-emerald-700" />
@@ -1410,6 +1497,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </table>
         </div>
       </div>
+    </>
+  )}
 
       {/* Academic Session Selector Modal */}
       <AcademicSessionModal

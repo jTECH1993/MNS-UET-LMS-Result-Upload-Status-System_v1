@@ -224,11 +224,14 @@ Director, Academic Affairs & Examination Directorate`;
           {docType === 'REPORT' && (
             <div className="space-y-6">
               <div className="text-center">
+                <span className="inline-block text-[10px] font-extrabold text-emerald-800 uppercase tracking-widest bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 rounded-full mb-1">
+                  Central Academic &amp; Institutional Monitoring Portal
+                </span>
                 <h2 className="text-base sm:text-lg font-black uppercase tracking-wider text-slate-900 underline decoration-emerald-700 decoration-2 underline-offset-4">
-                  Executive LMS Result Upload Status & Compliance Report
+                  Task Report: LMS Result Upload Status &amp; Compliance
                 </h2>
                 <p className="text-xs text-slate-600 mt-1">
-                  Consolidated Academic Verification Report across all University Departments & Degree Cohorts
+                  Consolidated Academic Verification Report across all University Departments &amp; Degree Cohorts
                 </p>
               </div>
 

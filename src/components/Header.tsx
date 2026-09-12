@@ -21,7 +21,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { ActiveUserSession } from '../types';
+import { ActiveUserSession, MonitoringModuleId } from '../types';
 import { AuthService } from '../services/authService';
 import { MnsUetLogo } from './MnsUetLogo';
 
@@ -36,7 +36,14 @@ interface Props {
   savedCount: number;
   currentSession?: string;
   currentSemester?: string;
+  onToggleMobileSidebar?: () => void;
+  activeModule?: MonitoringModuleId;
 }
+
+const MODULE_NAMES: Record<MonitoringModuleId, string> = {
+  LMS: 'LMS Result Upload Status',
+  WORK_ON_DEMAND: 'Work on Demand: Institutional Requisitions',
+};
 
 export const Header: React.FC<Props> = ({
   activeView,
@@ -49,6 +56,8 @@ export const Header: React.FC<Props> = ({
   savedCount,
   currentSession = '2023',
   currentSemester = '1',
+  onToggleMobileSidebar,
+  activeModule = 'LMS',
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
@@ -238,7 +247,18 @@ export const Header: React.FC<Props> = ({
       {/* Main Header Row */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3.5 flex items-center justify-between gap-3">
         {/* University Crest & Titles */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              onClick={onToggleMobileSidebar}
+              className="md:hidden p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer shrink-0"
+              title="Open Monitoring Modules Sidebar"
+              aria-label="Open Monitoring Modules Sidebar"
+            >
+              <Menu className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+            </button>
+          )}
           <div className="shrink-0 flex items-center justify-center p-0.5 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:scale-105 transition-transform">
             <MnsUetLogo className="w-11 h-11 sm:w-14 sm:h-14" />
           </div>
@@ -247,8 +267,13 @@ export const Header: React.FC<Props> = ({
               MNS University of Engineering &amp; Technology, Multan
             </h1>
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 font-semibold tracking-wide mt-0.5">
-              <span className="text-emerald-800 dark:text-emerald-400 font-bold truncate">
-                LMS RESULT UPLOAD MONITORING
+              <span className="text-emerald-800 dark:text-emerald-400 font-extrabold truncate uppercase tracking-tight">
+                Central Monitoring Portal
+              </span>
+              <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
+              <span className="inline-flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-bold bg-emerald-100/80 dark:bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 text-[11px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Task: {MODULE_NAMES[activeModule] || 'LMS Result Upload Status'}</span>
               </span>
               <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
               <span className="hidden sm:inline-flex items-center gap-1 text-slate-800 dark:text-slate-200 font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-[11px]">

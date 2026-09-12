@@ -144,6 +144,11 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       <td className="p-2.5 font-medium">
                         <div className="font-bold text-slate-800">{acc.name}</div>
                         <div className="text-[11px] text-slate-500 font-mono">@{acc.username}</div>
+                        {acc.email && (
+                          <div className="text-[10px] text-emerald-700 font-medium truncate max-w-[180px]" title={acc.email}>
+                            {acc.email}
+                          </div>
+                        )}
                       </td>
                       <td className="p-2.5">
                         <span
