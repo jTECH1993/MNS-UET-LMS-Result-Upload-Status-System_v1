@@ -250,20 +250,28 @@ export class StorageService {
     degreeLevel?: string,
     shift: AcademicShift = 'Morning',
     session: string = '2023',
-    semester: string = '1'
+    semester: string = '1',
+    section: string = 'A'
   ): SubmissionRecord | null {
     const store = this.getStore();
-    // 1. Normalized key check
-    const normKey = getRecordKey(department, program, degreeLevel, shift, session, semester);
+    const sec = (section || 'A').trim().toUpperCase();
+
+    // 1. Normalized key check with section
+    const normKey = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
     if (store[normKey]) return store[normKey];
 
-    // 2. Legacy key check (if degreeLevel was part of legacy key)
-    if (degreeLevel) {
+    // 2. Legacy key check (if existing record was saved before section was part of key)
+    if (sec === 'A') {
       const legKey = getLegacyRecordKey(department, program, degreeLevel, shift, session, semester);
-      if (store[legKey]) return store[legKey];
+      if (store[legKey]) {
+        return {
+          ...store[legKey],
+          section: 'A',
+        };
+      }
     }
 
-    // 3. Fallback scan matching normalized attributes
+    // 3. Fallback scan matching normalized attributes including section
     const targetDept = (department || '').trim().toLowerCase();
     const targetProg = (program || '').trim().toLowerCase();
     const targetShift = shift || 'Morning';
@@ -271,12 +279,14 @@ export class StorageService {
     const targetSem = (semester || '1').trim();
 
     const matched = Object.values(store).find((r) => {
+      const rSec = (r.section || 'A').trim().toUpperCase();
       return (
         (r.department || '').trim().toLowerCase() === targetDept &&
         (r.program || '').trim().toLowerCase() === targetProg &&
         (r.shift || 'Morning') === targetShift &&
         (r.session || '2023').trim() === targetSess &&
-        (r.semester || '1').trim() === targetSem
+        (r.semester || '1').trim() === targetSem &&
+        rSec === sec
       );
     });
 
@@ -285,17 +295,19 @@ export class StorageService {
 
   public static saveSubmission(record: SubmissionRecord): { success: boolean; isUpdate: boolean } {
     const store = this.getStore();
+    const sec = (record.section || 'A').trim().toUpperCase();
     const key = getRecordKey(
       record.department,
       record.program,
       record.degreeLevel,
       record.shift || 'Morning',
       record.session || '2023',
-      record.semester || '1'
+      record.semester || '1',
+      sec
     );
 
-    // Clean up any legacy duplicate key if existing
-    if (record.degreeLevel) {
+    // Clean up any legacy duplicate key if existing for Section A
+    if (sec === 'A') {
       const legKey = getLegacyRecordKey(
         record.department,
         record.program,
@@ -315,6 +327,7 @@ export class StorageService {
     const recordToSave: SubmissionRecord = {
       ...record,
       id: key,
+      section: sec,
       shift: record.shift || 'Morning',
       session: (record.session || '2023').trim(),
       semester: (record.semester || '1').trim(),
@@ -337,8 +350,8 @@ export class StorageService {
     // Audit log
     this.logAccess(
       isUpdate
-        ? `Updated result upload status for ${record.program} [${record.shift}] (${record.subjects.length} courses)`
-        : `Submitted new LMS record for ${record.program} [${record.shift}] (${record.subjects.length} courses)`,
+        ? `Updated result upload status for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`
+        : `Submitted new LMS record for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`,
       record.department,
       record.program
     );
@@ -352,16 +365,18 @@ export class StorageService {
     degreeLevel?: string,
     shift: AcademicShift = 'Morning',
     session: string = '2023',
-    semester: string = '1'
+    semester: string = '1',
+    section: string = 'A'
   ): boolean {
-    const key = getRecordKey(department, program, degreeLevel, shift, session, semester);
+    const sec = (section || 'A').trim().toUpperCase();
+    const key = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
     const store = this.getStore();
     let deleted = false;
     if (store[key]) {
       delete store[key];
       deleted = true;
     }
-    if (degreeLevel) {
+    if (sec === 'A') {
       const legKey = getLegacyRecordKey(department, program, degreeLevel, shift, session, semester);
       if (store[legKey]) {
         delete store[legKey];
@@ -373,7 +388,7 @@ export class StorageService {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
-      this.logAccess(`Permanently deleted LMS record for ${program} [${shift}]`, department, program);
+      this.logAccess(`Permanently deleted LMS record for ${program} [${shift} - Sec ${sec}]`, department, program);
       return true;
     }
     return false;
@@ -544,6 +559,7 @@ export class StorageService {
       'Program',
       'Degree Level',
       'Shift',
+      'Section',
       'Session',
       'Semester',
       'HOD / Coordinator',
@@ -574,6 +590,7 @@ export class StorageService {
           `"${rec.program}"`,
           `"${rec.degreeLevel}"`,
           `"${rec.shift || 'Morning'}"`,
+          `"${rec.section || 'A'}"`,
           `"${rec.session}"`,
           `"${rec.semester}"`,
           `"${rec.hodCoordinator}"`,
@@ -597,6 +614,7 @@ export class StorageService {
             `"${rec.program}"`,
             `"${rec.degreeLevel}"`,
             `"${rec.shift || 'Morning'}"`,
+            `"${rec.section || 'A'}"`,
             `"${rec.session}"`,
             `"${rec.semester}"`,
             `"${rec.hodCoordinator}"`,

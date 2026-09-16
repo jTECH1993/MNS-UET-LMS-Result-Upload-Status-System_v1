@@ -645,7 +645,15 @@ export const UserProfileModal: React.FC<Props> = ({
                 <option value="Head of Department (HOD)" />
               </datalist>
               <div className="flex flex-wrap gap-1 mt-1.5">
-                {['Lecturer', 'Assistant Professor', 'Associate Professor', 'Professor', 'Visiting Lecturer'].map((d) => (
+                {[
+                  'Lecturer',
+                  'Assistant Professor',
+                  'Associate Professor',
+                  'Professor',
+                  'Visiting Lecturer',
+                  'Head of Department (HOD)',
+                  'Program Coordinator',
+                ].map((d) => (
                   <button
                     key={d}
                     type="button"

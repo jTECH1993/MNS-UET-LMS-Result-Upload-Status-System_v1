@@ -20,6 +20,7 @@ interface Props {
   currentCount: number;
   currentShift: AcademicShift;
   currentSemester: string;
+  currentSection?: string;
   departmentName: string;
   programName: string;
 }
@@ -54,6 +55,7 @@ export const BulkCourseImportModal: React.FC<Props> = ({
   currentCount,
   currentShift,
   currentSemester,
+  currentSection = 'A',
   departmentName,
   programName,
 }) => {
@@ -148,7 +150,7 @@ export const BulkCourseImportModal: React.FC<Props> = ({
       uploadedBy: c.uploadedBy,
       status: c.status,
       remarks: c.remarks,
-      sectionShift: currentShift,
+      sectionShift: `${currentShift} - Sem ${currentSemester} (Sec ${currentSection})`,
       dateUploaded: c.status === 'Uploaded' ? new Date().toISOString().split('T')[0] : '',
     }));
 

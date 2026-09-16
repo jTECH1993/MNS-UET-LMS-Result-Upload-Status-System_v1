@@ -49,8 +49,8 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState<number>(0);
 
-  // Register form state
-  const [regRole, setRegRole] = useState<'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER'>('COORDINATOR');
+  // Register form state - do NOT default to Program Coordinator
+  const [regRole, setRegRole] = useState<'LECTURER' | 'VISITING_LECTURER' | 'HOD' | 'COORDINATOR' | ''>('');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regDepartment, setRegDepartment] = useState(UNIVERSITY_DEPARTMENTS[0].name);
@@ -111,7 +111,20 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
   const handleRoleSelection = (newRole: 'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER') => {
     setRegRole(newRole);
-    // Do not force "Program Coordinator" as default
+  };
+
+  const handleSelectDesignation = (title: string) => {
+    setRegDesignation(title);
+    setIsCustomDesignation(false);
+    if (['Lecturer', 'Assistant Professor', 'Associate Professor', 'Professor'].includes(title)) {
+      setRegRole('LECTURER');
+    } else if (title === 'Visiting Lecturer') {
+      setRegRole('VISITING_LECTURER');
+    } else if (title === 'Head of Department (HOD)') {
+      setRegRole('HOD');
+    } else if (title === 'Program Coordinator') {
+      setRegRole('COORDINATOR');
+    }
   };
 
   const handleDepartmentSelection = (newDept: string) => {
@@ -154,6 +167,11 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     setErrorMessage('');
     setSuccessMessage('');
 
+    if (!regEmail.trim() || !regEmail.includes('@') || !regEmail.includes('.')) {
+      setErrorMessage('Official institutional email address is compulsory. Please enter a valid email address (e.g. user@mnsuet.edu.pk).');
+      return;
+    }
+
     if (regPassword !== regConfirmPassword) {
       setErrorMessage('Passwords do not match. Please re-enter.');
       return;
@@ -170,8 +188,22 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
     const finalDesignation = (isCustomDesignation ? customDesignation : regDesignation).trim();
     if (!finalDesignation) {
-      setErrorMessage('Please select or specify your Designation Title (e.g. Lecturer, Assistant Professor, etc.).');
+      setErrorMessage('Please select or specify your Designation Title (e.g. Lecturer, Assistant Professor, Professor, etc.).');
       return;
+    }
+
+    let finalRole = regRole;
+    if (!finalRole) {
+      const lowerDesig = finalDesignation.toLowerCase();
+      if (lowerDesig.includes('coordinator')) {
+        finalRole = 'COORDINATOR';
+      } else if (lowerDesig.includes('hod') || lowerDesig.includes('head of department')) {
+        finalRole = 'HOD';
+      } else if (lowerDesig.includes('visiting')) {
+        finalRole = 'VISITING_LECTURER';
+      } else {
+        finalRole = 'LECTURER';
+      }
     }
 
     setIsSubmitting(true);
@@ -182,8 +214,8 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       designation: finalDesignation,
       username: finalUsername,
       password: regPassword,
-      role: regRole,
-      program: regRole !== 'HOD' ? regProgram : undefined,
+      role: finalRole,
+      program: finalRole !== 'HOD' ? regProgram : undefined,
     });
     setIsSubmitting(false);
 
@@ -554,52 +586,19 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
             </div>
 
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
-              {/* Institutional Role Selector: 4 Categories */}
+              {/* Institutional Role Selector: 4 Categories - Not defaulting to Program Coordinator */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Institutional Academic Category <span className="text-rose-600">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Institutional Academic Category <span className="text-rose-600">*</span>
+                  </label>
+                  {!regRole && (
+                    <span className="text-[11px] text-amber-600 font-semibold">
+                      Please select your category or click a designation below
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleRoleSelection('COORDINATOR')}
-                    className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                      regRole === 'COORDINATOR'
-                        ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30 text-teal-950 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-md shrink-0 ${regRole === 'COORDINATOR' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      <GraduationCap className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs block">Program Coordinator</span>
-                      <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
-                        Incharge of specific degree program (e.g. BS AI)
-                      </span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRoleSelection('HOD')}
-                    className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                      regRole === 'HOD'
-                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/30 text-emerald-950 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-md shrink-0 ${regRole === 'HOD' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      <Briefcase className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs block">Head of Department (HOD)</span>
-                      <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
-                        Departmental executive oversight
-                      </span>
-                    </div>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => handleRoleSelection('LECTURER')}
@@ -613,9 +612,9 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                       <BookOpen className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-xs block">Regular Lecturer</span>
+                      <span className="font-bold text-xs block">Regular Faculty / Lecturer</span>
                       <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
-                        Faculty course instructor
+                        Lecturer, Assistant / Associate / Full Professor
                       </span>
                     </div>
                   </button>
@@ -635,7 +634,47 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     <div>
                       <span className="font-bold text-xs block">Visiting Lecturer</span>
                       <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
-                        Adjunct / Visiting faculty
+                        Adjunct / Visiting faculty instructor
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRoleSelection('HOD')}
+                    className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                      regRole === 'HOD'
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/30 text-emerald-950 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`p-1.5 rounded-md shrink-0 ${regRole === 'HOD' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      <Briefcase className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs block">Head of Department (HOD)</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
+                        Departmental executive oversight &amp; approvals
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRoleSelection('COORDINATOR')}
+                    className={`py-2 px-3 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                      regRole === 'COORDINATOR'
+                        ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/30 text-teal-950 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`p-1.5 rounded-md shrink-0 ${regRole === 'COORDINATOR' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs block">Program Coordinator</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">
+                        Incharge of specific degree program (e.g. BS AI)
                       </span>
                     </div>
                   </button>
@@ -653,7 +692,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder="e.g. Engr. Muhammad Talha"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
                   />
                 </div>
 
@@ -703,7 +742,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                             setIsCustomDesignation(true);
                             setCustomDesignation(regDesignation || '');
                           } else {
-                            setRegDesignation(val);
+                            handleSelectDesignation(val);
                           }
                         }}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
@@ -714,21 +753,26 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                         <option value="Associate Professor">Associate Professor</option>
                         <option value="Professor">Professor</option>
                         <option value="Visiting Lecturer">Visiting Lecturer</option>
-                        <option value="Program Coordinator">Program Coordinator</option>
                         <option value="Head of Department (HOD)">Head of Department (HOD)</option>
+                        <option value="Program Coordinator">Program Coordinator</option>
                         <option value="CUSTOM">Other / Custom Designation...</option>
                       </select>
 
-                      {/* Quick 1-click selection chips for academic ranks */}
+                      {/* Quick 1-click selection chips for all academic ranks */}
                       <div className="flex flex-wrap gap-1 pt-0.5">
-                        {['Lecturer', 'Assistant Professor', 'Associate Professor', 'Professor', 'Visiting Lecturer'].map((d) => (
+                        {[
+                          'Lecturer',
+                          'Assistant Professor',
+                          'Associate Professor',
+                          'Professor',
+                          'Visiting Lecturer',
+                          'Head of Department (HOD)',
+                          'Program Coordinator',
+                        ].map((d) => (
                           <button
                             key={d}
                             type="button"
-                            onClick={() => {
-                              setRegDesignation(d);
-                              setIsCustomDesignation(false);
-                            }}
+                            onClick={() => handleSelectDesignation(d)}
                             className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${
                               regDesignation === d
                                 ? 'bg-emerald-700 text-white border-emerald-800 font-bold shadow-xs'
@@ -738,6 +782,20 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                             {d}
                           </button>
                         ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomDesignation(true);
+                            setCustomDesignation(regDesignation || '');
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                            isCustomDesignation
+                              ? 'bg-emerald-700 text-white border-emerald-800 font-bold shadow-xs'
+                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-medium'
+                          }`}
+                        >
+                          + Custom
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -762,11 +820,16 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                 </div>
               </div>
 
-              {/* Email Address for Password Recovery */}
+              {/* Email Address for Login & Password Recovery */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Official / Notification Email <span className="text-emerald-700 font-normal">(Used for Password Recovery)</span> *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Official Institutional Email Address <span className="text-rose-600">*</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-2 py-0.5 rounded">
+                    Used as Username &amp; for Password Recovery
+                  </span>
+                </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                     <Mail className="w-4 h-4" />
@@ -786,6 +849,9 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden font-medium"
                   />
                 </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Compulsory. This email is your primary login identifier and receives confidential 6-digit OTP verification codes.
+                </p>
               </div>
 
               <div>
@@ -805,7 +871,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                 </select>
               </div>
 
-              {regRole !== 'HOD' && (
+              {regRole && regRole !== 'HOD' && (
                 <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-lg space-y-1.5">
                   <label className="block text-xs font-bold text-teal-900 uppercase tracking-wider">
                     Assigned Degree Program *
@@ -1050,6 +1116,13 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                       {targetEmail}
                     </strong>
                   </p>
+
+                  <div className="p-2.5 bg-amber-50/90 border border-amber-200 rounded-lg text-amber-900 text-xs flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="leading-snug">
+                      <strong>Security Notice:</strong> The verification code is sent directly to your email inbox and is never displayed on this screen to protect your account from unauthorized password resets.
+                    </p>
+                  </div>
 
                   <div className="text-[11px] text-slate-600 border-t border-emerald-200/80 pt-2 flex items-center justify-between gap-2">
                     <span>Please check your inbox & spam folder.</span>

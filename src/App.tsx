@@ -70,6 +70,7 @@ export default function App() {
   const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
   const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
   const [targetSemester, setTargetSemester] = useState<string>('1');
+  const [targetAcademicSection, setTargetAcademicSection] = useState<string>('A');
 
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
@@ -160,7 +161,8 @@ export default function App() {
     prog: string,
     shift?: AcademicShift,
     session?: string,
-    semester?: string
+    semester?: string,
+    section?: string
   ) => {
     // Only Admin can jump to HOD entry for other departments from VC dashboard
     if (currentUser?.role === 'HOD' && currentUser.department !== dept) {
@@ -174,6 +176,7 @@ export default function App() {
     if (shift) setTargetShift(shift);
     if (session) setTargetSession(session);
     if (semester) setTargetSemester(semester);
+    if (section) setTargetAcademicSection(section);
     setIsInspectionMode(true);
     setActiveView('HOD');
     setActiveModule('LMS');
@@ -200,7 +203,8 @@ export default function App() {
     targetDegreeLevel,
     targetShift,
     targetSession,
-    targetSemester
+    targetSemester,
+    targetAcademicSection
   );
 
   const isAdmin = currentUser.role === 'ADMIN';
@@ -432,8 +436,10 @@ export default function App() {
             selectedShiftProp={targetShift}
             selectedSessionProp={targetSession}
             selectedSemesterProp={targetSemester}
+            selectedSectionProp={targetAcademicSection}
             onSessionChangedProp={(newSess) => setTargetSession(newSess)}
             onSemesterChangedProp={(newSem) => setTargetSemester(newSem)}
+            onSectionChangedProp={(newSec) => setTargetAcademicSection(newSec)}
             onDepartmentChangedProp={(newDept) => setTargetDept(newDept)}
             onProgramChangedProp={(newProg) => setTargetProg(newProg)}
             onShiftChangedProp={(newShift) => setTargetShift(newShift)}

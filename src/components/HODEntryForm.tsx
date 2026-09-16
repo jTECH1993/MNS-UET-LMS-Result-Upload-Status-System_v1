@@ -4,9 +4,11 @@ import {
   UNIVERSITY_DEPARTMENTS,
   ACADEMIC_SHIFTS,
   ACADEMIC_SEMESTERS,
+  STANDARD_ACADEMIC_SECTIONS,
   DEGREE_LEVEL_OPTIONS,
   createEmptySubjectRow,
   createInitialBlankRows,
+  getRecordKey,
 } from '../data/departmentsData';
 import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift } from '../types';
 import { StorageService } from '../services/storageService';
@@ -76,6 +78,7 @@ interface Props {
   selectedShiftProp?: AcademicShift;
   selectedSessionProp?: string;
   selectedSemesterProp?: string;
+  selectedSectionProp?: string;
   currentUser?: ActiveUserSession;
   onOpenUserModal?: () => void;
   onSessionChangedProp?: (session: string) => void;
@@ -83,6 +86,7 @@ interface Props {
   onDepartmentChangedProp?: (dept: string) => void;
   onProgramChangedProp?: (prog: string) => void;
   onShiftChangedProp?: (shift: AcademicShift) => void;
+  onSectionChangedProp?: (section: string) => void;
   onSwitchToVC?: () => void;
   readOnly?: boolean;
 }
@@ -94,6 +98,7 @@ export const HODEntryForm: React.FC<Props> = ({
   selectedShiftProp,
   selectedSessionProp,
   selectedSemesterProp,
+  selectedSectionProp,
   currentUser,
   onOpenUserModal,
   onSessionChangedProp,
@@ -101,6 +106,7 @@ export const HODEntryForm: React.FC<Props> = ({
   onDepartmentChangedProp,
   onProgramChangedProp,
   onShiftChangedProp,
+  onSectionChangedProp,
   onSwitchToVC,
   readOnly,
 }) => {
@@ -155,6 +161,11 @@ export const HODEntryForm: React.FC<Props> = ({
   // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
   const [shift, setShift] = useState<AcademicShift>(selectedShiftProp || 'Morning');
 
+  // Section selection (Section A, Section B, Section C, etc.) - strictly isolated data partition
+  const [section, setSection] = useState<string>((selectedSectionProp || 'A').trim().toUpperCase());
+  const [isCustomSectionOpen, setIsCustomSectionOpen] = useState<boolean>(false);
+  const [customSectionInput, setCustomSectionInput] = useState<string>('');
+
   // Semester selection (1 to 8) - strictly isolated institutional semester cycle
   const [semester, setSemester] = useState<string>(selectedSemesterProp || '1');
 
@@ -188,7 +199,7 @@ export const HODEntryForm: React.FC<Props> = ({
   } | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
-  // Status of each semester (1 to 8) for the current department + program + shift + session
+  // Status of each semester (1 to 8) for the current department + program + shift + session + section
   const semesterStatuses = useMemo(() => {
     return ACADEMIC_SEMESTERS.map((sem) => {
       const existing = StorageService.getSubmission(
@@ -197,7 +208,8 @@ export const HODEntryForm: React.FC<Props> = ({
         degreeLevel,
         shift,
         session,
-        sem.id
+        sem.id,
+        section
       );
       const hasRecord = Boolean(existing);
       let summaryInfo = null;
@@ -210,7 +222,52 @@ export const HODEntryForm: React.FC<Props> = ({
         summary: summaryInfo,
       };
     });
-  }, [department, program, degreeLevel, shift, session, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, shift, session, section, lastSavedTime, isExistingRecord]);
+
+  // Status of common sections (A, B, etc.) for the currently selected semester & shift
+  const sectionStatuses = useMemo(() => {
+    const defaultSections = ['A', 'B'];
+    const activeSecUpper = (section || 'A').trim().toUpperCase();
+    const allSecs = [...defaultSections];
+    if (!allSecs.includes(activeSecUpper)) {
+      allSecs.push(activeSecUpper);
+    }
+    return allSecs.map((secId) => {
+      const existing = StorageService.getSubmission(
+        department,
+        program,
+        degreeLevel,
+        shift,
+        session,
+        semester,
+        secId
+      );
+      const hasRecord = Boolean(existing);
+      let summaryInfo = null;
+      let validCourseCount = 0;
+      if (existing) {
+        summaryInfo = StorageService.calculateSummary(existing.subjects);
+        validCourseCount = existing.subjects.filter(
+          (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status
+        ).length;
+      }
+      return {
+        id: secId,
+        label: `Section ${secId}`,
+        shortLabel: `Sec ${secId}`,
+        hasRecord,
+        courseCount: validCourseCount,
+        summary: summaryInfo,
+      };
+    });
+  }, [department, program, degreeLevel, shift, session, semester, section, lastSavedTime, isExistingRecord]);
+
+  const handleSectionChange = (newSec: string) => {
+    const cleanSec = (newSec || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
+    setSection(cleanSec);
+    setIsCustomSectionOpen(false);
+    if (onSectionChangedProp) onSectionChangedProp(cleanSec);
+  };
 
   const handleSemesterChange = (newSem: string) => {
     setSemester(newSem);
@@ -236,7 +293,7 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [currentUser]);
 
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
-  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(8, 'Morning'));
+  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(8, 'Morning', '1', 'A'));
 
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record")
   useEffect(() => {
@@ -268,6 +325,12 @@ export const HODEntryForm: React.FC<Props> = ({
       setSemester(selectedSemesterProp);
     }
   }, [selectedSemesterProp]);
+
+  useEffect(() => {
+    if (selectedSectionProp && selectedSectionProp !== section) {
+      setSection(selectedSectionProp.trim().toUpperCase());
+    }
+  }, [selectedSectionProp]);
 
   // Strict Department & Program Isolation for HOD & Coordinator roles
   useEffect(() => {
@@ -316,7 +379,7 @@ export const HODEntryForm: React.FC<Props> = ({
     if (onShiftChangedProp) onShiftChangedProp(newShift);
   };
 
-  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, or Semester changes
+  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, Semester, or Section changes
   useEffect(() => {
     if (!department || !program) return;
 
@@ -326,7 +389,8 @@ export const HODEntryForm: React.FC<Props> = ({
       degreeLevel,
       shift,
       session,
-      semester
+      semester,
+      section
     );
 
     if (existing) {
@@ -342,27 +406,27 @@ export const HODEntryForm: React.FC<Props> = ({
       );
       const rows = [...validRows];
       while (rows.length < 8) {
-        rows.push(createEmptySubjectRow(rows.length + 1, shift, semester));
+        rows.push(createEmptySubjectRow(rows.length + 1, shift, semester, section));
       }
       setSubjects(rows);
       setSelectedRowIds(new Set());
 
       showFeedback(
         'info',
-        `Database record loaded for ${program} [${shift} Shift – Semester ${semester}]: ${validRows.length} subject(s) saved.`
+        `Database record loaded for ${program} [${shift} Shift – Semester ${semester} – Section ${section}]: ${validRows.length} subject(s) saved.`
       );
     } else {
       // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(8, shift, semester));
+      setSubjects(createInitialBlankRows(8, shift, semester, section));
       setSelectedRowIds(new Set());
       showFeedback(
         'info',
-        `Ready to enter courses for ${program} (${shift} Shift – Semester ${semester}). Fill course details and click 'Submit Result Status'.`
+        `Ready to enter courses for ${program} (${shift} Shift – Semester ${semester} – Section ${section}). Fill course details and click 'Submit Result Status'.`
       );
     }
-  }, [department, program, degreeLevel, shift, session, semester]);
+  }, [department, program, degreeLevel, shift, session, semester, section]);
 
   const showFeedback = (type: 'success' | 'info' | 'warning', text: string) => {
     setFeedbackMessage({ type, text });
@@ -422,12 +486,12 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('warning', 'Maximum 25 subject rows reached for this sheet.');
       return;
     }
-    const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester);
+    const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester, section);
     if (currentUser?.name) {
       newRow.uploadedBy = currentUser.name;
     }
     setSubjects((prev) => [...prev, newRow]);
-    showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester}.`);
+    showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester} (Section ${section}).`);
   };
 
   // Remove last course row
@@ -684,7 +748,7 @@ export const HODEntryForm: React.FC<Props> = ({
       const total = Math.max(newRows.length, 6);
       const filledRows: SubjectRow[] = [...newRows];
       while (filledRows.length < total) {
-        filledRows.push(createEmptySubjectRow(filledRows.length + 1, shift, semester));
+        filledRows.push(createEmptySubjectRow(filledRows.length + 1, shift, semester, section));
       }
       setSubjects(filledRows);
       showFeedback('success', `Imported ${newRows.length} course(s) and replaced existing table.`);
@@ -692,6 +756,47 @@ export const HODEntryForm: React.FC<Props> = ({
       setSubjects((prev) => [...prev, ...newRows]);
       showFeedback('success', `Appended ${newRows.length} course(s) to table.`);
     }
+  };
+
+  // Helper to copy syllabus from Section A to Section B (or vice versa) without overlapping records
+  const handleCopySyllabusFromOtherSection = (sourceSec: string = 'A') => {
+    const sourceRec = StorageService.getSubmission(
+      department,
+      program,
+      degreeLevel,
+      shift,
+      session,
+      semester,
+      sourceSec
+    );
+    if (!sourceRec || !sourceRec.subjects || sourceRec.subjects.length === 0) {
+      showFeedback('warning', `No course syllabus found in Section ${sourceSec} to copy.`);
+      return;
+    }
+    const valid = sourceRec.subjects.filter((s) => s.courseCode.trim() || s.subjectTitle.trim());
+    if (valid.length === 0) {
+      showFeedback('warning', `Section ${sourceSec} has no courses recorded.`);
+      return;
+    }
+    const copiedRows: SubjectRow[] = valid.map((s, idx) => ({
+      id: `row_${Date.now()}_copy_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+      courseCode: s.courseCode,
+      subjectTitle: s.subjectTitle,
+      creditHours: s.creditHours,
+      sectionShift: `${shift} - Sem ${semester} (Sec ${section})`,
+      status: '' as LMSStatus,
+      dateUploaded: '',
+      uploadedBy: currentUser?.name || '',
+      remarks: '',
+    }));
+    while (copiedRows.length < 8) {
+      copiedRows.push(createEmptySubjectRow(copiedRows.length + 1, shift, semester, section));
+    }
+    setSubjects(copiedRows);
+    showFeedback(
+      'success',
+      `Imported ${valid.length} course(s) from Section ${sourceSec} for Section ${section}. Section records remain completely isolated.`
+    );
   };
 
   // Save / Update handler
@@ -718,6 +823,7 @@ export const HODEntryForm: React.FC<Props> = ({
       program,
       degreeLevel,
       shift,
+      section,
       session,
       semester,
       hodCoordinator,
@@ -739,8 +845,8 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback(
         'success',
         result.isUpdate
-          ? `Record updated successfully for ${program} [${shift} Shift – Semester ${semester}] (${activeRows.length} subjects). Changes saved to database.`
-          : `New record saved successfully for ${program} [${shift} Shift – Semester ${semester}] (${activeRows.length} subjects) in database.`
+          ? `Record updated successfully for ${program} [${shift} Shift – Semester ${semester} – Section ${section}] (${activeRows.length} subjects). Changes saved to database.`
+          : `New record saved successfully for ${program} [${shift} Shift – Semester ${semester} – Section ${section}] (${activeRows.length} subjects) in database.`
       );
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     }
@@ -748,14 +854,14 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Clear Form (Requirement 11: Clear Form clears screen ONLY, does NOT delete database data)
   const handleClearForm = () => {
-    setSubjects(createInitialBlankRows(1, shift, semester));
+    setSubjects(createInitialBlankRows(1, shift, semester, section));
     showFeedback(
       'info',
-      `Visible form cleared on screen for ${shift} shift – Semester ${semester}. Previously saved database records remain untouched.`
+      `Visible form cleared on screen for ${shift} shift – Semester ${semester} – Section ${section}. Previously saved database records remain untouched.`
     );
   };
 
-  // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift program)
+  // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift/section record)
   const handleDeleteConfirm = () => {
     const success = StorageService.deleteSubmission(
       department,
@@ -763,7 +869,8 @@ export const HODEntryForm: React.FC<Props> = ({
       degreeLevel,
       shift,
       session,
-      semester
+      semester,
+      section
     );
 
     setIsDeleteModalOpen(false);
@@ -771,8 +878,8 @@ export const HODEntryForm: React.FC<Props> = ({
     if (success) {
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setSubjects(createInitialBlankRows(1, shift, semester));
-      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift – Semester ${semester}].`);
+      setSubjects(createInitialBlankRows(1, shift, semester, section));
+      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift – Semester ${semester} – Section ${section}].`);
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     } else {
       showFeedback('warning', 'No saved database record was found to delete.');
@@ -787,6 +894,7 @@ export const HODEntryForm: React.FC<Props> = ({
       program,
       degreeLevel,
       shift,
+      section,
       session,
       semester,
       hodCoordinator,
@@ -798,7 +906,7 @@ export const HODEntryForm: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
     StorageService.exportCSV([currentRec]);
-    showFeedback('success', `Exported CSV sheet for ${program} [${shift} Shift].`);
+    showFeedback('success', `Exported CSV sheet for ${program} [${shift} Shift – Section ${section}].`);
   };
 
   const handleSessionChangeFromModal = (newSess: string) => {
@@ -999,8 +1107,8 @@ export const HODEntryForm: React.FC<Props> = ({
           </span>
         </div>
 
-        {/* 5 Form Fields Grid matching Screenshot 1 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* 6 Form Fields Grid: Dept, Program, Level, Semester, Shift, and Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5">
           {/* Department */}
           <div>
             <label
@@ -1152,6 +1260,146 @@ export const HODEntryForm: React.FC<Props> = ({
               </button>
             </div>
           </div>
+
+          {/* Section (Section A, Section B, etc. - Strictly Isolated Partition) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="select-section"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1"
+              >
+                Section <span className="text-rose-600">*</span>
+              </label>
+              <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                Isolated
+              </span>
+            </div>
+            <select
+              id="select-section"
+              value={['A', 'B', 'C', 'D'].includes(section) ? section : 'CUSTOM'}
+              onChange={(e) => {
+                if (e.target.value === 'CUSTOM') {
+                  setIsCustomSectionOpen(true);
+                } else {
+                  handleSectionChange(e.target.value);
+                }
+              }}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer"
+            >
+              <option value="A">Section A</option>
+              <option value="B">Section B</option>
+              <option value="C">Section C</option>
+              <option value="D">Section D</option>
+              {!['A', 'B', 'C', 'D'].includes(section) && (
+                <option value={section}>Section {section}</option>
+              )}
+              <option value="CUSTOM">+ Other Section...</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Isolated Section Selector Tabs (Section A, Section B, etc.) */}
+        <div className="pt-3 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                Class Section:
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal">
+                (Data is strictly isolated per section — Section A & B never overlap)
+              </span>
+            </div>
+            <div className="text-[11px] text-indigo-900 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+              Active: {shift} Shift • Sem {semester} • Section {section}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {sectionStatuses.map((sec) => {
+              const isSelected = sec.id === section;
+              return (
+                <button
+                  key={sec.id}
+                  id={`btn-section-tab-${sec.id}`}
+                  type="button"
+                  onClick={() => handleSectionChange(sec.id)}
+                  className={`py-2 px-3.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+                    isSelected
+                      ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30'
+                      : sec.hasRecord
+                      ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-sm font-black">{sec.label}</span>
+                  {sec.hasRecord ? (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                        isSelected ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-200 text-indigo-900'
+                      }`}
+                    >
+                      ● {sec.courseCount} Saved
+                    </span>
+                  ) : (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded font-normal ${
+                        isSelected ? 'bg-indigo-800 text-indigo-200' : 'text-slate-400'
+                      }`}
+                    >
+                      Empty
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Custom section button */}
+            <button
+              id="btn-add-custom-section"
+              type="button"
+              onClick={() => {
+                setIsCustomSectionOpen(true);
+                setCustomSectionInput('');
+              }}
+              className="py-2 px-3 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-slate-500" />
+              <span>Other Section...</span>
+            </button>
+          </div>
+
+          {/* Quick copy helper banner when current section is empty but another section has courses */}
+          {(() => {
+            const otherSecStatus = sectionStatuses.find(
+              (s) => s.id !== section && s.hasRecord && s.courseCount > 0
+            );
+            const hasCurrentCourses = subjects.some(
+              (s) => s.courseCode.trim() || s.subjectTitle.trim()
+            );
+
+            if (!isReadOnly && !hasCurrentCourses && otherSecStatus) {
+              return (
+                <div className="mt-2.5 p-3 rounded-lg bg-indigo-50/90 border border-indigo-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-indigo-950">
+                    <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>
+                      <strong>Section {section}</strong> is currently empty.{' '}
+                      <strong>{otherSecStatus.label}</strong> has {otherSecStatus.courseCount} course(s).
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopySyllabusFromOtherSection(otherSecStatus.id)}
+                    className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-md font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+                    title={`Copy course codes and titles from ${otherSecStatus.label} into Section ${section}`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Course Titles from {otherSecStatus.label}</span>
+                  </button>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {/* Quick Semester Selection Tabs (Semesters 1-8) */}
@@ -1161,7 +1409,7 @@ export const HODEntryForm: React.FC<Props> = ({
               Quick Semester Jump:
             </span>
             <span className="text-[11px] text-slate-500">
-              Active: <strong>Semester {semester}</strong> for <strong>{shift} Shift</strong>
+              Active: <strong>Semester {semester}</strong> for <strong>{shift} Shift – Section {section}</strong>
             </span>
           </div>
           <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
@@ -1257,7 +1505,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 Course Result Upload Status
               </h3>
               <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
-                {program} • Sem {semester} • {shift}
+                {program} • Sem {semester} • {shift} • Section {section}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -2498,6 +2746,7 @@ export const HODEntryForm: React.FC<Props> = ({
         department={department}
         program={program}
         shift={shift}
+        section={section}
         session={session}
         semester={semester}
         onCancel={() => setIsDeleteModalOpen(false)}
@@ -2534,9 +2783,60 @@ export const HODEntryForm: React.FC<Props> = ({
         currentCount={subjects.length}
         currentShift={shift}
         currentSemester={semester}
+        currentSection={section}
         departmentName={department}
         programName={program}
       />
+
+      {/* Custom Section Dialog Modal */}
+      {isCustomSectionOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 border border-slate-200">
+            <h4 className="text-sm font-bold text-slate-900 mb-1">
+              Add / Switch to Custom Section
+            </h4>
+            <p className="text-xs text-slate-500 mb-4">
+              Create an isolated section partition (e.g. C, D, E) for {program} ({shift} Shift, Sem {semester}).
+            </p>
+            <input
+              type="text"
+              value={customSectionInput}
+              onChange={(e) => setCustomSectionInput(e.target.value.toUpperCase())}
+              placeholder="e.g. C or D"
+              maxLength={12}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white mb-4 uppercase"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomSectionOpen(false);
+                  setCustomSectionInput('');
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cleaned = customSectionInput.trim().toUpperCase();
+                  if (cleaned) {
+                    handleSectionChange(cleaned);
+                  }
+                  setIsCustomSectionOpen(false);
+                  setCustomSectionInput('');
+                }}
+                disabled={!customSectionInput.trim()}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Set Section
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,6 +2,8 @@ export type LMSStatus = 'Uploaded' | 'Pending' | 'In Progress' | 'Not Applicable
 
 export type AcademicShift = 'Morning' | 'Evening';
 
+export type AcademicSection = 'A' | 'B' | 'C' | 'D' | string;
+
 export interface SubjectRow {
   id: string;
   courseCode: string;
@@ -93,11 +95,12 @@ export interface AuditLogEntry {
 }
 
 export interface SubmissionRecord {
-  id: string; // key: department__program__degreeLevel__shift__session__semester
+  id: string; // key: department__program__degreeLevel__shift__session__semester__sec
   department: string;
   program: string;
   degreeLevel: string;
   shift: AcademicShift; // 'Morning' | 'Evening'
+  section?: string; // e.g. "A", "B", "C", "D" (Defaults to "A")
   session: string; // e.g. "2023", "2024"
   semester: string; // e.g. "1"
   hodCoordinator: string;

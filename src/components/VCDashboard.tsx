@@ -40,7 +40,8 @@ interface Props {
     program: string,
     shift?: AcademicShift,
     session?: string,
-    semester?: string
+    semester?: string,
+    section?: string
   ) => void;
   allRecords: SubmissionRecord[];
 }
@@ -74,6 +75,7 @@ export interface UnifiedProgramRow {
 export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords }) => {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | AcademicShift>('ALL');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
   // Default to Semester 1 as requested by user so Vice Chancellor genuinely inspects Semester 1 data without clutter
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('1');
   const [currentSession, setCurrentSession] = useState<string>(() => StorageService.getSelectedSession());
@@ -91,13 +93,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   // Per-row shift selection state (allows user/VC to toggle Morning/Evening on an individual program row)
   const [rowShiftOverrides, setRowShiftOverrides] = useState<Record<string, AcademicShift>>({});
 
-  // Map of submissions by unique key: department__program__shift__session__semester
+  // Map of submissions by unique key: department__program__shift__session__semester (and with __sec_X)
   const recordMap = useMemo(() => {
     const map = new Map<string, SubmissionRecord>();
     allRecords.forEach((r) => {
       const shiftVal = r.shift || 'Morning';
       const sessVal = r.session || '2023';
       const semVal = r.semester || '1';
+      const secVal = (r.section || 'A').toUpperCase();
+      // Section-specific key
+      map.set(
+        `${r.department.trim()}__${r.program.trim()}__${shiftVal}__${sessVal}__${semVal}__sec_${secVal}`,
+        r
+      );
+      // Legacy or default key
       map.set(
         `${r.department.trim()}__${r.program.trim()}__${shiftVal}__${sessVal}__${semVal}`,
         r
@@ -125,18 +134,55 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           let firstSubSem: string | undefined = undefined;
 
           ACADEMIC_SEMESTERS.forEach((sem) => {
-            const sub =
-              recordMap.get(
-                `${dept.name.trim()}__${prog.name.trim()}__${shiftName}__${currentSession}__${sem.id}`
-              ) || null;
-            semRecords[sem.id] = sub;
-            if (sub) {
+            const baseKey = `${dept.name.trim()}__${prog.name.trim()}__${shiftName}__${currentSession}__${sem.id}`;
+            const subA = recordMap.get(`${baseKey}__sec_A`) || (recordMap.get(baseKey)?.section === 'B' ? null : recordMap.get(baseKey)) || null;
+            const subB = recordMap.get(`${baseKey}__sec_B`) || (recordMap.get(baseKey)?.section === 'B' ? recordMap.get(baseKey) : null) || null;
+
+            let primarySub: SubmissionRecord | null = null;
+            let semSubCount = 0;
+            let semUploaded = 0;
+            let semPending = 0;
+
+            if (selectedSectionFilter === 'A') {
+              primarySub = subA;
+              if (subA) {
+                const s = StorageService.calculateSummary(subA.subjects);
+                semSubCount = s.totalSubjects;
+                semUploaded = s.uploaded;
+                semPending = s.pending;
+              }
+            } else if (selectedSectionFilter === 'B') {
+              primarySub = subB;
+              if (subB) {
+                const s = StorageService.calculateSummary(subB.subjects);
+                semSubCount = s.totalSubjects;
+                semUploaded = s.uploaded;
+                semPending = s.pending;
+              }
+            } else {
+              // 'ALL' Sections: Combine metrics of Section A and Section B without double-counting identical references
+              primarySub = subA || subB;
+              if (subA) {
+                const sA = StorageService.calculateSummary(subA.subjects);
+                semSubCount += sA.totalSubjects;
+                semUploaded += sA.uploaded;
+                semPending += sA.pending;
+              }
+              if (subB && subB !== subA) {
+                const sB = StorageService.calculateSummary(subB.subjects);
+                semSubCount += sB.totalSubjects;
+                semUploaded += sB.uploaded;
+                semPending += sB.pending;
+              }
+            }
+
+            semRecords[sem.id] = primarySub;
+            if (primarySub) {
               submittedCount++;
               if (!firstSubSem) firstSubSem = sem.id;
-              const sum = StorageService.calculateSummary(sub.subjects);
-              sumSubjects += sum.totalSubjects;
-              sumUploaded += sum.uploaded;
-              sumPending += sum.pending;
+              sumSubjects += semSubCount;
+              sumUploaded += semUploaded;
+              sumPending += semPending;
             }
           });
 
@@ -183,7 +229,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     });
 
     return list;
-  }, [recordMap, currentSession, rosterVersion]);
+  }, [recordMap, currentSession, rosterVersion, selectedSectionFilter]);
 
   // High-level statistics based on active Session, Shift, and Semester filters
   const stats = useMemo(() => {
@@ -880,6 +926,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             </select>
           </div>
 
+          {/* Section Filter (All / Section A / Section B) */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+            <span className="text-slate-400 font-semibold">Section:</span>
+            <select
+              id="filter-section"
+              value={selectedSectionFilter}
+              onChange={(e) => setSelectedSectionFilter(e.target.value as any)}
+              className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value="ALL">All Sections (A &amp; B)</option>
+              <option value="A">Section A Only</option>
+              <option value="B">Section B Only</option>
+            </select>
+          </div>
+
           {/* Submission Status Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
             <Filter className="w-4 h-4 text-slate-400" />
@@ -1126,7 +1187,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                         currentSession,
                         selectedSemesterFilter !== 'ALL'
                           ? selectedSemesterFilter
-                          : shiftData.firstSubmittedSemester || '1'
+                          : shiftData.firstSubmittedSemester || '1',
+                        selectedSectionFilter !== 'ALL'
+                          ? selectedSectionFilter
+                          : activeSub?.section || 'A'
                       )
                     }
                     className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
@@ -1393,7 +1457,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                         progItem.program,
                                         effectiveShift,
                                         currentSession,
-                                        sem.id
+                                        sem.id,
+                                        selectedSectionFilter !== 'ALL'
+                                          ? selectedSectionFilter
+                                          : semSub?.section || 'A'
                                       )
                                     }
                                     className={`w-6 h-6 rounded text-[10px] font-black transition-all cursor-pointer flex items-center justify-center border ${
@@ -1476,7 +1543,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                               currentSession,
                               selectedSemesterFilter !== 'ALL'
                                 ? selectedSemesterFilter
-                                : shiftData.firstSubmittedSemester || '1'
+                                : shiftData.firstSubmittedSemester || '1',
+                              selectedSectionFilter !== 'ALL'
+                                ? selectedSectionFilter
+                                : 'A'
                             )
                           }
                           className="px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-950 hover:bg-emerald-50 rounded border border-emerald-300 transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"

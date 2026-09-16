@@ -29,6 +29,19 @@ export const ACADEMIC_SEMESTERS: SemesterOption[] = [
   { id: '8', label: '8th Semester', shortLabel: 'Sem 8', roman: 'VIII' },
 ];
 
+export interface SectionOption {
+  id: string; // 'A', 'B', 'C', 'D'
+  label: string; // 'Section A'
+  shortLabel: string; // 'Sec A'
+}
+
+export const STANDARD_ACADEMIC_SECTIONS: SectionOption[] = [
+  { id: 'A', label: 'Section A', shortLabel: 'Sec A' },
+  { id: 'B', label: 'Section B', shortLabel: 'Sec B' },
+  { id: 'C', label: 'Section C', shortLabel: 'Sec C' },
+  { id: 'D', label: 'Section D', shortLabel: 'Sec D' },
+];
+
 export const DEFAULT_ACADEMIC_SESSIONS: string[] = ['2023', '2024', '2022', '2025'];
 
 // Official Departments and Academic Programs from MNS-UET Multan (https://mnsuet.edu.pk/)
@@ -130,11 +143,26 @@ export const DEGREE_LEVEL_OPTIONS = [
 
 /**
  * The unique identity of each submitted status is:
- * Department + Program + Shift + Session + Semester
- * e.g. Computer Science + BS Computer Science + Morning + 2023 + 1
- * is strictly isolated from Computer Science + BS Computer Science + Evening + 2023 + 1.
+ * Department + Program + Shift + Session + Semester + Section
+ * e.g. Computer Science + BS Computer Science + Morning + 2023 + 1 + Section A
+ * is strictly isolated from Computer Science + BS Computer Science + Morning + 2023 + 1 + Section B
+ * and all other offerings without overlap.
  */
 export function getRecordKey(
+  department: string,
+  program: string,
+  degreeLevel?: string,
+  shift: AcademicShift = 'Morning',
+  session: string = '2023',
+  semester: string = '1',
+  section: string = 'A'
+): string {
+  const sanitize = (str: string) => (str || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const sec = (section || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return `${sanitize(department)}__${sanitize(program)}__${sanitize(shift)}__${(session || '2023').trim()}__${(semester || '1').trim()}__sec_${sec || 'A'}`;
+}
+
+export function getLegacyRecordKey(
   department: string,
   program: string,
   degreeLevel?: string,
@@ -146,29 +174,19 @@ export function getRecordKey(
   return `${sanitize(department)}__${sanitize(program)}__${sanitize(shift)}__${(session || '2023').trim()}__${(semester || '1').trim()}`;
 }
 
-export function getLegacyRecordKey(
-  department: string,
-  program: string,
-  degreeLevel: string,
-  shift: AcademicShift = 'Morning',
-  session: string = '2023',
-  semester: string = '1'
-): string {
-  const sanitize = (str: string) => (str || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-  return `${sanitize(department)}__${sanitize(program)}__${sanitize(degreeLevel)}__${sanitize(shift)}__${(session || '2023').trim()}__${(semester || '1').trim()}`;
-}
-
 export function createEmptySubjectRow(
   index: number = 1,
   defaultShift: AcademicShift = 'Morning',
-  semester: string = '1'
+  semester: string = '1',
+  section: string = 'A'
 ) {
+  const secLabel = (section || 'A').trim().toUpperCase();
   return {
     id: `row_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
     courseCode: '',
     subjectTitle: '',
     creditHours: '',
-    sectionShift: `${defaultShift} - Sem ${semester}`,
+    sectionShift: `${defaultShift} - Sem ${semester} (Sec ${secLabel})`,
     status: '' as const,
     dateUploaded: '',
     uploadedBy: '',
@@ -179,9 +197,10 @@ export function createEmptySubjectRow(
 export function createInitialBlankRows(
   count: number = 8,
   defaultShift: AcademicShift = 'Morning',
-  semester: string = '1'
+  semester: string = '1',
+  section: string = 'A'
 ) {
-  return Array.from({ length: count }, (_, i) => createEmptySubjectRow(i + 1, defaultShift, semester));
+  return Array.from({ length: count }, (_, i) => createEmptySubjectRow(i + 1, defaultShift, semester, section));
 }
 
 // Clean Database initialization: ZERO DUMMY DATA.

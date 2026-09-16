@@ -6,6 +6,7 @@ interface Props {
   department: string;
   program: string;
   shift?: string;
+  section?: string;
   session: string;
   semester: string;
   onCancel: () => void;
@@ -17,6 +18,7 @@ export const DeleteModal: React.FC<Props> = ({
   department,
   program,
   shift = 'Morning',
+  section = 'A',
   session,
   semester,
   onCancel,
@@ -60,8 +62,8 @@ export const DeleteModal: React.FC<Props> = ({
               <span className="text-emerald-800 font-bold text-right">{program}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500 font-medium">Shift:</span>
-              <span className="text-indigo-800 font-bold text-right">{shift}</span>
+              <span className="text-slate-500 font-medium">Shift / Section:</span>
+              <span className="text-indigo-800 font-bold text-right">{shift} – Section {section}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 font-medium">Session / Semester:</span>

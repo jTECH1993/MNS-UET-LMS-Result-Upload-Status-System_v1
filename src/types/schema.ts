@@ -15,6 +15,7 @@ export interface BaseInstitutionalEntity {
   program: string;
   degreeLevel: string; // e.g. "BS", "MS", "PhD"
   shift: AcademicShift; // "Morning" | "Evening"
+  section?: string; // "A" | "B" | "C" | "D" (Defaults to "A")
   session: string; // e.g. "2023", "2024"
   semester: string; // "1" to "8"
   createdAt: string;
