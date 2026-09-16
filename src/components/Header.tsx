@@ -103,6 +103,12 @@ export const Header: React.FC<Props> = ({
       return { label: short, cls: 'bg-amber-600 text-white shadow-2xs' };
     }
     if (isCoordinator) {
+      if (currentUser.assignedPrograms && currentUser.assignedPrograms.length > 1) {
+        return {
+          label: `Coord • ${currentUser.assignedPrograms.length} Programs`,
+          cls: 'bg-teal-700 text-white shadow-2xs font-extrabold',
+        };
+      }
       let shortLabel = 'Coordinator';
       if (currentUser.program) {
         const pLower = currentUser.program.toLowerCase();
@@ -294,11 +300,18 @@ export const Header: React.FC<Props> = ({
                   <GraduationCap className="w-3 h-3 text-teal-700 dark:text-teal-400" />
                   Program Coordinator
                 </span>
-                {currentUser.program && (
+                {currentUser.assignedPrograms && currentUser.assignedPrograms.length > 1 ? (
+                  <span
+                    className="font-extrabold text-teal-950 dark:text-teal-100 bg-teal-50 dark:bg-teal-950/80 px-2 py-0.5 rounded border border-teal-300 dark:border-teal-700"
+                    title={`Assigned Programs: ${currentUser.assignedPrograms.join(', ')}`}
+                  >
+                    {currentUser.assignedPrograms.length} Programs Coordinated: {currentUser.assignedPrograms.join(', ')}
+                  </span>
+                ) : currentUser.program ? (
                   <span className="font-extrabold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700">
                     {currentUser.program}
                   </span>
-                )}
+                ) : null}
                 <span className="text-slate-600 dark:text-slate-400 hidden xs:inline">
                   • {currentUser.department}
                 </span>
@@ -510,7 +523,12 @@ export const Header: React.FC<Props> = ({
                   {currentUser.name}
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  {currentUser.department} {currentUser.program ? `• ${currentUser.program}` : ''}
+                  {currentUser.department}{' '}
+                  {currentUser.assignedPrograms && currentUser.assignedPrograms.length > 1
+                    ? `• ${currentUser.assignedPrograms.join(', ')}`
+                    : currentUser.program
+                    ? `• ${currentUser.program}`
+                    : ''}
                 </p>
               </div>
             </div>

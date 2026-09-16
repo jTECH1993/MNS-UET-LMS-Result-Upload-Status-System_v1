@@ -166,6 +166,7 @@ export class AuthService {
       if (account) {
         session.role = account.role;
         session.program = account.program;
+        session.assignedPrograms = account.assignedPrograms;
         session.department = account.department;
         session.designation = account.designation;
         session.name = account.name;
@@ -278,6 +279,7 @@ export class AuthService {
       department: account.department,
       role: account.role,
       program: account.program,
+      assignedPrograms: account.assignedPrograms,
       avatarUrl: account.avatarUrl,
       themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -305,6 +307,7 @@ export class AuthService {
     designation: string;
     role?: UserRole;
     program?: string;
+    assignedPrograms?: string[];
   }): { success: boolean; message: string; session?: ActiveUserSession } {
     const cleanUser = SecurityService.sanitizeInput(data.username).trim();
     const cleanEmail = SecurityService.sanitizeInput(data.email || '').trim().toLowerCase();
@@ -350,6 +353,14 @@ export class AuthService {
       };
     }
 
+    const rawAssigned = data.assignedPrograms && data.assignedPrograms.length > 0
+      ? data.assignedPrograms.map((p) => SecurityService.sanitizeInput(p).trim()).filter(Boolean)
+      : data.program
+      ? [SecurityService.sanitizeInput(data.program).trim()]
+      : [];
+
+    const primaryProgram = rawAssigned[0] || (data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined);
+
     const newAccount: UserAccount = {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: cleanUser,
@@ -359,7 +370,8 @@ export class AuthService {
       department: cleanDept,
       designation: cleanDesig,
       role: assignedRole,
-      program: data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined,
+      program: assignedRole !== 'HOD' ? primaryProgram : undefined,
+      assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
     };
@@ -372,7 +384,7 @@ export class AuthService {
       severity: 'INFO',
       actor: newAccount.username,
       targetAccount: newAccount.username,
-      details: `New account registered: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Email saved to database for recovery.`,
+      details: `New account registered: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
     });
 
     const session: ActiveUserSession = {
@@ -384,6 +396,7 @@ export class AuthService {
       department: newAccount.department,
       role: newAccount.role,
       program: newAccount.program,
+      assignedPrograms: newAccount.assignedPrograms,
       token: `auth_tok_${Date.now()}`,
     };
 
@@ -547,7 +560,7 @@ export class AuthService {
     return { success: true, message: `Account "${target.username}" deleted successfully.` };
   }
 
-  // Update Profile: Name, Designation, Avatar, Password, Theme, Role, Program, Department
+  // Update Profile: Name, Designation, Avatar, Password, Theme, Role, Program, Assigned Programs, Department
   public static updateProfile(
     userId: string,
     data: {
@@ -561,6 +574,7 @@ export class AuthService {
       role?: UserRole;
       department?: string;
       program?: string;
+      assignedPrograms?: string[];
     }
   ): { success: boolean; message: string; session?: ActiveUserSession } {
     const accounts = this.getAccounts();
@@ -623,6 +637,11 @@ export class AuthService {
       account.program = data.program.trim() || undefined;
     }
 
+    // Update multiple assigned programs
+    if (data.assignedPrograms !== undefined) {
+      account.assignedPrograms = data.assignedPrograms.length > 0 ? data.assignedPrograms : undefined;
+    }
+
     // Update avatarUrl (can be empty string to remove avatar)
     if (data.avatarUrl !== undefined) {
       account.avatarUrl = data.avatarUrl.trim();
@@ -649,6 +668,7 @@ export class AuthService {
         department: account.department,
         role: account.role,
         program: account.program,
+        assignedPrograms: account.assignedPrograms,
         avatarUrl: account.avatarUrl,
         themePreference: account.themePreference,
       };

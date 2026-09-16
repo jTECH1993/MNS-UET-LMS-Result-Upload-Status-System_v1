@@ -19,6 +19,9 @@ import {
   BookOpen,
   Briefcase,
   Mail,
+  Layers,
+  Plus,
+  Star,
 } from 'lucide-react';
 import { ActiveUserSession, UserRole } from '../types';
 import { AuthService } from '../services/authService';
@@ -43,6 +46,8 @@ export const UserProfileModal: React.FC<Props> = ({
   const [department, setDepartment] = useState<string>('');
   const [academicRole, setAcademicRole] = useState<'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER'>('COORDINATOR');
   const [program, setProgram] = useState<string>('');
+  const [assignedPrograms, setAssignedPrograms] = useState<string[]>([]);
+  const [isMultiProgramCoord, setIsMultiProgramCoord] = useState<boolean>(false);
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -93,6 +98,12 @@ export const UserProfileModal: React.FC<Props> = ({
           ? 'BS Artificial Intelligence'
           : deptGroup?.programs[0]?.name || '');
       setProgram(defaultProg);
+
+      const initialAssigned = currentUser.assignedPrograms && currentUser.assignedPrograms.length > 0
+        ? currentUser.assignedPrograms
+        : defaultProg ? [defaultProg] : [];
+      setAssignedPrograms(initialAssigned);
+      setIsMultiProgramCoord(initialAssigned.length > 1);
 
       setCurrentPassword('');
       setNewPassword('');
@@ -231,6 +242,9 @@ export const UserProfileModal: React.FC<Props> = ({
       role: !isMasterAccount ? (academicRole as UserRole) : undefined,
       department: !isMasterAccount ? department : undefined,
       program: !isMasterAccount && academicRole !== 'HOD' ? program : undefined,
+      assignedPrograms: !isMasterAccount && academicRole === 'COORDINATOR'
+        ? (isMultiProgramCoord && assignedPrograms.length > 0 ? assignedPrograms : [program])
+        : (!isMasterAccount && academicRole !== 'HOD' ? [program] : undefined),
     });
 
     setIsSaving(false);
@@ -560,34 +574,127 @@ export const UserProfileModal: React.FC<Props> = ({
                       ? 'bg-sky-50/70 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800'
                       : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
                   }`}>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                       <label className="block text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                         <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        {academicRole === 'COORDINATOR' ? 'Coordinated Degree Program' : 'Primary Teaching Program / Degree'} <span className="text-rose-600">*</span>
+                        {academicRole === 'COORDINATOR' ? 'Coordinated Degree Program(s)' : 'Primary Teaching Program / Degree'} <span className="text-rose-600">*</span>
                       </label>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
-                        Programs in {activeDeptGroup.code}
-                      </span>
+                      {academicRole === 'COORDINATOR' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !isMultiProgramCoord;
+                            setIsMultiProgramCoord(next);
+                            if (next && !assignedPrograms.includes(program)) {
+                              setAssignedPrograms([program]);
+                            }
+                          }}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer flex items-center gap-1 ${
+                            isMultiProgramCoord
+                              ? 'bg-teal-700 text-white border-teal-800'
+                              : 'bg-white dark:bg-slate-800 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700'
+                          }`}
+                        >
+                          <Layers className="w-3 h-3" />
+                          <span>{isMultiProgramCoord ? '✓ Multi-Program Mode' : '+ Coordinates >1 Program?'}</span>
+                        </button>
+                      )}
                     </div>
 
-                    <select
-                      id="select-profile-program"
-                      value={program}
-                      onChange={(e) => handleProgramSelect(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-2xs"
-                    >
-                      {availablePrograms.map((prog) => (
-                        <option key={prog.name} value={prog.name}>
-                          {prog.name} ({prog.degreeLevel})
-                        </option>
-                      ))}
-                    </select>
+                    {!isMultiProgramCoord ? (
+                      <select
+                        id="select-profile-program"
+                        value={program}
+                        onChange={(e) => {
+                          handleProgramSelect(e.target.value);
+                          setAssignedPrograms([e.target.value]);
+                        }}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-2xs"
+                      >
+                        {availablePrograms.map((prog) => (
+                          <option key={prog.name} value={prog.name}>
+                            {prog.name} ({prog.degreeLevel})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {availablePrograms.map((prog) => {
+                            const isSelected = assignedPrograms.includes(prog.name);
+                            const isPrimary = program === prog.name;
+                            return (
+                              <div
+                                key={prog.name}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    if (assignedPrograms.length > 1) {
+                                      const updated = assignedPrograms.filter((p) => p !== prog.name);
+                                      setAssignedPrograms(updated);
+                                      if (isPrimary && updated.length > 0) {
+                                        setProgram(updated[0]);
+                                      }
+                                    }
+                                  } else {
+                                    setAssignedPrograms((prev) => [...prev, prog.name]);
+                                  }
+                                }}
+                                className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex items-center justify-between gap-1.5 select-none ${
+                                  isSelected
+                                    ? 'bg-teal-700 text-white border-teal-800'
+                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-teal-400'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border text-[9px] shrink-0 ${
+                                    isSelected ? 'bg-white text-teal-800 border-white font-black' : 'border-slate-400'
+                                  }`}>
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="text-xs font-bold truncate">{prog.name}</span>
+                                </div>
+                                {isSelected && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleProgramSelect(prog.name);
+                                    }}
+                                    className={`shrink-0 text-[8px] px-1.5 py-0.5 rounded font-bold border transition-all cursor-pointer ${
+                                      isPrimary
+                                        ? 'bg-amber-300 text-slate-950 border-amber-400 font-extrabold'
+                                        : 'bg-teal-800 text-teal-100 border-teal-600'
+                                    }`}
+                                  >
+                                    {isPrimary ? '★ Primary' : 'Set Primary'}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] font-bold text-teal-900 dark:text-teal-200">Selected:</span>
+                          {assignedPrograms.map((pName) => (
+                            <span
+                              key={pName}
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900 text-teal-950 dark:text-teal-100 border border-teal-300 dark:border-teal-700 inline-flex items-center gap-1"
+                            >
+                              {program === pName && <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />}
+                              <span>{pName}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 leading-snug pt-0.5">
                       <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                       <span>
                         {academicRole === 'COORDINATOR'
-                          ? <>Assigned as <strong>Program Coordinator of {program}</strong>. The university header badge, status bar, and result upload forms will display your coordinated program.</>
+                          ? isMultiProgramCoord && assignedPrograms.length > 1
+                            ? <>Assigned as <strong>Coordinator of {assignedPrograms.length} Programs</strong> ({assignedPrograms.join(', ')}). Your portal header and filters will reflect all coordinated programs.</>
+                            : <>Assigned as <strong>Program Coordinator of {program}</strong>. The university header badge, status bar, and result upload forms will display your coordinated program.</>
                           : academicRole === 'LECTURER'
                           ? <>Configured as <strong>Lecturer ({program})</strong> in {department}. You can filter and manage your assigned LMS course uploads.</>
                           : <>Configured as <strong>Visiting Lecturer ({program})</strong> in {department}. You can filter and update your assigned LMS results.</>

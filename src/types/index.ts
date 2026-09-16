@@ -52,7 +52,8 @@ export interface UserAccount {
   department: string; // e.g. "Department of Computer Science" or "ALL"
   designation: string;
   role: UserRole;
-  program?: string; // e.g. "BS Artificial Intelligence"
+  program?: string; // Primary program e.g. "BS Artificial Intelligence"
+  assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   createdAt: string;
   lastLoginAt?: string;
   failedLoginAttempts?: number;
@@ -70,7 +71,8 @@ export interface ActiveUserSession {
   designation: string;
   department: string;
   role: UserRole;
-  program?: string; // e.g. "BS Artificial Intelligence"
+  program?: string; // Primary program e.g. "BS Artificial Intelligence"
+  assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   token?: string;
   avatarUrl?: string;
   themePreference?: 'light' | 'dark';

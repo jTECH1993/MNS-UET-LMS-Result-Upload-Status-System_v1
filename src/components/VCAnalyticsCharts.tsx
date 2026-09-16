@@ -13,6 +13,8 @@ import {
   Cell,
   AreaChart,
   Area,
+  LineChart,
+  Line,
 } from 'recharts';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SubmissionRecord, AcademicShift } from '../types';
@@ -32,6 +34,12 @@ import {
   ArrowUpRight,
   ShieldAlert,
   Percent,
+  Split,
+  Scale,
+  Users,
+  ArrowRight,
+  ExternalLink,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -39,8 +47,18 @@ interface Props {
   currentSession: string;
   selectedSemesterFilter?: string;
   selectedShiftFilter?: 'ALL' | AcademicShift;
+  selectedSectionFilter?: string;
   onFilterByDepartment?: (deptName: string) => void;
   onFilterByStatus?: (status: 'ALL' | 'SUBMITTED' | 'PENDING') => void;
+  onFilterBySection?: (section: string) => void;
+  onInspectProgram?: (
+    department: string,
+    program: string,
+    shift: AcademicShift,
+    session: string,
+    semester: string,
+    section: string
+  ) => void;
 }
 
 const COLORS = {
@@ -48,6 +66,10 @@ const COLORS = {
   inProgress: '#3b82f6', // blue-500
   pending: '#f59e0b', // amber-500
   awaiting: '#94a3b8', // slate-400
+  secA: '#059669', // emerald-600
+  secB: '#6366f1', // indigo-500
+  secC: '#ec4899', // pink-500
+  secD: '#8b5cf6', // purple-500
 };
 
 export const VCAnalyticsCharts: React.FC<Props> = ({
@@ -55,12 +77,17 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
   currentSession,
   selectedSemesterFilter = 'ALL',
   selectedShiftFilter = 'ALL',
+  selectedSectionFilter = 'ALL',
   onFilterByDepartment,
   onFilterByStatus,
+  onFilterBySection,
+  onInspectProgram,
 }) => {
-  const [chartViewTab, setChartViewTab] = useState<'ALL' | 'DEPTS' | 'SEMESTERS' | 'REASONS' | 'STATS'>('ALL');
+  const [chartViewTab, setChartViewTab] = useState<
+    'ALL' | 'DEPTS' | 'SECTIONS' | 'SEMESTERS' | 'REASONS' | 'STATS'
+  >('ALL');
 
-  // Compute departmental performance stats
+  // Compute departmental performance stats, respecting active section filter if specified
   const deptPerformanceData = useMemo(() => {
     return UNIVERSITY_DEPARTMENTS.map((dept) => {
       let uploaded = 0;
@@ -68,36 +95,29 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
       let inProgress = 0;
       let total = 0;
 
-      dept.programs.forEach((prog) => {
-        const shiftsToInspect: AcademicShift[] =
-          selectedShiftFilter === 'ALL'
-            ? ['Morning', 'Evening']
-            : [selectedShiftFilter];
+      // Filter all matching records in database
+      const matching = allRecords.filter((r) => {
+        if (r.department.trim() !== dept.name.trim()) return false;
+        if ((r.session || '2023') !== currentSession) return false;
+        if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return false;
+        if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return false;
+        if (
+          selectedSectionFilter !== 'ALL' &&
+          (r.section || 'A').trim().toUpperCase() !== selectedSectionFilter.trim().toUpperCase()
+        ) {
+          return false;
+        }
+        return true;
+      });
 
-        shiftsToInspect.forEach((sh) => {
-          const semsToInspect =
-            selectedSemesterFilter === 'ALL'
-              ? ['1', '2', '3', '4', '5', '6', '7', '8']
-              : [selectedSemesterFilter];
-
-          semsToInspect.forEach((sem) => {
-            const sub = StorageService.getSubmission(
-              dept.name,
-              prog.name,
-              prog.degreeLevel || 'BS',
-              sh,
-              currentSession,
-              sem
-            );
-            if (sub && sub.subjects && sub.subjects.length > 0) {
-              const summary = StorageService.calculateSummary(sub.subjects);
-              uploaded += summary.uploaded;
-              pending += summary.pending;
-              inProgress += summary.inProgress;
-              total += summary.totalSubjects;
-            }
-          });
-        });
+      matching.forEach((r) => {
+        if (r.subjects && r.subjects.length > 0) {
+          const summary = StorageService.calculateSummary(r.subjects);
+          uploaded += summary.uploaded;
+          pending += summary.pending;
+          inProgress += summary.inProgress;
+          total += summary.totalSubjects;
+        }
       });
 
       const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
@@ -112,7 +132,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         Percentage: percentage,
       };
     });
-  }, [allRecords, currentSession, selectedSemesterFilter, selectedShiftFilter]);
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter]);
 
   // Shift Comparison: Morning vs Evening
   const shiftComparison = useMemo(() => {
@@ -276,6 +296,277 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
     };
   }, [deptPerformanceData]);
 
+  // Section Analytics Data & Cross-Cohort Comparisons
+  const activeSections = useMemo(() => {
+    const set = new Set<string>(['A', 'B']);
+    allRecords.forEach((r) => {
+      if ((r.session || '2023') === currentSession && r.section) {
+        set.add(r.section.trim().toUpperCase());
+      }
+    });
+    return Array.from(set).sort();
+  }, [allRecords, currentSession]);
+
+  const sectionMetrics = useMemo(() => {
+    return activeSections.map((sec) => {
+      let uploaded = 0;
+      let pending = 0;
+      let inProgress = 0;
+      let total = 0;
+      const progSet = new Set<string>();
+
+      allRecords.forEach((r) => {
+        if ((r.session || '2023') !== currentSession) return;
+        if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
+        if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
+
+        const rSec = (r.section || 'A').trim().toUpperCase();
+        if (rSec !== sec) return;
+
+        if (r.subjects && r.subjects.length > 0) {
+          const sum = StorageService.calculateSummary(r.subjects);
+          uploaded += sum.uploaded;
+          pending += sum.pending;
+          inProgress += sum.inProgress;
+          total += sum.totalSubjects;
+          progSet.add(`${r.department}__${r.program}`);
+        }
+      });
+
+      const completionRate = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+
+      return {
+        section: sec,
+        name: `Section ${sec}`,
+        uploaded,
+        pending,
+        inProgress,
+        total,
+        completionRate,
+        programsCount: progSet.size,
+      };
+    });
+  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter, activeSections]);
+
+  const secAStats = useMemo(() => {
+    return (
+      sectionMetrics.find((s) => s.section === 'A') || {
+        section: 'A',
+        name: 'Section A',
+        uploaded: 0,
+        pending: 0,
+        inProgress: 0,
+        total: 0,
+        completionRate: 0,
+        programsCount: 0,
+      }
+    );
+  }, [sectionMetrics]);
+
+  const secBStats = useMemo(() => {
+    return (
+      sectionMetrics.find((s) => s.section === 'B') || {
+        section: 'B',
+        name: 'Section B',
+        uploaded: 0,
+        pending: 0,
+        inProgress: 0,
+        total: 0,
+        completionRate: 0,
+        programsCount: 0,
+      }
+    );
+  }, [sectionMetrics]);
+
+  // Parity Index between Section A and Section B
+  const sectionParity = useMemo(() => {
+    const gap = Math.abs(secAStats.completionRate - secBStats.completionRate);
+    const parityIndex = Math.max(0, 100 - gap);
+    return {
+      gap,
+      parityIndex,
+      isBalanced: gap <= 10,
+    };
+  }, [secAStats, secBStats]);
+
+  // Section Metric Comparison Data for Grouped Bar Chart
+  const sectionMetricComparisonData = useMemo(() => {
+    return [
+      {
+        metric: 'Verified Uploaded',
+        'Section A': secAStats.uploaded,
+        'Section B': secBStats.uploaded,
+      },
+      {
+        metric: 'In Progress',
+        'Section A': secAStats.inProgress,
+        'Section B': secBStats.inProgress,
+      },
+      {
+        metric: 'Pending Delay',
+        'Section A': secAStats.pending,
+        'Section B': secBStats.pending,
+      },
+      {
+        metric: 'Total Courses',
+        'Section A': secAStats.total,
+        'Section B': secBStats.total,
+      },
+    ];
+  }, [secAStats, secBStats]);
+
+  // Departmental Section Disparity (Section A % vs Section B % per department)
+  const deptSectionComparisonData = useMemo(() => {
+    return UNIVERSITY_DEPARTMENTS.map((dept) => {
+      let aUploaded = 0;
+      let aTotal = 0;
+      let bUploaded = 0;
+      let bTotal = 0;
+
+      allRecords.forEach((r) => {
+        if (r.department.trim() !== dept.name.trim()) return;
+        if ((r.session || '2023') !== currentSession) return;
+        if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
+        if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
+
+        const sec = (r.section || 'A').trim().toUpperCase();
+        const sum = StorageService.calculateSummary(r.subjects || []);
+        if (sec === 'A') {
+          aUploaded += sum.uploaded;
+          aTotal += sum.totalSubjects;
+        } else if (sec === 'B') {
+          bUploaded += sum.uploaded;
+          bTotal += sum.totalSubjects;
+        }
+      });
+
+      const aRate = aTotal > 0 ? Math.round((aUploaded / aTotal) * 100) : 0;
+      const bRate = bTotal > 0 ? Math.round((bUploaded / bTotal) * 100) : 0;
+      const disparity = Math.abs(aRate - bRate);
+
+      return {
+        code: dept.code,
+        name: dept.name,
+        'Section A': aRate,
+        'Section B': bRate,
+        aUploaded,
+        aTotal,
+        bUploaded,
+        bTotal,
+        disparity,
+        hasDisparity: (aTotal > 0 || bTotal > 0) && disparity >= 20,
+      };
+    });
+  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter]);
+
+  // Semester Trajectory by Section (Semesters 1 through 8)
+  const semesterSectionTrajectoryData = useMemo(() => {
+    return ['1', '2', '3', '4', '5', '6', '7', '8'].map((sem) => {
+      let aUploaded = 0;
+      let aTotal = 0;
+      let bUploaded = 0;
+      let bTotal = 0;
+
+      allRecords.forEach((r) => {
+        if ((r.session || '2023') !== currentSession) return;
+        if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
+        if ((r.semester || '1') !== sem) return;
+
+        const sec = (r.section || 'A').trim().toUpperCase();
+        const sum = StorageService.calculateSummary(r.subjects || []);
+        if (sec === 'A') {
+          aUploaded += sum.uploaded;
+          aTotal += sum.totalSubjects;
+        } else if (sec === 'B') {
+          bUploaded += sum.uploaded;
+          bTotal += sum.totalSubjects;
+        }
+      });
+
+      const aRate = aTotal > 0 ? Math.round((aUploaded / aTotal) * 100) : 0;
+      const bRate = bTotal > 0 ? Math.round((bUploaded / bTotal) * 100) : 0;
+
+      return {
+        semester: `Sem ${sem}`,
+        'Section A': aRate,
+        'Section B': bRate,
+        'Section A (Count)': aUploaded,
+        'Section B (Count)': bUploaded,
+      };
+    });
+  }, [allRecords, currentSession, selectedShiftFilter]);
+
+  // Cohort Section Disparity Actionable Alert List
+  const sectionDisparityAlerts = useMemo(() => {
+    const alerts: Array<{
+      department: string;
+      program: string;
+      shift: AcademicShift;
+      semester: string;
+      secAUploaded: number;
+      secATotal: number;
+      secARate: number;
+      secBUploaded: number;
+      secBTotal: number;
+      secBRate: number;
+      disparity: number;
+      message: string;
+    }> = [];
+
+    const cohortGroups: Record<string, { secA?: SubmissionRecord; secB?: SubmissionRecord }> = {};
+
+    allRecords.forEach((r) => {
+      if ((r.session || '2023') !== currentSession) return;
+      if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
+      if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
+
+      const key = `${r.department.trim()}__${r.program.trim()}__${r.shift || 'Morning'}__${r.semester || '1'}`;
+      if (!cohortGroups[key]) cohortGroups[key] = {};
+      const sec = (r.section || 'A').trim().toUpperCase();
+      if (sec === 'A') cohortGroups[key].secA = r;
+      else if (sec === 'B') cohortGroups[key].secB = r;
+    });
+
+    Object.entries(cohortGroups).forEach(([key, group]) => {
+      if (!group.secA && !group.secB) return;
+      const [department, program, shift, semester] = key.split('__');
+
+      const sumA = group.secA
+        ? StorageService.calculateSummary(group.secA.subjects || [])
+        : { uploaded: 0, totalSubjects: 0 };
+      const sumB = group.secB
+        ? StorageService.calculateSummary(group.secB.subjects || [])
+        : { uploaded: 0, totalSubjects: 0 };
+
+      const rateA = sumA.totalSubjects > 0 ? Math.round((sumA.uploaded / sumA.totalSubjects) * 100) : 0;
+      const rateB = sumB.totalSubjects > 0 ? Math.round((sumB.uploaded / sumB.totalSubjects) * 100) : 0;
+
+      const disparity = Math.abs(rateA - rateB);
+
+      if ((sumA.totalSubjects > 0 || sumB.totalSubjects > 0) && (disparity >= 15 || (rateA > 0 && !group.secB) || (rateB > 0 && !group.secA))) {
+        alerts.push({
+          department,
+          program,
+          shift: shift as AcademicShift,
+          semester,
+          secAUploaded: sumA.uploaded,
+          secATotal: sumA.totalSubjects,
+          secARate: rateA,
+          secBUploaded: sumB.uploaded,
+          secBTotal: sumB.totalSubjects,
+          secBRate: rateB,
+          disparity,
+          message:
+            rateA >= rateB
+              ? `Section A is at ${rateA}% while Section B is at ${rateB}%`
+              : `Section B is at ${rateB}% while Section A is at ${rateA}%`,
+        });
+      }
+    });
+
+    return alerts.sort((a, b) => b.disparity - a.disparity);
+  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter]);
+
   return (
     <div className="space-y-5">
       {/* Productivity View Mode Switcher */}
@@ -292,6 +583,19 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
           >
             <Layers className="w-3.5 h-3.5" />
             <span>All Visualizations</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setChartViewTab('SECTIONS')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              chartViewTab === 'SECTIONS'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Split className="w-3.5 h-3.5" />
+            <span>Section-Wise Graphs (Sec A vs B)</span>
           </button>
 
           <button
@@ -526,6 +830,433 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
                 <span className="text-[10px] text-slate-500">
                   {aggregateKPIs.lowestDept ? `(${aggregateKPIs.lowestDept.Percentage}% completed)` : ''}
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION-WISE GRAPHS & COHORT DISPARITY INTELLIGENCE */}
+      {(chartViewTab === 'ALL' || chartViewTab === 'SECTIONS') && (
+        <div className="space-y-4">
+          {/* Section Header with Parity Index & Quick Filter */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Split className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Section-Wise LMS Result Intelligence &amp; Parity Analysis
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Direct cohort comparison of Section A vs. Section B upload velocity, completion parity, and department-level divergence
+                </p>
+              </div>
+
+              {/* Section Quick-Filter Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">Filter View:</span>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => onFilterBySection?.('ALL')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                      selectedSectionFilter === 'ALL'
+                        ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    All Sections
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onFilterBySection?.('A')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                      selectedSectionFilter === 'A'
+                        ? 'bg-emerald-700 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Section A Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onFilterBySection?.('B')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                      selectedSectionFilter === 'B'
+                        ? 'bg-indigo-700 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Section B Only
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Section Executive KPI Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-4">
+              {/* Section A Card */}
+              <div
+                onClick={() => onFilterBySection?.('A')}
+                className="p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 cursor-pointer hover:border-emerald-400 transition-all"
+                title="Click to filter by Section A"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
+                    Section A Compliance
+                  </span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                    Cohort A
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                    {secAStats.completionRate}%
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold">
+                    ({secAStats.uploaded}/{secAStats.total} courses)
+                  </span>
+                </div>
+                <div className="w-full bg-emerald-100 dark:bg-emerald-950 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-full rounded-full transition-all"
+                    style={{ width: `${secAStats.completionRate}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2 block">
+                  {secAStats.pending} pending &bull; {secAStats.inProgress} in progress
+                </span>
+              </div>
+
+              {/* Section B Card */}
+              <div
+                onClick={() => onFilterBySection?.('B')}
+                className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 cursor-pointer hover:border-indigo-400 transition-all"
+                title="Click to filter by Section B"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">
+                    Section B Compliance
+                  </span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300">
+                    Cohort B
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-indigo-700 dark:text-indigo-400 font-mono">
+                    {secBStats.completionRate}%
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold">
+                    ({secBStats.uploaded}/{secBStats.total} courses)
+                  </span>
+                </div>
+                <div className="w-full bg-indigo-100 dark:bg-indigo-950 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                  <div
+                    className="bg-indigo-600 h-full rounded-full transition-all"
+                    style={{ width: `${secBStats.completionRate}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2 block">
+                  {secBStats.pending} pending &bull; {secBStats.inProgress} in progress
+                </span>
+              </div>
+
+              {/* Section Parity Index */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Cohort Parity Index
+                  </span>
+                  <Scale className="w-4 h-4 text-slate-500" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {sectionParity.parityIndex}%
+                  </span>
+                  <span
+                    className={`text-xs font-bold ${
+                      sectionParity.isBalanced ? 'text-emerald-600' : 'text-amber-600'
+                    }`}
+                  >
+                    {sectionParity.isBalanced ? 'High Parity' : `${sectionParity.gap}% Gap`}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      sectionParity.isBalanced ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                    style={{ width: `${sectionParity.parityIndex}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-2 block">
+                  University-wide section upload synchronization
+                </span>
+              </div>
+
+              {/* Disparity Alerts */}
+              <div className="p-3.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                    Divergence Alerts
+                  </span>
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-amber-700 dark:text-amber-400 font-mono">
+                    {sectionDisparityAlerts.length}
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold">cohort(s)</span>
+                </div>
+                <span className="text-[10px] text-amber-800 dark:text-amber-400 mt-3 block">
+                  Cohorts with &gt;15% gap between Sec A and Sec B
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section Graphs Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Chart 1: Section A vs Section B Course Load & Status (Grouped Bar Chart) */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-emerald-600" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Section A vs. Section B Status Comparison
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-emerald-600"></span> Sec A
+                  </span>
+                  <span className="flex items-center gap-1 text-indigo-700 dark:text-indigo-400">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-indigo-500"></span> Sec B
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-[280px] w-full pt-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={sectionMetricComparisonData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
+                    <XAxis dataKey="metric" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#1e293b',
+                        color: '#fff',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        border: 'none',
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                    <Bar dataKey="Section A" fill="#059669" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Section B" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 2: Departmental Section Disparity (Sec A % vs Sec B %) */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Departmental Section Completion Parity (%)
+                  </h4>
+                </div>
+                <span className="text-[11px] font-mono text-slate-400">
+                  Target: 100% Both Cohorts
+                </span>
+              </div>
+
+              <div className="h-[280px] w-full pt-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={deptSectionComparisonData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
+                    <XAxis dataKey="code" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                    <Tooltip
+                      formatter={(value: any) => [`${value}%`, '']}
+                      contentStyle={{
+                        backgroundColor: '#1e293b',
+                        color: '#fff',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        border: 'none',
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                    <Bar dataKey="Section A" fill="#059669" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Section B" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 3: Semester x Section Trajectory (Semesters 1-8) */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Semester-Wise Section Trajectory (Sem 1 to 8)
+                  </h4>
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono">Completion Rate %</span>
+              </div>
+
+              <div className="h-[260px] w-full pt-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={semesterSectionTrajectoryData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
+                    <XAxis dataKey="semester" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                    <Tooltip
+                      formatter={(value: any) => [`${value}%`, '']}
+                      contentStyle={{
+                        backgroundColor: '#1e293b',
+                        color: '#fff',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        border: 'none',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                    <Line
+                      type="monotone"
+                      dataKey="Section A"
+                      stroke="#059669"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="Section B"
+                      stroke="#6366f1"
+                      strokeWidth={3}
+                      strokeDasharray="4 4"
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Actionable Disparity Watchlist for Vice Chancellor */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Section Cohort Divergence Watchlist
+                    </h4>
+                  </div>
+                  <span className="text-[11px] bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-bold px-2 py-0.5 rounded">
+                    {sectionDisparityAlerts.length} Attention Item{sectionDisparityAlerts.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 mt-3 max-h-[260px] overflow-y-auto pr-1">
+                  {sectionDisparityAlerts.length === 0 ? (
+                    <div className="text-center py-10 text-xs text-slate-400">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                      <p className="font-bold text-slate-700 dark:text-slate-300">
+                        Excellent Cohort Synchronization!
+                      </p>
+                      <p className="text-slate-400 mt-0.5">
+                        No major upload discrepancies detected between Section A and Section B.
+                      </p>
+                    </div>
+                  ) : (
+                    sectionDisparityAlerts.map((item, idx) => (
+                      <div
+                        key={`${item.department}_${item.program}_${item.shift}_${item.semester}_${idx}`}
+                        className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {item.program}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 font-semibold text-slate-700 dark:text-slate-300">
+                              {item.shift} &bull; Sem {item.semester}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                            {item.message}
+                          </p>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                            <span>Sec A: <strong className="text-emerald-700">{item.secAUploaded}/{item.secATotal}</strong></span>
+                            <span>Sec B: <strong className="text-indigo-700">{item.secBUploaded}/{item.secBTotal}</strong></span>
+                            <span>Gap: <strong className="text-amber-700">{item.disparity}%</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onInspectProgram?.(
+                                item.department,
+                                item.program,
+                                item.shift,
+                                currentSession,
+                                item.semester,
+                                'A'
+                              )
+                            }
+                            className="px-2 py-1 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-200 font-bold text-[11px] cursor-pointer"
+                            title="Inspect Section A"
+                          >
+                            Sec A
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onInspectProgram?.(
+                                item.department,
+                                item.program,
+                                item.shift,
+                                currentSession,
+                                item.semester,
+                                'B'
+                              )
+                            }
+                            className="px-2 py-1 rounded bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-200 font-bold text-[11px] cursor-pointer"
+                            title="Inspect Section B"
+                          >
+                            Sec B
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>Direct HOD verification available per cohort</span>
+                <span className="font-mono font-bold text-slate-500">Session {currentSession}</span>
               </div>
             </div>
           </div>

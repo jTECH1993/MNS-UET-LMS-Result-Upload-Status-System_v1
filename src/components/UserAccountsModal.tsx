@@ -172,11 +172,30 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             ? 'VISITING'
                             : acc.role}
                         </span>
-                        {acc.program && (
+                        {acc.assignedPrograms && acc.assignedPrograms.length > 1 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <span className="w-full text-[9px] font-bold text-teal-900">
+                              {acc.assignedPrograms.length} Programs Coordinated:
+                            </span>
+                            {acc.assignedPrograms.map((p) => (
+                              <span
+                                key={p}
+                                className={`inline-block text-[9px] px-1 py-0.2 rounded font-semibold border ${
+                                  p === acc.program
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                                    : 'bg-teal-50 text-teal-800 border-teal-200'
+                                }`}
+                                title={p === acc.program ? 'Primary Program' : p}
+                              >
+                                {p === acc.program ? `★ ${p}` : p}
+                              </span>
+                            ))}
+                          </div>
+                        ) : acc.program ? (
                           <span className="block text-[9px] text-teal-700 font-semibold mt-0.5">
                             {acc.program}
                           </span>
-                        )}
+                        ) : null}
                       </td>
                       <td className="p-2.5 text-slate-600">
                         <span className="line-clamp-1" title={acc.department}>

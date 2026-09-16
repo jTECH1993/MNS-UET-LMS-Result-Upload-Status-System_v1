@@ -24,6 +24,11 @@ import {
   Send,
   ShieldAlert,
   RefreshCw,
+  Layers,
+  Plus,
+  Check,
+  Star,
+  X,
 } from 'lucide-react';
 
 interface Props {
@@ -58,6 +63,12 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     const dept0 = UNIVERSITY_DEPARTMENTS[0];
     return dept0.programs[0]?.name || 'BS Artificial Intelligence';
   });
+  const [regAssignedPrograms, setRegAssignedPrograms] = useState<string[]>(() => {
+    const dept0 = UNIVERSITY_DEPARTMENTS[0];
+    return dept0.programs[0]?.name ? [dept0.programs[0].name] : ['BS Artificial Intelligence'];
+  });
+  const [isMultiProgram, setIsMultiProgram] = useState<boolean>(false);
+  const [interDeptProgToAdd, setInterDeptProgToAdd] = useState<string>('');
   const [regDesignation, setRegDesignation] = useState('');
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignation, setCustomDesignation] = useState('');
@@ -111,6 +122,12 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
   const handleRoleSelection = (newRole: 'COORDINATOR' | 'HOD' | 'LECTURER' | 'VISITING_LECTURER') => {
     setRegRole(newRole);
+    if (newRole === 'COORDINATOR') {
+      // If user clicks Coordinator, ensure assigned programs array has the selected program
+      if (regAssignedPrograms.length === 0 && regProgram) {
+        setRegAssignedPrograms([regProgram]);
+      }
+    }
   };
 
   const handleSelectDesignation = (title: string) => {
@@ -131,8 +148,41 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     setRegDepartment(newDept);
     const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
     if (deptObj && deptObj.programs.length > 0) {
-      setRegProgram(deptObj.programs[0].name);
+      const defaultProg = deptObj.programs[0].name;
+      setRegProgram(defaultProg);
+      if (!isMultiProgram) {
+        setRegAssignedPrograms([defaultProg]);
+      } else {
+        // If in multi-program mode and none in this new department are selected yet, add its first program
+        const hasExistingInNewDept = regAssignedPrograms.some((p) =>
+          deptObj.programs.some((dp) => dp.name === p)
+        );
+        if (!hasExistingInNewDept) {
+          setRegAssignedPrograms((prev) => [...prev, defaultProg]);
+        }
+      }
     }
+  };
+
+  const toggleProgramSelection = (progName: string) => {
+    setRegAssignedPrograms((prev) => {
+      if (prev.includes(progName)) {
+        if (prev.length <= 1) {
+          return prev; // keep at least 1 program
+        }
+        const updated = prev.filter((p) => p !== progName);
+        if (regProgram === progName && updated.length > 0) {
+          setRegProgram(updated[0]);
+        }
+        return updated;
+      } else {
+        const updated = [...prev, progName];
+        if (!regProgram) {
+          setRegProgram(progName);
+        }
+        return updated;
+      }
+    });
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -206,6 +256,11 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       }
     }
 
+    const finalAssigned = isMultiProgram && regAssignedPrograms.length > 0
+      ? regAssignedPrograms
+      : [regProgram];
+    const primaryProgram = finalAssigned.includes(regProgram) ? regProgram : finalAssigned[0];
+
     setIsSubmitting(true);
     const result = AuthService.registerAccount({
       name: regName,
@@ -215,7 +270,8 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       username: finalUsername,
       password: regPassword,
       role: finalRole,
-      program: finalRole !== 'HOD' ? regProgram : undefined,
+      program: finalRole !== 'HOD' ? primaryProgram : undefined,
+      assignedPrograms: finalRole !== 'HOD' ? finalAssigned : undefined,
     });
     setIsSubmitting(false);
 
@@ -872,24 +928,239 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               </div>
 
               {regRole && regRole !== 'HOD' && (
-                <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-lg space-y-1.5">
-                  <label className="block text-xs font-bold text-teal-900 uppercase tracking-wider">
-                    Assigned Degree Program *
-                  </label>
-                  <select
-                    value={regProgram}
-                    onChange={(e) => setRegProgram(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-hidden"
-                  >
-                    {UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.programs.map((prog) => (
-                      <option key={prog.name} value={prog.name}>
-                        {prog.name} ({prog.degreeLevel})
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[10px] text-slate-500 block">
-                    Your assigned courses and header badges will reflect this degree program.
-                  </span>
+                <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-black text-teal-950 uppercase tracking-wider flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 text-teal-700 shrink-0" />
+                        <span>Assigned Degree Program{isMultiProgram ? 's' : ''} *</span>
+                      </label>
+                      <span className="text-[11px] text-teal-800 font-medium block">
+                        {isMultiProgram
+                          ? 'Select all programs you coordinate or teach across the department'
+                          : 'Select your degree program or enable multi-program coordination'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      id="btn-toggle-multiprogram"
+                      onClick={() => {
+                        const next = !isMultiProgram;
+                        setIsMultiProgram(next);
+                        if (next) {
+                          if (!regAssignedPrograms.includes(regProgram)) {
+                            setRegAssignedPrograms([regProgram]);
+                          }
+                        } else {
+                          setRegAssignedPrograms([regProgram]);
+                        }
+                      }}
+                      className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto ${
+                        isMultiProgram
+                          ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                          : 'bg-white text-teal-900 border-teal-300 hover:bg-teal-100 hover:border-teal-400'
+                      }`}
+                      title={isMultiProgram ? 'Switch to single program selection' : 'Enable multiple programs if you coordinate more than one degree'}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>{isMultiProgram ? '✓ Multi-Program Mode (Active)' : '+ Coordinator of >1 Program?'}</span>
+                    </button>
+                  </div>
+
+                  {!isMultiProgram ? (
+                    /* Single Program Dropdown */
+                    <div className="space-y-2">
+                      <select
+                        value={regProgram}
+                        onChange={(e) => {
+                          setRegProgram(e.target.value);
+                          setRegAssignedPrograms([e.target.value]);
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-hidden shadow-2xs"
+                      >
+                        {UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.programs.map((prog) => (
+                          <option key={prog.name} value={prog.name}>
+                            {prog.name} ({prog.degreeLevel})
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-1">
+                        <span className="text-[10px] text-slate-500">
+                          Your assigned courses and header badges will reflect this degree program.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMultiProgram(true);
+                            if (!regAssignedPrograms.includes(regProgram)) {
+                              setRegAssignedPrograms([regProgram]);
+                            }
+                          }}
+                          className="text-[11px] font-bold text-teal-800 hover:text-teal-950 underline decoration-teal-400 hover:decoration-teal-700 cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Coordinates more than one program? Select multiple</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Multi-Program Interactive Checklist & Management */
+                    <div className="space-y-3 pt-1">
+                      {/* Department Programs Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.programs.map((prog) => {
+                          const isSelected = regAssignedPrograms.includes(prog.name);
+                          const isPrimary = regProgram === prog.name;
+                          return (
+                            <div
+                              key={prog.name}
+                              onClick={() => toggleProgramSelection(prog.name)}
+                              className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all flex items-start justify-between gap-2 select-none ${
+                                isSelected
+                                  ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:border-teal-400 hover:bg-teal-50/50'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2 min-w-0">
+                                <div
+                                  className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center border text-[10px] shrink-0 ${
+                                    isSelected
+                                      ? 'bg-white text-teal-800 border-white font-black'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className={`text-xs font-bold block truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                                    {prog.name}
+                                  </span>
+                                  <span className={`text-[10px] block ${isSelected ? 'text-teal-100' : 'text-slate-500'}`}>
+                                    {prog.degreeLevel} • {UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.code || 'Dept'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {isSelected && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRegProgram(prog.name);
+                                  }}
+                                  className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold border transition-all cursor-pointer ${
+                                    isPrimary
+                                      ? 'bg-amber-300 text-slate-950 border-amber-400 font-extrabold shadow-2xs'
+                                      : 'bg-teal-800/80 text-teal-100 border-teal-600 hover:bg-teal-600'
+                                  }`}
+                                  title={isPrimary ? 'Primary Default Program' : 'Click to designate as primary program'}
+                                >
+                                  {isPrimary ? '★ Primary' : 'Set Primary'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected Programs Bar & Count */}
+                      <div className="p-2.5 bg-white rounded-lg border border-teal-300 shadow-2xs space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-extrabold text-teal-950 flex items-center gap-1.5 flex-wrap">
+                            <span>Selected Programs ({regAssignedPrograms.length}):</span>
+                            {regAssignedPrograms.length > 1 && (
+                              <span className="text-[10px] bg-teal-100 text-teal-900 px-1.5 py-0.2 rounded font-bold">
+                                Multi-Program Coordinator
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const deptProgs = UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.programs.map((p) => p.name) || [];
+                              setRegAssignedPrograms(deptProgs);
+                              if (deptProgs.length > 0 && !deptProgs.includes(regProgram)) {
+                                setRegProgram(deptProgs[0]);
+                              }
+                            }}
+                            className="text-[10px] font-bold text-teal-700 hover:text-teal-950 underline cursor-pointer"
+                          >
+                            Select All in {UNIVERSITY_DEPARTMENTS.find((d) => d.name === regDepartment)?.code || 'Dept'}
+                          </button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {regAssignedPrograms.map((pName) => {
+                            const isPrimary = regProgram === pName;
+                            return (
+                              <span
+                                key={pName}
+                                className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                                  isPrimary
+                                    ? 'bg-amber-50 text-amber-950 border-amber-300'
+                                    : 'bg-teal-50 text-teal-900 border-teal-300'
+                                }`}
+                              >
+                                {isPrimary && <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />}
+                                <span>{pName}</span>
+                                {regAssignedPrograms.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleProgramSelection(pName)}
+                                    className="text-slate-400 hover:text-rose-600 ml-0.5 cursor-pointer"
+                                    title={`Remove ${pName}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Interdisciplinary / Cross-department Program Add */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-teal-200/80">
+                        <span className="text-[11px] font-bold text-teal-950 shrink-0">
+                          + Add Interdisciplinary Program from Another Department:
+                        </span>
+                        <select
+                          value={interDeptProgToAdd}
+                          onChange={(e) => {
+                            const chosen = e.target.value;
+                            if (chosen) {
+                              if (!regAssignedPrograms.includes(chosen)) {
+                                setRegAssignedPrograms((prev) => [...prev, chosen]);
+                              }
+                              setInterDeptProgToAdd('');
+                            }
+                          }}
+                          className="px-2 py-1 bg-white border border-teal-300 rounded text-xs text-slate-800 font-medium focus:ring-2 focus:ring-teal-600 focus:outline-hidden"
+                        >
+                          <option value="">-- Choose Program from other departments --</option>
+                          {UNIVERSITY_DEPARTMENTS.filter((d) => d.name !== regDepartment).map((d) => (
+                            <optgroup key={d.name} label={`${d.name} (${d.code})`}>
+                              {d.programs.map((p) => (
+                                <option
+                                  key={p.name}
+                                  value={p.name}
+                                  disabled={regAssignedPrograms.includes(p.name)}
+                                >
+                                  {p.name} ({p.degreeLevel}) {regAssignedPrograms.includes(p.name) ? '✓ Added' : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+
+                      <p className="text-[10px] text-teal-800/90 font-medium">
+                        ✓ As coordinator of multiple programs, all selected programs will be linked to your account. You can switch between them with one click on your dashboard.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

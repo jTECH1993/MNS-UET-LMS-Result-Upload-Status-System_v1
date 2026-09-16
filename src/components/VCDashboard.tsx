@@ -698,8 +698,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             currentSession={currentSession}
             selectedSemesterFilter={selectedSemesterFilter}
             selectedShiftFilter={selectedShiftFilter}
+            selectedSectionFilter={selectedSectionFilter}
             onFilterByDepartment={(dept) => setSelectedDeptFilter(dept)}
             onFilterByStatus={(status) => setStatusFilter(status)}
+            onFilterBySection={(section) => setSelectedSectionFilter(section)}
+            onInspectProgram={(dept, prog, shift, sess, sem, sec) => {
+              onSelectProgramToEdit(dept, prog, shift, sess, sem, sec);
+            }}
           />
         </div>
       )}

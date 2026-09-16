@@ -271,6 +271,7 @@ Director, Academic Affairs & Examination Directorate`;
                         <th className="py-2.5 px-3">#</th>
                         <th className="py-2.5 px-3">Department & Program</th>
                         <th className="py-2.5 px-3 text-center">Level</th>
+                        <th className="py-2.5 px-3 text-center">Sections</th>
                         <th className="py-2.5 px-3 text-center">Morning Shift</th>
                         <th className="py-2.5 px-3 text-center">Evening Shift</th>
                         <th className="py-2.5 px-3 text-center">Overall Compliance</th>
@@ -296,6 +297,16 @@ Director, Academic Affairs & Examination Directorate`;
                               <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
                                 {prog.degreeLevel}
                               </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  Sec A
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                  Sec B
+                                </span>
+                              </div>
                             </td>
                             <td className="py-2 px-3 text-center">
                               {m.hasSubmission ? (

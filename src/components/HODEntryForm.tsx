@@ -1260,10 +1260,12 @@ export const HODEntryForm: React.FC<Props> = ({
                 className="text-xs font-bold text-slate-700 flex items-center gap-1"
               >
                 Program <span className="text-rose-600">*</span>
-                {currentUser?.role === 'COORDINATOR' && currentUser.program === program && (
-                  <span className="text-[9px] bg-teal-100 text-teal-800 px-1 py-0.2 rounded font-bold">
-                    My Program
-                  </span>
+                {currentUser?.role === 'COORDINATOR' && (
+                  (currentUser.assignedPrograms ? currentUser.assignedPrograms.includes(program) : currentUser.program === program) ? (
+                    <span className="text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-bold">
+                      ★ Coordinated by You
+                    </span>
+                  ) : null
                 )}
               </label>
               {!isReadOnly && (
@@ -1283,12 +1285,41 @@ export const HODEntryForm: React.FC<Props> = ({
               onChange={(e) => handleProgramChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
             >
-              {currentDeptPrograms.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.name} {currentUser?.program === p.name ? '★ (Coordinated)' : ''}
-                </option>
-              ))}
+              {currentDeptPrograms.map((p) => {
+                const isCoordinated = currentUser?.assignedPrograms
+                  ? currentUser.assignedPrograms.includes(p.name)
+                  : currentUser?.program === p.name;
+                return (
+                  <option key={p.name} value={p.name}>
+                    {p.name} {isCoordinated ? '★ (My Program)' : ''}
+                  </option>
+                );
+              })}
             </select>
+            {/* Quick multi-program switcher chips for coordinators overseeing >1 program */}
+            {currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 1 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                <span className="text-[9px] font-bold text-teal-900">Your Coordinated Programs:</span>
+                {currentUser.assignedPrograms.map((pName) => {
+                  const isCurrent = program === pName;
+                  return (
+                    <button
+                      key={pName}
+                      type="button"
+                      onClick={() => handleProgramChange(pName)}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer border ${
+                        isCurrent
+                          ? 'bg-teal-700 text-white border-teal-800 shadow-2xs'
+                          : 'bg-teal-50 text-teal-900 border-teal-200 hover:bg-teal-100'
+                      }`}
+                      title={`Switch to ${pName}`}
+                    >
+                      {isCurrent ? '● ' : ''}{pName}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Level */}
