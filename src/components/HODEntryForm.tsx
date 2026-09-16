@@ -731,13 +731,23 @@ export const HODEntryForm: React.FC<Props> = ({
     showFeedback('info', `Quick Tool: Applied delay remark "${trimmed}" to ${scopeLabel}.`);
   };
 
-  const handleImportCourses = (imported: Partial<SubjectRow>[], mode: 'replace' | 'append') => {
+  const handleImportCourses = (
+    imported: Partial<SubjectRow>[],
+    mode: 'replace' | 'append',
+    targetSec?: string
+  ) => {
+    const effectiveSection = (targetSec || section).trim().toUpperCase();
+    if (effectiveSection && effectiveSection !== section) {
+      setSection(effectiveSection);
+      if (onSectionChangedProp) onSectionChangedProp(effectiveSection);
+    }
+
     const newRows: SubjectRow[] = imported.map((c, i) => ({
       id: 'subj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + i,
       courseCode: c.courseCode || '',
       subjectTitle: c.subjectTitle || '',
       creditHours: c.creditHours || '3',
-      sectionShift: c.sectionShift || shift,
+      sectionShift: c.sectionShift || `${shift} - Sem ${semester} (Sec ${effectiveSection})`,
       status: c.status || 'Uploaded',
       dateUploaded: c.dateUploaded || (c.status === 'Uploaded' ? new Date().toISOString().split('T')[0] : ''),
       uploadedBy: c.uploadedBy || (currentUser?.name || ''),
@@ -748,13 +758,112 @@ export const HODEntryForm: React.FC<Props> = ({
       const total = Math.max(newRows.length, 6);
       const filledRows: SubjectRow[] = [...newRows];
       while (filledRows.length < total) {
-        filledRows.push(createEmptySubjectRow(filledRows.length + 1, shift, semester, section));
+        filledRows.push(createEmptySubjectRow(filledRows.length + 1, shift, semester, effectiveSection));
       }
       setSubjects(filledRows);
-      showFeedback('success', `Imported ${newRows.length} course(s) and replaced existing table.`);
+      showFeedback(
+        'success',
+        `Imported ${newRows.length} course(s) for Section ${effectiveSection} (Replaced table). Remember to click 'Submit Result Status' or Save.`
+      );
     } else {
       setSubjects((prev) => [...prev, ...newRows]);
-      showFeedback('success', `Appended ${newRows.length} course(s) to table.`);
+      showFeedback(
+        'success',
+        `Appended ${newRows.length} course(s) to Section ${effectiveSection} sheet.`
+      );
+    }
+  };
+
+  // Direct multi-section database synchronization (e.g. from LMS portal export with Section A & Section B)
+  const handleImportDirectToSections = (
+    sectionData: Record<string, Partial<SubjectRow>[]>,
+    mode: 'replace' | 'append'
+  ) => {
+    let savedTotal = 0;
+    const secKeys = Object.keys(sectionData);
+
+    secKeys.forEach((secKey) => {
+      const courses = sectionData[secKey];
+      if (!courses || courses.length === 0) return;
+
+      const existingRec = StorageService.getSubmission(
+        department,
+        program,
+        degreeLevel,
+        shift,
+        session,
+        semester,
+        secKey
+      );
+
+      const newRows: SubjectRow[] = courses.map((c, i) => ({
+        id: 'subj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + i,
+        courseCode: c.courseCode || '',
+        subjectTitle: c.subjectTitle || '',
+        creditHours: c.creditHours || '3',
+        sectionShift: `${shift} - Sem ${semester} (Sec ${secKey})`,
+        status: c.status || 'Uploaded',
+        dateUploaded: c.dateUploaded || (c.status === 'Uploaded' ? new Date().toISOString().split('T')[0] : ''),
+        uploadedBy: c.uploadedBy || (currentUser?.name || 'Department Faculty'),
+        remarks: c.remarks || 'LMS Portal Bulk Synchronization',
+      }));
+
+      let finalRows: SubjectRow[] = [];
+      if (mode === 'replace' || !existingRec) {
+        finalRows = [...newRows];
+        while (finalRows.length < 8) {
+          finalRows.push(createEmptySubjectRow(finalRows.length + 1, shift, semester, secKey));
+        }
+      } else {
+        finalRows = [...(existingRec.subjects || []), ...newRows];
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const recToSave: SubmissionRecord = {
+        id: '',
+        department,
+        program,
+        degreeLevel,
+        shift,
+        session,
+        semester,
+        section: secKey,
+        hodCoordinator: hodCoordinator || currentUser?.name || 'HOD / Coordinator',
+        submissionDate: submissionDate || today,
+        subjects: finalRows,
+        accessedBy: currentUser?.name || 'Department Faculty',
+        userDesignation: currentUser?.designation || 'HOD / Coordinator',
+        createdAt: existingRec?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      StorageService.saveSubmission(recToSave);
+      savedTotal += newRows.length;
+    });
+
+    // Refresh current active section view if it was updated
+    const currentUpdated = StorageService.getSubmission(
+      department,
+      program,
+      degreeLevel,
+      shift,
+      session,
+      semester,
+      section
+    );
+    if (currentUpdated) {
+      setSubjects(currentUpdated.subjects);
+      setIsExistingRecord(true);
+      setLastSavedTime(currentUpdated.updatedAt);
+    }
+
+    showFeedback(
+      'success',
+      `Synchronized & Saved ${savedTotal} course(s) across Section ${secKeys.join(' & Section ')} directly to database!`
+    );
+
+    if (onRecordSavedOrDeleted) {
+      onRecordSavedOrDeleted();
     }
   };
 
@@ -1500,17 +1609,60 @@ export const HODEntryForm: React.FC<Props> = ({
         {/* Card Header matching Screenshot 1 */}
         <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-bold text-slate-900 tracking-tight">
                 Course Result Upload Status
               </h3>
               <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
-                {program} • Sem {semester} • {shift} • Section {section}
+                {program} • Sem {semester} • {shift}
+              </span>
+              <span className="text-[11px] font-bold bg-indigo-100 text-indigo-950 px-2.5 py-0.5 rounded-md border border-indigo-300 flex items-center gap-1.5 font-mono">
+                <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                Section {section}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Enter individual course details, teaching instructor, and current upload status into the LMS portal.
             </p>
+
+            {/* Quick Section Switcher Bar */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+              <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mr-1">
+                <Layers className="w-3.5 h-3.5 text-indigo-700" />
+                Section View:
+              </span>
+              {sectionStatuses.map((sec) => {
+                const isCur = sec.id === section;
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => handleSectionChange(sec.id)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                      isCur
+                        ? 'bg-indigo-900 text-white border-indigo-950 shadow-2xs ring-2 ring-indigo-400/30'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        sec.hasRecord ? 'bg-emerald-500' : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Section {sec.id}</span>
+                    {sec.courseCount > 0 && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                          isCur ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {sec.courseCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Course Search & Actions toolbar */}
@@ -1958,10 +2110,13 @@ export const HODEntryForm: React.FC<Props> = ({
                   {isReadOnly ? (
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
                           <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
                             {subject.courseCode || 'N/A'}
+                          </span>
+                          <span className="font-mono font-bold text-[10px] bg-indigo-50 text-indigo-900 px-1.5 py-0.5 rounded border border-indigo-200">
+                            Sec {section}
                           </span>
                         </div>
                         <div>
@@ -2007,7 +2162,7 @@ export const HODEntryForm: React.FC<Props> = ({
                     <>
                       {/* Card Header: Checkbox, Row #, Course Code, and Action buttons */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="checkbox"
                             checked={isRowSelected}
@@ -2015,6 +2170,9 @@ export const HODEntryForm: React.FC<Props> = ({
                             className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
                           />
                           <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                          <span className="font-mono font-bold text-[10px] bg-indigo-50 text-indigo-900 px-1.5 py-0.5 rounded border border-indigo-200">
+                            Sec {section}
+                          </span>
                         </div>
 
                         <div className="flex-1 max-w-[140px]">
@@ -2217,6 +2375,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 <th className="py-2.5 px-2 text-center w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3 w-32">Course Code</th>
                 <th className="py-2.5 px-3 min-w-[200px]">Course Title *</th>
+                <th className="py-2.5 px-2 text-center w-24">Section</th>
                 <th className="py-2.5 px-2 text-center w-24">Credit Hours</th>
                 <th className="py-2.5 px-3 min-w-[170px]">Teacher / Instructor</th>
                 <th className="py-2.5 px-3 w-48">LMS Upload Status *</th>
@@ -2240,7 +2399,7 @@ export const HODEntryForm: React.FC<Props> = ({
               {filteredSubjects.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isReadOnly ? (showAdvancedColumns ? 9 : 7) : (showAdvancedColumns ? 11 : 9)}
+                    colSpan={isReadOnly ? (showAdvancedColumns ? 10 : 8) : (showAdvancedColumns ? 12 : 10)}
                     className="py-12 text-center text-slate-400 bg-white"
                   >
                     <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -2338,6 +2497,17 @@ export const HODEntryForm: React.FC<Props> = ({
                             className="w-full bg-transparent border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium"
                           />
                         )}
+                      </td>
+
+                      {/* Section Column - Always visible as requested */}
+                      <td className="py-2 px-2 text-center">
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono shadow-2xs"
+                          title={`Assigned Class Section: Section ${section}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                          Sec {section}
+                        </span>
                       </td>
 
                       {/* Credit Hours */}
@@ -2780,12 +2950,14 @@ export const HODEntryForm: React.FC<Props> = ({
         isOpen={isBulkImportOpen}
         onClose={() => setIsBulkImportOpen(false)}
         onImportCourses={handleImportCourses}
+        onImportDirectToSections={handleImportDirectToSections}
         currentCount={subjects.length}
         currentShift={shift}
         currentSemester={semester}
         currentSection={section}
         departmentName={department}
         programName={program}
+        availableSections={sectionStatuses.map((s) => s.id)}
       />
 
       {/* Custom Section Dialog Modal */}

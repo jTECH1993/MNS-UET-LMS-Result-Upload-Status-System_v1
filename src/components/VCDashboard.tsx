@@ -50,6 +50,7 @@ export interface ShiftCohortData {
   hasSubmission: boolean;
   submittedSemestersCount: number;
   semesterRecords: Record<string, SubmissionRecord | null>;
+  semesterSectionRecords: Record<string, Record<string, SubmissionRecord>>;
   totalSubjects: number;
   totalUploaded: number;
   totalPending: number;
@@ -75,7 +76,7 @@ export interface UnifiedProgramRow {
 export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords }) => {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | AcademicShift>('ALL');
-  const [selectedSectionFilter, setSelectedSectionFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   // Default to Semester 1 as requested by user so Vice Chancellor genuinely inspects Semester 1 data without clutter
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('1');
   const [currentSession, setCurrentSession] = useState<string>(() => StorageService.getSelectedSession());
@@ -127,6 +128,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
         const buildShiftData = (shiftName: AcademicShift): ShiftCohortData => {
           const semRecords: Record<string, SubmissionRecord | null> = {};
+          const semSectionMap: Record<string, Record<string, SubmissionRecord>> = {};
           let submittedCount = 0;
           let sumSubjects = 0;
           let sumUploaded = 0;
@@ -134,45 +136,47 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           let firstSubSem: string | undefined = undefined;
 
           ACADEMIC_SEMESTERS.forEach((sem) => {
-            const baseKey = `${dept.name.trim()}__${prog.name.trim()}__${shiftName}__${currentSession}__${sem.id}`;
-            const subA = recordMap.get(`${baseKey}__sec_A`) || (recordMap.get(baseKey)?.section === 'B' ? null : recordMap.get(baseKey)) || null;
-            const subB = recordMap.get(`${baseKey}__sec_B`) || (recordMap.get(baseKey)?.section === 'B' ? recordMap.get(baseKey) : null) || null;
+            semSectionMap[sem.id] = {};
+
+            // Find all matching submissions in database for this department, program, shift, session & semester
+            const matchingRecords = allRecords.filter(
+              (r) =>
+                r.department.trim() === dept.name.trim() &&
+                r.program.trim() === prog.name.trim() &&
+                (r.shift || 'Morning') === shiftName &&
+                (r.session || '2023') === currentSession &&
+                (r.semester || '1') === sem.id
+            );
+
+            matchingRecords.forEach((r) => {
+              const sec = (r.section || 'A').trim().toUpperCase();
+              semSectionMap[sem.id][sec] = r;
+            });
 
             let primarySub: SubmissionRecord | null = null;
             let semSubCount = 0;
             let semUploaded = 0;
             let semPending = 0;
 
-            if (selectedSectionFilter === 'A') {
-              primarySub = subA;
-              if (subA) {
-                const s = StorageService.calculateSummary(subA.subjects);
-                semSubCount = s.totalSubjects;
-                semUploaded = s.uploaded;
-                semPending = s.pending;
-              }
-            } else if (selectedSectionFilter === 'B') {
-              primarySub = subB;
-              if (subB) {
-                const s = StorageService.calculateSummary(subB.subjects);
+            if (selectedSectionFilter !== 'ALL') {
+              primarySub = semSectionMap[sem.id][selectedSectionFilter] || null;
+              if (primarySub) {
+                const s = StorageService.calculateSummary(primarySub.subjects);
                 semSubCount = s.totalSubjects;
                 semUploaded = s.uploaded;
                 semPending = s.pending;
               }
             } else {
-              // 'ALL' Sections: Combine metrics of Section A and Section B without double-counting identical references
-              primarySub = subA || subB;
-              if (subA) {
-                const sA = StorageService.calculateSummary(subA.subjects);
-                semSubCount += sA.totalSubjects;
-                semUploaded += sA.uploaded;
-                semPending += sA.pending;
-              }
-              if (subB && subB !== subA) {
-                const sB = StorageService.calculateSummary(subB.subjects);
-                semSubCount += sB.totalSubjects;
-                semUploaded += sB.uploaded;
-                semPending += sB.pending;
+              // 'ALL' Sections: Combine metrics of all active sections without double-counting
+              const activeSecList = Object.values(semSectionMap[sem.id]);
+              if (activeSecList.length > 0) {
+                primarySub = activeSecList[0];
+                activeSecList.forEach((sub) => {
+                  const s = StorageService.calculateSummary(sub.subjects);
+                  semSubCount += s.totalSubjects;
+                  semUploaded += s.uploaded;
+                  semPending += s.pending;
+                });
               }
             }
 
@@ -190,6 +194,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             hasSubmission: submittedCount > 0,
             submittedSemestersCount: submittedCount,
             semesterRecords: semRecords,
+            semesterSectionRecords: semSectionMap,
             totalSubjects: sumSubjects,
             totalUploaded: sumUploaded,
             totalPending: sumPending,
@@ -230,6 +235,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
     return list;
   }, [recordMap, currentSession, rosterVersion, selectedSectionFilter]);
+
+  // Dynamic list of all sections present in system database (e.g. A, B, C, D)
+  const availableSectionsInDb = useMemo(() => {
+    const secSet = new Set<string>(['A', 'B']);
+    allRecords.forEach((r) => {
+      if (r.section) {
+        secSet.add(r.section.trim().toUpperCase());
+      }
+    });
+    return Array.from(secSet).sort();
+  }, [allRecords]);
 
   // High-level statistics based on active Session, Shift, and Semester filters
   const stats = useMemo(() => {
@@ -926,18 +942,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             </select>
           </div>
 
-          {/* Section Filter (All / Section A / Section B) */}
+          {/* Section Filter (All / Section A / Section B / Custom) */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
             <span className="text-slate-400 font-semibold">Section:</span>
             <select
               id="filter-section"
               value={selectedSectionFilter}
-              onChange={(e) => setSelectedSectionFilter(e.target.value as any)}
+              onChange={(e) => setSelectedSectionFilter(e.target.value)}
               className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="ALL">All Sections (A &amp; B)</option>
-              <option value="A">Section A Only</option>
-              <option value="B">Section B Only</option>
+              <option value="ALL">All Sections (Combined)</option>
+              {availableSectionsInDb.map((sec) => (
+                <option key={sec} value={sec}>
+                  Section {sec} Only
+                </option>
+              ))}
             </select>
           </div>
 
@@ -1142,6 +1161,48 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                     </div>
                   </div>
 
+                  {/* Section Badges on Mobile Card */}
+                  {(() => {
+                    const secMap = selectedSemesterFilter !== 'ALL'
+                      ? shiftData.semesterSectionRecords?.[selectedSemesterFilter] || {}
+                      : {};
+                    const secKeys = Object.keys(secMap).sort();
+                    if (secKeys.length > 0) {
+                      return (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] text-slate-500 font-semibold">Active Sections:</span>
+                          {secKeys.map((secKey) => {
+                            const sub = secMap[secKey];
+                            const sum = StorageService.calculateSummary(sub.subjects);
+                            return (
+                              <button
+                                key={secKey}
+                                type="button"
+                                onClick={() =>
+                                  onSelectProgramToEdit(
+                                    progItem.department,
+                                    progItem.program,
+                                    effectiveShift,
+                                    currentSession,
+                                    selectedSemesterFilter,
+                                    secKey
+                                  )
+                                }
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 flex items-center gap-1 cursor-pointer hover:bg-indigo-100"
+                              >
+                                <span>Sec {secKey}</span>
+                                <span className="text-[9px] bg-white px-1 rounded border border-indigo-100 font-mono">
+                                  {sum.uploaded}/{sum.totalSubjects}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   {/* Progress & Upload Summary */}
                   <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                     <div className="flex items-baseline justify-between text-xs mb-1.5">
@@ -1220,6 +1281,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 <th className="py-2.5 px-3 border-r border-slate-300 text-center min-w-[170px]">
                   Academic Shift
                 </th>
+                <th className="py-2.5 px-2.5 border-r border-slate-300 text-center min-w-[140px]">
+                  Section / Cohort
+                </th>
                 {selectedSemesterFilter !== 'ALL' ? (
                   <th className="py-2.5 px-3 border-r border-slate-300 text-center min-w-[180px]">
                     Semester {selectedSemesterFilter} LMS Status
@@ -1239,7 +1303,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <tbody className="divide-y divide-slate-200 bg-white">
               {filteredPrograms.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400 text-sm">
+                  <td colSpan={9} className="py-10 text-center text-slate-400 text-sm">
                     {onlyGenuineSubmissions
                       ? 'No departments have submitted LMS result data for this selection yet.'
                       : 'No programs found matching the selected filters.'}
@@ -1400,6 +1464,97 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                             )}
                           </div>
                         </div>
+                      </td>
+
+                      {/* Section Column: Direct section visibility and quick inspection buttons */}
+                      <td className="py-2 px-2.5 border-r border-slate-200">
+                        {isSpecificSem ? (
+                          (() => {
+                            const secMap = shiftData.semesterSectionRecords?.[selectedSemesterFilter] || {};
+                            const secKeys = Object.keys(secMap).sort();
+
+                            if (secKeys.length === 0) {
+                              return (
+                                <div className="flex flex-col items-center justify-center gap-0.5 text-center">
+                                  <span className="text-[11px] font-semibold text-slate-500">
+                                    Sec A
+                                  </span>
+                                  <span className="text-[9px] text-slate-400">
+                                    Awaiting entry
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                {secKeys.map((secKey) => {
+                                  const sub = secMap[secKey];
+                                  const sum = StorageService.calculateSummary(sub.subjects);
+                                  const isFull = sum.totalSubjects > 0 && sum.uploaded === sum.totalSubjects;
+                                  return (
+                                    <button
+                                      key={secKey}
+                                      type="button"
+                                      onClick={() =>
+                                        onSelectProgramToEdit(
+                                          progItem.department,
+                                          progItem.program,
+                                          effectiveShift,
+                                          currentSession,
+                                          selectedSemesterFilter,
+                                          secKey
+                                        )
+                                      }
+                                      className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                                        isFull
+                                          ? 'bg-emerald-50 text-emerald-950 border-emerald-300 hover:bg-emerald-100'
+                                          : 'bg-indigo-50 text-indigo-950 border-indigo-200 hover:bg-indigo-100'
+                                      }`}
+                                      title={`Section ${secKey}: ${sum.uploaded}/${sum.totalSubjects} Uploaded (${sum.uploadPercentage}%) - Click to inspect directly`}
+                                    >
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${
+                                          isFull ? 'bg-emerald-600' : 'bg-indigo-600'
+                                        }`}
+                                      />
+                                      <span>Sec {secKey}</span>
+                                      <span className="text-[9px] px-1 py-0.2 bg-white/90 rounded border border-slate-200 font-mono">
+                                        {sum.uploaded}/{sum.totalSubjects}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          (() => {
+                            // Find all unique sections across all 8 semesters for this shift
+                            const allSecs = new Set<string>();
+                            Object.values(shiftData.semesterSectionRecords || {}).forEach((map) => {
+                              Object.keys(map).forEach((k) => allSecs.add(k));
+                            });
+                            const secList = Array.from(allSecs).sort();
+
+                            return (
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                {secList.length > 0 ? (
+                                  secList.map((sec) => (
+                                    <span
+                                      key={sec}
+                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono"
+                                    >
+                                      Sec {sec}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">Sec A &amp; B</span>
+                                )}
+                              </div>
+                            );
+                          })()
+                        )}
                       </td>
 
                       {/* Semester Column: Shows ONLY Selected Semester OR Matrix (Requirement: genuine view) */}
