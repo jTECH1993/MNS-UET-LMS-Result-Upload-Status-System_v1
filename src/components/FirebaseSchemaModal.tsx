@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   HelpCircle,
   FileCode,
-  Activity,
+  Activity, AlertTriangle,
   RefreshCw,
   AlertCircle,
 } from 'lucide-react';
