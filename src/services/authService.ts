@@ -77,7 +77,7 @@ const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v99';
 const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v99';
 
 // Seed default official university accounts (Master accounts: Admin, VC, & Coordinator)
-const DEFAULT_ACCOUNTS: UserAccount[] = [
+export const DEFAULT_ACCOUNTS: UserAccount[] = [
   {
     id: 'user_admin',
     username: 'admin',
@@ -114,18 +114,7 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
   },
 ];
 
-const SecurityHelper = {
-  isHashed: (str: string) => str.startsWith('$2a$') || str.startsWith('$2b$') || str.startsWith('$2y$'),
-  verifyPassword: (input: string, stored: string) => {
-    if (SecurityHelper.isHashed(stored)) {
-      return bcrypt.compareSync(input, stored);
-    }
-    return input === stored;
-  },
-  hashPassword: (input: string) => {
-    return bcrypt.hashSync(input, 10);
-  }
-};
+
 
 export class AuthService {
   public static getAccounts(): UserAccount[] {

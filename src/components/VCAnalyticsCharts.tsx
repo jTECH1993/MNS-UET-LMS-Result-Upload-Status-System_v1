@@ -109,9 +109,7 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
         }
 
         // Calculate percentage by averaging the completion rate of ALL active programs in this department
-      const percentage = deptProgs.length > 0 
-        ? Math.round(deptProgs.reduce((acc, curr) => acc + curr.Percentage, 0) / deptProgs.length)
-        : 0;
+      const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
         
         list.push({
           deptCode: dept.code,

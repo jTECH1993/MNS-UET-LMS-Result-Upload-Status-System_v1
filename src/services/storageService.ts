@@ -407,7 +407,7 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
   
   public static async wipeAllSubmissions(): Promise<boolean> {
     try {
-      const records = this.getSubmissions();
+      const records = this.getAllSubmissions();
       for (const record of records) {
         if (record.id) {
           await FirebaseStore.deleteSubmission(record.id).catch(console.error);
