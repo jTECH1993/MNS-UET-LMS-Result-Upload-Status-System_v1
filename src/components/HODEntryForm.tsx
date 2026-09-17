@@ -13,6 +13,7 @@ import {
 import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift } from '../types';
 import { StorageService } from '../services/storageService';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
+import { DeadlineBanner } from './DeadlineBanner';
 import { DeleteModal } from './DeleteModal';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
@@ -1193,6 +1194,10 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
       </div>
 
+      <div className="mb-4">
+        <DeadlineBanner currentSession={session} semesterFilter={semester} isVC={false} />
+      </div>
+
       {/* CARD 2: SELECT PROGRAM DETAILS (Screenshot 1) */}
       <div
         id="select-program-details-card"
@@ -1213,9 +1218,9 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
 
         {/* 6 Form Fields Grid: Dept, Program, Level, Semester, Shift, and Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
           {/* Department */}
-          <div className="lg:col-span-2">
+          <div className="">
             <label
               htmlFor="select-department"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1249,7 +1254,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Program */}
-          <div className="lg:col-span-3">
+          <div className="">
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="select-program"
@@ -1319,7 +1324,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Level */}
-          <div className="lg:col-span-2">
+          <div className="">
             <label
               htmlFor="select-degree-level"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1341,7 +1346,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Semester Dropdown */}
-          <div className="lg:col-span-2">
+          <div className="">
             <label
               htmlFor="select-semester"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1363,7 +1368,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Shift (Morning / Evening toggle) */}
-          <div className="lg:col-span-2">
+          <div className="">
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Shift <span className="text-rose-600">*</span>
             </label>
@@ -1398,7 +1403,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Section (Section A, Section B, etc. - Strictly Isolated Partition) */}
-          <div className="lg:col-span-1">
+          <div className="">
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="select-section"

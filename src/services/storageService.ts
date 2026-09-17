@@ -25,9 +25,35 @@ const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v99';
 const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v99';
 const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v99';
 const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v99';
-
+const SYSTEM_DEADLINE_KEY = 'mnsuet_system_deadline_v99';
 
 export class StorageService {
+  public static getSystemDeadline(): string | null {
+    try {
+      const stored = localStorage.getItem(SYSTEM_DEADLINE_KEY);
+      if (stored) return stored;
+    } catch (e) {
+      console.warn('Could not read system deadline', e);
+    }
+    return null;
+  }
+
+  public static setSystemDeadline(isoString: string | null): void {
+    try {
+      if (isoString) {
+        localStorage.setItem(SYSTEM_DEADLINE_KEY, isoString);
+      } else {
+        localStorage.removeItem(SYSTEM_DEADLINE_KEY);
+      }
+      this.logAccess(`Updated LMS Portal Lock Deadline to: ${isoString || 'Default'}`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: isoString }));
+      }
+    } catch (e) {
+      console.error('Could not save system deadline', e);
+    }
+  }
+
   // Generic Academic Sessions Management (e.g. 2023, 2024, 2025, or custom added)
   public static getAvailableSessions(): string[] {
     try {
