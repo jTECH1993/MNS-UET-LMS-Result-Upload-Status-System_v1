@@ -96,7 +96,7 @@ export class StorageService {
         keysToSync.push(key); // Track it
         FirebaseStore.listenGlobalState(key, (data) => {
           if (data === undefined) return;
-          const current = localStorage.getItem(key);
+        const current = localStorage.getItem(key);
           const newStr = typeof data === 'string' ? data : JSON.stringify(data);
           if (current !== newStr) {
             isReceiving = true;
@@ -118,7 +118,16 @@ export class StorageService {
     // Listen to all initial keys
     keysToSync.forEach(key => {
       FirebaseStore.listenGlobalState(key, (data) => {
-        if (data === undefined) return;
+        if (data === undefined) {
+          if (key === 'mnsuet_user_accounts_v99') {
+             import('./authService').then(({ DEFAULT_ACCOUNTS }) => {
+               if (!localStorage.getItem('mnsuet_user_accounts_v99')) {
+                 localStorage.setItem('mnsuet_user_accounts_v99', JSON.stringify(DEFAULT_ACCOUNTS));
+               }
+             });
+          }
+          return;
+        }
         const current = localStorage.getItem(key);
         const newStr = typeof data === 'string' ? data : JSON.stringify(data);
         if (current !== newStr) {
@@ -141,14 +150,7 @@ export class StorageService {
       });
     });
     
-    // Push the initial default accounts up to Firebase if not present
-    setTimeout(() => {
-       const accounts = localStorage.getItem('mnsuet_user_accounts_v99');
-       if (accounts) {
-         // This will trigger the interceptor and push up
-         localStorage.setItem('mnsuet_user_accounts_v99', accounts);
-       }
-    }, 2000);
+    // Initial push handled via onSnapshot undefined state.
   }
 
 

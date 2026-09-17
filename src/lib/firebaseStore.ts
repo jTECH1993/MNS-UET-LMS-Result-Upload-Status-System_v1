@@ -14,6 +14,8 @@ export class FirebaseStore {
     return onSnapshot(doc(db, 'config', key), (docSnap) => {
       if (docSnap.exists()) {
         callback(docSnap.data().data);
+      } else {
+        callback(undefined);
       }
     });
   }

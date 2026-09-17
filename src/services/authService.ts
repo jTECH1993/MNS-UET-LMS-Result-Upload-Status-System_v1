@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { UserAccount, ActiveUserSession, UserRole, AppTheme } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SecurityService } from './securityService';
@@ -81,7 +82,7 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
     id: 'user_admin',
     username: 'admin',
     email: 'admin@mnsuet.edu.pk',
-    password: 'Qwe12!@!@',
+    password: SecurityHelper.hashPassword('Qwe12!@!@'),
     name: 'System Administrator',
     designation: 'Director IT / Administrator',
     department: 'Office of the Registrar / IT Directorate',
@@ -92,7 +93,7 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
     id: 'user_vc',
     username: 'VC',
     email: 'vc@mnsuet.edu.pk',
-    password: 'JHG45$%xz',
+    password: SecurityHelper.hashPassword('JHG45$%xz'),
     name: 'Prof. Dr. Vice Chancellor',
     designation: 'Vice Chancellor',
     department: 'Office of the Vice Chancellor',
@@ -103,7 +104,7 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
     id: 'user_talha_coord',
     username: 'mtalhajahangir',
     email: 'mtalhajahangir@mnsuet.edu.pk',
-    password: 'Qwe12!@!@',
+    password: SecurityHelper.hashPassword('Qwe12!@!@'),
     name: 'Engr. Muhammad Talha Jahangir',
     designation: 'Program Coordinator (BS AI) / Lecturer',
     department: 'Department of Computer Science',
@@ -113,104 +114,28 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
   },
 ];
 
+const SecurityHelper = {
+  isHashed: (str: string) => str.startsWith('$2a$') || str.startsWith('$2b$') || str.startsWith('$2y$'),
+  verifyPassword: (input: string, stored: string) => {
+    if (SecurityHelper.isHashed(stored)) {
+      return bcrypt.compareSync(input, stored);
+    }
+    return input === stored;
+  },
+  hashPassword: (input: string) => {
+    return bcrypt.hashSync(input, 10);
+  }
+};
+
 export class AuthService {
-  // Retrieve all accounts from localStorage or seed defaults
-  
   public static getAccounts(): UserAccount[] {
+
     try {
       const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
       if (!raw) {
-        // Do NOT overwrite Firebase synchronously on first load.
-        // Just return defaults for now. Firebase will push the real data shortly if it exists.
         return DEFAULT_ACCOUNTS;
       }
-      let parsed: UserAccount[] = JSON.parse(raw);
-
-
-      // Automatically purge legacy dummy test accounts (hod_cs, hod_ee) so system is completely fresh
-      let modified = false;
-      const initialCount = parsed.length;
-      parsed = parsed.filter(
-        (a) => a.username.toLowerCase() !== 'hod_cs' && a.username.toLowerCase() !== 'hod_ee'
-      );
-      if (parsed.length !== initialCount) {
-        modified = true;
-      }
-
-      // Ensure required Admin and VC master accounts always exist
-      const adminAcc = parsed.find(
-        (a) => a.username.toLowerCase() === 'admin'
-      );
-      if (!adminAcc) {
-        parsed.push({ ...DEFAULT_ACCOUNTS[0] });
-        modified = true;
-      } else {
-        if (adminAcc.password !== 'Qwe12!@!@') {
-          adminAcc.password = 'Qwe12!@!@';
-          modified = true;
-        }
-        if (!adminAcc.email) {
-          adminAcc.email = 'admin@mnsuet.edu.pk';
-          modified = true;
-        }
-        adminAcc.role = 'ADMIN';
-      }
-
-      const vcAcc = parsed.find(
-        (a) => a.username.toLowerCase() === 'vc'
-      );
-      if (!vcAcc) {
-        parsed.push({ ...DEFAULT_ACCOUNTS[1] });
-        modified = true;
-      } else {
-        if (vcAcc.password !== 'JHG45$%xz') {
-          vcAcc.password = 'JHG45$%xz';
-          modified = true;
-        }
-        if (!vcAcc.email) {
-          vcAcc.email = 'vc@mnsuet.edu.pk';
-          modified = true;
-        }
-        vcAcc.role = 'VC';
-      }
-
-      // Ensure required Coordinator account exists for Engr. Muhammad Talha Jahangir
-      const talhaCoordAcc = parsed.find(
-        (a) =>
-          a.username.toLowerCase() === 'mtalhajahangir' ||
-          a.email?.toLowerCase() === 'mtalhajahangir@mnsuet.edu.pk'
-      );
-      if (!talhaCoordAcc) {
-        parsed.push({ ...DEFAULT_ACCOUNTS[2] });
-        modified = true;
-      } else {
-        if (talhaCoordAcc.password !== 'Qwe12!@!@') {
-          talhaCoordAcc.password = 'Qwe12!@!@';
-          modified = true;
-        }
-        if (talhaCoordAcc.email !== 'mtalhajahangir@mnsuet.edu.pk') {
-          talhaCoordAcc.email = 'mtalhajahangir@mnsuet.edu.pk';
-          modified = true;
-        }
-        talhaCoordAcc.role = 'COORDINATOR';
-        if (!talhaCoordAcc.program) {
-          talhaCoordAcc.program = 'BS Artificial Intelligence';
-          modified = true;
-        }
-      }
-
-      // Ensure all accounts have a clean email and valid structure
-      for (const acc of parsed) {
-        if (!acc.email) {
-          acc.email = `${acc.username.toLowerCase().replace(/[^a-z0-9]/g, '')}@mnsuet.edu.pk`;
-          modified = true;
-        }
-      }
-
-      if (modified) {
-        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(parsed));
-      }
-      return parsed;
+      return JSON.parse(raw);
     } catch (e) {
       console.warn('Error reading accounts, using defaults', e);
       return DEFAULT_ACCOUNTS;
@@ -313,7 +238,7 @@ export class AuthService {
     }
 
     // Verify password
-    if (account.password !== cleanPass) {
+    if (!SecurityHelper.verifyPassword(cleanPass, account.password)) {
       const failResult = SecurityService.recordFailedLogin(account.username);
       if (failResult.isLocked) {
         return {
@@ -339,6 +264,10 @@ export class AuthService {
       details: `Successful sign-in as ${account.role} (${account.name}).`,
     });
 
+    // Auto-upgrade plaintext passwords
+    if (!SecurityHelper.isHashed(account.password)) {
+      account.password = SecurityHelper.hashPassword(cleanPass);
+    }
     // Update last login timestamp
     account.lastLoginAt = new Date().toISOString();
     this.saveAccounts(accounts);
@@ -438,7 +367,7 @@ export class AuthService {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: cleanUser,
       email: cleanEmail,
-      password: cleanPass,
+      password: SecurityHelper.hashPassword(cleanPass),
       name: cleanName,
       department: cleanDept,
       designation: cleanDesig,
@@ -591,7 +520,7 @@ export class AuthService {
       return { success: false, message: 'Target account could not be found.' };
     }
 
-    account.password = newPassword.trim();
+    account.password = SecurityHelper.hashPassword(newPassword.trim());
     this.saveAccounts(accounts);
     SecurityService.clearResetRequest();
     SecurityService.resetFailedLogin(account.username);
@@ -665,7 +594,7 @@ export class AuthService {
           message: 'Please enter your current password to set a new password.',
         };
       }
-      if (data.oldPassword.trim() !== account.password) {
+      if (!SecurityHelper.verifyPassword(data.oldPassword.trim(), account.password)) {
         return {
           success: false,
           message: 'Current password does not match. Please verify and try again.',
@@ -677,7 +606,7 @@ export class AuthService {
           message: 'New password must be at least 4 characters long.',
         };
       }
-      account.password = data.newPassword.trim();
+      account.password = SecurityHelper.hashPassword(data.newPassword.trim());
     }
 
     // Update name
