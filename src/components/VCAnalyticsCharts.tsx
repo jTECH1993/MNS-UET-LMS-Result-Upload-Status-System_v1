@@ -122,6 +122,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         return true;
       });
 
+      let submittedCohorts = 0;
       matching.forEach((r) => {
         if (r.subjects && r.subjects.length > 0) {
           const summary = StorageService.calculateSummary(r.subjects);
@@ -130,6 +131,26 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
           inProgress += summary.inProgress;
           total += summary.totalSubjects;
         }
+      });
+
+      // Inject estimated genuine completion data for pending programs
+      const activeProgNames = Array.from(
+        new Set(effectiveSessions.flatMap((s) => StorageService.getSessionPrograms(dept.name, s)))
+      );
+      
+      dept.programs.forEach((prog) => {
+         const isSessionActive = activeProgNames.includes(prog.name);
+         if (isSessionActive) {
+            // Check if there's any matching record for Morning shift
+            const hasMorning = matching.some(r => r.program === prog.name && (r.shift || 'Morning') === 'Morning');
+            if (!hasMorning) {
+                // If it's a specific semester or 'ALL' (assume Sem 1 baseline)
+                if (selectedSemesterFilter !== 'ALL' || selectedSemesterFilter === 'ALL') {
+                    total += 6;
+                    pending += 6;
+                }
+            }
+         }
       });
 
       const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;

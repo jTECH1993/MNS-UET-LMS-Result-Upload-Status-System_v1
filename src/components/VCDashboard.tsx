@@ -206,6 +206,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               sumSubjects += semSubCount;
               sumUploaded += semUploaded;
               sumPending += semPending;
+            } else {
+              // Inject estimated genuine completion data for pending programs
+              // Only expect data if we are explicitly filtering for this semester, or if it's Semester 1 as a default baseline for 'ALL'
+              const shouldExpect = selectedSemesterFilter === sem.id || (selectedSemesterFilter === 'ALL' && sem.id === '1');
+              if (shouldExpect && shiftName === 'Morning') {
+                 sumSubjects += 6; // Assume 6 courses minimum for genuine compliance calculation
+                 sumPending += 6;
+              }
             }
           });
 
@@ -862,10 +870,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 </div>
 
                 <div className="mt-2.5 pt-2 border-t border-slate-200/80">
-                  <div className="flex items-baseline justify-between text-[11px] mb-1">
-                    <span className="text-slate-500">
-                      {dept.totalUploaded}/{dept.totalSubjects} Uploaded
+                  <div className="flex flex-col gap-0.5 mb-1.5">
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      Programs: <strong className="text-slate-800">{dept.submittedCohorts} / {dept.programsCount}</strong> Uploaded
                     </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      Courses: {dept.totalUploaded} / {dept.totalSubjects} (Est.)
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between text-[11px] mb-1">
+                    <span className="text-slate-700 font-bold">Genuine Compliance</span>
                     <span
                       className={`font-black ${
                         isFull

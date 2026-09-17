@@ -1025,36 +1025,38 @@ export const HODEntryForm: React.FC<Props> = ({
 
   return (
     <div id="hod-entry-interface" className="space-y-6">
-      {/* Toast Feedback */}
+      {/* Centered Overlay Feedback Popup */}
       {feedbackMessage && (
-        <div
-          id="status-feedback-banner"
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3.5 rounded-xl border text-sm flex items-center justify-between shadow-2xl transition-all animate-in fade-in slide-in-from-bottom-5 w-[90%] max-w-md ${
-            feedbackMessage.type === 'success'
-              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 dark:bg-emerald-950 dark:border-emerald-600 dark:text-emerald-100'
-              : feedbackMessage.type === 'warning'
-              ? 'bg-amber-50 border-amber-400 text-amber-950 dark:bg-amber-950 dark:border-amber-600 dark:text-amber-100'
-              : 'bg-blue-50 border-blue-400 text-blue-950 dark:bg-blue-950 dark:border-blue-600 dark:text-blue-100'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {feedbackMessage.type === 'success' && (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            )}
-            {feedbackMessage.type === 'warning' && (
-              <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
-            {feedbackMessage.type === 'info' && (
-              <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
-            )}
-            <span className="font-bold text-[15px]">{feedbackMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setFeedbackMessage(null)}
-            className="text-xs font-bold underline ml-4 hover:opacity-75"
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div
+            id="status-feedback-banner"
+            className={`px-6 py-6 rounded-2xl border flex flex-col items-center text-center shadow-2xl transition-all animate-in zoom-in-95 w-[90%] max-w-sm ${
+              feedbackMessage.type === 'success'
+                ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-emerald-500/20'
+                : feedbackMessage.type === 'warning'
+                ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-amber-500/20'
+                : 'bg-blue-50 border-blue-400 text-blue-950 shadow-blue-500/20'
+            }`}
           >
-            Dismiss
-          </button>
+            {feedbackMessage.type === 'success' && <CheckCircle2 className="w-12 h-12 text-emerald-600 mb-3" />}
+            {feedbackMessage.type === 'warning' && <Info className="w-12 h-12 text-amber-600 mb-3" />}
+            {feedbackMessage.type === 'info' && <Clock className="w-12 h-12 text-blue-600 mb-3" />}
+            
+            <span className="font-bold text-lg leading-snug mb-5">{feedbackMessage.text}</span>
+            
+            <button
+              onClick={() => setFeedbackMessage(null)}
+              className={`px-6 py-2 rounded-lg font-bold text-sm transition-colors w-full ${
+                feedbackMessage.type === 'success'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : feedbackMessage.type === 'warning'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              Confirm
+            </button>
+          </div>
         </div>
       )}
 
