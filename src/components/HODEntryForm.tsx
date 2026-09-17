@@ -437,10 +437,18 @@ export const HODEntryForm: React.FC<Props> = ({
         `Database record loaded for ${program} [${shift} Shift – Semester ${semester} – Section ${section}]: ${validRows.length} subject(s) saved.`
       );
     } else {
+      
       // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
+      
+      // Reset HOD / Coordinator name to the currently logged-in user
+      if (currentUser?.name) {
+        setHodCoordinator(`${currentUser.name} (${currentUser.designation})`);
+      }
+
       setSubjects(createInitialBlankRows(8, shift, semester, section));
+
       setSelectedRowIds(new Set());
       showFeedback(
         'info',
