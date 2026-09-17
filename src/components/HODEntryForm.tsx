@@ -1025,12 +1025,12 @@ export const HODEntryForm: React.FC<Props> = ({
 
   return (
     <div id="hod-entry-interface" className="space-y-6">
-      {/* Centered Overlay Feedback Popup */}
+      {/* Toast Notification */}
       {feedbackMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed bottom-6 right-6 z-[100] flex animate-in slide-in-from-bottom-5 fade-in duration-300">
           <div
             id="status-feedback-banner"
-            className={`px-6 py-6 rounded-2xl border flex flex-col items-center text-center shadow-2xl transition-all animate-in zoom-in-95 w-[90%] max-w-sm ${
+            className={`px-4 py-3 rounded-xl border flex items-center gap-3 shadow-xl max-w-sm ${
               feedbackMessage.type === 'success'
                 ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-emerald-500/20'
                 : feedbackMessage.type === 'warning'
@@ -1038,23 +1038,17 @@ export const HODEntryForm: React.FC<Props> = ({
                 : 'bg-blue-50 border-blue-400 text-blue-950 shadow-blue-500/20'
             }`}
           >
-            {feedbackMessage.type === 'success' && <CheckCircle2 className="w-12 h-12 text-emerald-600 mb-3" />}
-            {feedbackMessage.type === 'warning' && <Info className="w-12 h-12 text-amber-600 mb-3" />}
-            {feedbackMessage.type === 'info' && <Clock className="w-12 h-12 text-blue-600 mb-3" />}
+            {feedbackMessage.type === 'success' && <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />}
+            {feedbackMessage.type === 'warning' && <Info className="w-6 h-6 text-amber-600 shrink-0" />}
+            {feedbackMessage.type === 'info' && <Clock className="w-6 h-6 text-blue-600 shrink-0" />}
             
-            <span className="font-bold text-lg leading-snug mb-5">{feedbackMessage.text}</span>
+            <span className="font-bold text-sm leading-snug flex-1">{feedbackMessage.text}</span>
             
             <button
               onClick={() => setFeedbackMessage(null)}
-              className={`px-6 py-2 rounded-lg font-bold text-sm transition-colors w-full ${
-                feedbackMessage.type === 'success'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : feedbackMessage.type === 'warning'
-                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
+              className="p-1 rounded-md hover:bg-black/5 transition-colors shrink-0"
             >
-              Confirm
+              <X className="w-4 h-4 opacity-50 hover:opacity-100" />
             </button>
           </div>
         </div>

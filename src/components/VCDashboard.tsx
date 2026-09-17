@@ -6,6 +6,7 @@ import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { ExecutiveReportModal } from './ExecutiveReportModal';
 import { VCAnalyticsCharts } from './VCAnalyticsCharts';
+import { VCAuditFeed } from './VCAuditFeed';
 import { MnsUetLogo } from './MnsUetLogo';
 import {
   Building2,
@@ -32,6 +33,8 @@ import {
   ArrowRight,
   BarChart3,
   TrendingUp,
+  Activity,
+  Timer
 } from 'lucide-react';
 
 interface Props {
@@ -93,7 +96,32 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
-  const [dashboardViewMode, setDashboardViewMode] = useState<'ANALYTICS' | 'ROSTER' | 'COMBINED'>('COMBINED');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'ANALYTICS' | 'ROSTER' | 'COMBINED' | 'ACTIVITY'>('COMBINED');
+
+  // Real-time Countdown Timer for LMS Lock Deadline (Simulating Sept 20th 2026 for the current environment)
+  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number }>({ hours: 72, minutes: 45, seconds: 0 });
+  useEffect(() => {
+    // Target date set to +3 days from "now" (which is simulated as Sept 17 2026 in metadata)
+    const targetDate = new Date('2026-09-20T00:00:00Z').getTime();
+    
+    const updateCountdown = () => {
+      const now = new Date().getTime();
+      const distance = targetDate - now;
+      if (distance < 0) {
+        setTimeLeft({ hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+      setTimeLeft({
+        hours: Math.floor((distance % (1000 * 60 * 60 * 24 * 10)) / (1000 * 60 * 60)), // total hours left
+        minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
+        seconds: Math.floor((distance % (1000 * 60)) / 1000),
+      });
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Synchronize when active sessions change anywhere across the app
   useEffect(() => {
@@ -566,6 +594,47 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
+      {/* Institutional Deadline Tracker Banner */}
+      <div className="bg-indigo-900 text-white rounded-xl shadow-md p-4 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-indigo-700 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-10 opacity-10">
+          <Timer className="w-32 h-32" />
+        </div>
+        <div className="flex items-center gap-4 z-10">
+          <div className="p-3 bg-indigo-800 rounded-lg shrink-0 border border-indigo-600">
+            <Timer className="w-6 h-6 text-indigo-300 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black tracking-wide text-indigo-50">LMS Portal Lock Deadline</h2>
+            <p className="text-[11px] text-indigo-200 font-medium">
+              Academic Session {currentSession} Semester {selectedSemesterFilter} finalization.
+              All concerned HODs must submit genuine results before system lockdown.
+            </p>
+          </div>
+        </div>
+        <div className="z-10 bg-indigo-950/60 px-5 py-3 rounded-lg border border-indigo-800/80 flex items-baseline gap-3 shrink-0">
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-black tabular-nums text-white">
+              {String(timeLeft.hours).padStart(2, '0')}
+            </span>
+            <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Hours</span>
+          </div>
+          <span className="text-2xl font-black text-indigo-600/50">:</span>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-black tabular-nums text-white">
+              {String(timeLeft.minutes).padStart(2, '0')}
+            </span>
+            <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Mins</span>
+          </div>
+          <span className="text-2xl font-black text-indigo-600/50">:</span>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-black tabular-nums text-emerald-400">
+              {String(timeLeft.seconds).padStart(2, '0')}
+            </span>
+            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Secs</span>
+          </div>
+        </div>
+      </div>
+
       {/* University Metric Highlights */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Genuine Upload Progress */}
@@ -707,20 +776,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>Executive Analytics &amp; Roster</span>
-          </button>
-          <button
-            id="btn-vc-mode-analytics"
-            type="button"
-            onClick={() => setDashboardViewMode('ANALYTICS')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              dashboardViewMode === 'ANALYTICS'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Interactive Graphs Only</span>
+            <span className="hidden sm:inline">Executive Analytics</span>
           </button>
           <button
             id="btn-vc-mode-roster"
@@ -733,7 +789,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             }`}
           >
             <GraduationCap className="w-3.5 h-3.5" />
-            <span>Department Roster Only</span>
+            <span className="hidden sm:inline">Department Roster</span>
+          </button>
+          <button
+            id="btn-vc-mode-activity"
+            type="button"
+            onClick={() => setDashboardViewMode('ACTIVITY')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'ACTIVITY'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Live Activity Feed</span>
           </button>
         </div>
       </div>
@@ -794,6 +863,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               onSelectProgramToEdit(dept, prog, shift, sess, sem, sec);
             }}
           />
+        </div>
+      )}
+
+      {/* Live Activity Feed Section (Rendered in ACTIVITY mode) */}
+      {dashboardViewMode === 'ACTIVITY' && (
+        <div className="mt-4">
+          <VCAuditFeed />
         </div>
       )}
 
