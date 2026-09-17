@@ -8,6 +8,7 @@ import {
   AuditLogEntry,
   AuditChangeDetail,
   WorkOnDemandRequisition,
+  ProgramSessionDetail,
 } from '../types';
 import {
   UNIVERSITY_DEPARTMENTS,
@@ -35,6 +36,11 @@ export class StorageService {
   public static initFirebaseSync(): void {
     if (this._isSyncing) return;
     this._isSyncing = true;
+
+    // Trigger auth accounts bi-directional database sync
+    import('./authService').then(({ AuthService }) => {
+      AuthService.initDatabaseSync();
+    }).catch(console.error);
 
     // Listen to Firebase records and update local storage
     FirebaseStore.listenToSubmissions((records) => {
@@ -208,6 +214,10 @@ export class StorageService {
 
   public static setSelectedSession(session: string): void {
     localStorage.setItem('mnsuet_current_active_session_v99', session);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: [session] }));
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
   }
 
   public static getActiveSessions(): string[] {
@@ -225,6 +235,10 @@ export class StorageService {
     if (toSave.length > 0) {
       localStorage.setItem('mnsuet_current_active_session_v99', toSave[0]);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: toSave }));
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
   }
 
   public static toggleActiveSession(session: string): string[] {
@@ -238,16 +252,50 @@ export class StorageService {
     return this.getActiveSessions().includes(session);
   }
 
-  public static getSessionPrograms(departmentName: string, sessionName: string = '2023'): string[] {
+  public static getSessionPrograms(
+    departmentName: string,
+    sessionName: string = '2023',
+    customRecords?: SubmissionRecord[]
+  ): string[] {
     const roster = this.getAllSessionRoster(sessionName);
-    if (roster[departmentName] && roster[departmentName].length > 0) return roster[departmentName];
-    // Fallback: strictly consider ONLY programs configured for session 2023 if session is 2023
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === departmentName);
+    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === departmentName.trim().toLowerCase());
     if (!dept) return [];
-    if (sessionName === '2023' || sessionName.includes('23')) {
-      return dept.programs.filter((p) => p.session2023).map((p) => p.name);
+
+    let activePrograms: string[] = [];
+
+    // 1. If coordinator/HOD configured a roster for this department and session in database:
+    const configuredKey = Object.keys(roster).find(k => k.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
+      activePrograms = [...roster[configuredKey]];
+    } else {
+      // 2. Default coordinator template:
+      // In Session 2023: only programs configured as session2023 (e.g. BS Computer Science & B.Sc. SET for CS)
+      if (sessionName === '2023' || sessionName.includes('23')) {
+        activePrograms = dept.programs.filter((p) => p.session2023).map((p) => p.name);
+      } else {
+        // For other sessions (e.g. 2024), default to all department programs unless coordinator customizes
+        activePrograms = dept.programs.map((p) => p.name);
+      }
     }
-    return dept.programs.map((p) => p.name);
+
+    // 3. Dynamic Database inclusion: If any submission record exists in the database for this program in this session,
+    // it is DEFINITELY an active program for this session!
+    try {
+      const records = customRecords || this.getAllSubmissions();
+      records.forEach((r) => {
+        if (
+          r.department &&
+          r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() &&
+          (r.session || '2023').trim() === sessionName.trim()
+        ) {
+          if (r.program && !activePrograms.includes(r.program.trim())) {
+            activePrograms.push(r.program.trim());
+          }
+        }
+      });
+    } catch (e) {}
+
+    return activePrograms;
   }
 
   public static getSession2023Programs(departmentName: string): string[] {
@@ -258,7 +306,7 @@ export class StorageService {
     try {
       const stored = localStorage.getItem('mnsuet_session_active_roster_v99__' + sessionName);
       if (stored) return JSON.parse(stored);
-    } catch(e) {}
+    } catch (e) {}
     return {};
   }
 
@@ -266,10 +314,29 @@ export class StorageService {
     return this.getAllSessionRoster('2023');
   }
 
-  public static setSessionPrograms(departmentName: string, programNames: string[], sessionName: string = '2023'): void {
+  public static setSessionPrograms(
+    departmentName: string,
+    programNames: string[],
+    sessionName: string = '2023'
+  ): void {
     const roster = this.getAllSessionRoster(sessionName);
     roster[departmentName] = programNames;
-    localStorage.setItem('mnsuet_session_active_roster_v99__' + sessionName, JSON.stringify(roster));
+    const key = 'mnsuet_session_active_roster_v99__' + sessionName;
+    localStorage.setItem(key, JSON.stringify(roster));
+    
+    // Immediately persist to Firestore Database so changes reflect across devices and users
+    try {
+      FirebaseStore.syncGlobalState(key, roster).catch(console.error);
+    } catch (e) {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_roster_updated', {
+          detail: { department: departmentName, session: sessionName, programs: programNames },
+        })
+      );
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
   }
 
   public static setSession2023Programs(departmentName: string, programNames: string[]): void {
@@ -277,7 +344,97 @@ export class StorageService {
   }
 
   public static resetSession2023Roster(): void {
-    localStorage.removeItem('mnsuet_session_active_roster_v99__2023');
+    const key = 'mnsuet_session_active_roster_v99__2023';
+    localStorage.removeItem(key);
+    try {
+      FirebaseStore.syncGlobalState(key, {}).catch(console.error);
+    } catch (e) {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_roster_updated', { detail: { session: '2023' } }));
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
+  }
+
+  /**
+   * Evaluates dynamic session applicability for a program when VC or Coordinator selects
+   * one or multiple sessions (e.g. ['2023'], ['2024'], or ['2023', '2024']).
+   */
+  public static getProgramSessionDetail(
+    departmentName: string,
+    programName: string,
+    selectedSessions: string[] = ['2023'],
+    allRecords?: SubmissionRecord[]
+  ): ProgramSessionDetail {
+    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    const prog = dept?.programs.find((p) => p.name.trim().toLowerCase() === programName.trim().toLowerCase());
+    const degreeLevel = prog?.degreeLevel || 'BS';
+
+    const availableSessions = this.getAvailableSessions();
+    const allConfiguredSessions: string[] = [];
+    availableSessions.forEach((sess) => {
+      const progs = this.getSessionPrograms(departmentName, sess, allRecords);
+      if (progs.includes(programName)) {
+        allConfiguredSessions.push(sess);
+      }
+    });
+
+    const activeSelected = selectedSessions.length > 0 ? selectedSessions : ['2023'];
+    const applicableSessions = activeSelected.filter((s) => allConfiguredSessions.includes(s));
+    const isApplicableInSelected = applicableSessions.length > 0;
+    const isApplicableInAllSelected =
+      activeSelected.length > 0 && applicableSessions.length === activeSelected.length;
+
+    let hasSubmissionsInSelected = false;
+    try {
+      const records = allRecords || this.getAllSubmissions();
+      hasSubmissionsInSelected = records.some(
+        (r) =>
+          r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() &&
+          r.program.trim().toLowerCase() === programName.trim().toLowerCase() &&
+          activeSelected.includes(r.session || '2023')
+      );
+    } catch (e) {}
+
+    let statusLabel = '';
+    let badgeClass = '';
+
+    if (activeSelected.length === 1) {
+      const singleSess = activeSelected[0];
+      if (isApplicableInSelected) {
+        statusLabel = `Session ${singleSess} Active`;
+        badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300';
+      } else {
+        statusLabel = `Not in Session ${singleSess}`;
+        badgeClass = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200';
+      }
+    } else {
+      // Multiple sessions selected (e.g. 2023 and 2024)
+      if (isApplicableInAllSelected) {
+        statusLabel = `Session ${activeSelected.join(' & ')} (Both)`;
+        badgeClass = 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border-emerald-400 font-bold';
+      } else if (applicableSessions.length > 0) {
+        statusLabel = `Session ${applicableSessions.join(', ')} only`;
+        badgeClass = applicableSessions.includes('2023')
+          ? 'bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-300 border-sky-300 font-semibold'
+          : 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300 font-semibold';
+      } else {
+        statusLabel = `Not in Selected Sessions`;
+        badgeClass = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200';
+      }
+    }
+
+    return {
+      programName,
+      degreeLevel,
+      applicableSessions,
+      allConfiguredSessions,
+      isApplicableInSelected,
+      isApplicableInAllSelected,
+      statusLabel,
+      badgeClass,
+      hasSubmissionsInSelected,
+      hasUploadedRecords: hasSubmissionsInSelected,
+    };
   }
 
   public static getStore(): Record<string, SubmissionRecord> {
@@ -449,15 +606,24 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
   
   public static async wipeAllSubmissions(): Promise<boolean> {
     try {
-      const records = this.getAllSubmissions();
-      for (const record of records) {
-        if (record.id) {
-          await FirebaseStore.deleteSubmission(record.id).catch(console.error);
-        }
+      // 1. Wipe Firestore submissions & access logs
+      await FirebaseStore.wipeAllSubmissions().catch(console.error);
+      await FirebaseStore.wipeAllAccessLogs().catch(console.error);
+
+      // 2. Wipe SQLite submissions & subjects via backend API
+      if (typeof window !== 'undefined') {
+        await fetch('/api/reset-data', { method: 'POST' }).catch(console.error);
       }
+
+      // 3. Clear local storage submission stores and logs (PRESERVING accounts and sessions)
       this.setStore({});
       localStorage.setItem('mnsuet_submission_records_v99', JSON.stringify([]));
-      this.logAccess('Purged all LMS submission records to pristine fresh state (accounts preserved)');
+      localStorage.setItem('mnsuet_lms_result_records_v99', JSON.stringify({}));
+      localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify([]));
+      localStorage.setItem('mnsuet_work_on_demand_requisitions_v99', JSON.stringify([]));
+
+      // Note: mnsuet_user_accounts_v99, mnsuet_auth_session_v99, and roster configs are 100% PRESERVED!
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }

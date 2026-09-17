@@ -156,6 +156,19 @@ export interface WorkOnDemandRequisition {
   hardwareOrApiNeeded: string;
 }
 
+export interface ProgramSessionDetail {
+  programName: string;
+  degreeLevel: string;
+  applicableSessions: string[];
+  allConfiguredSessions: string[];
+  isApplicableInSelected: boolean;
+  isApplicableInAllSelected: boolean;
+  statusLabel: string;
+  badgeClass: string;
+  hasSubmissionsInSelected: boolean;
+  hasUploadedRecords: boolean;
+}
+
 export * from './schema';
 
 

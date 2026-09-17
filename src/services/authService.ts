@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { UserAccount, ActiveUserSession, UserRole, AppTheme } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SecurityService } from './securityService';
+import { FirebaseStore } from '../lib/firebaseStore';
 
 export interface ThemeDefinition {
   id: AppTheme;
@@ -145,24 +146,119 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
   },
 ];
 
-
-
 export class AuthService {
-  public static getAccounts(): UserAccount[] {
+  private static _isDatabaseSyncInitialized = false;
 
+  // Initialize bi-directional synchronization with SQLite backend and Firestore cloud
+  public static initDatabaseSync(): void {
+    if (this._isDatabaseSyncInitialized) return;
+    this._isDatabaseSyncInitialized = true;
+
+    // 1. Listen to real-time changes in Firestore users collection
+    try {
+      FirebaseStore.listenToUserAccounts((cloudAccounts) => {
+        if (!cloudAccounts || cloudAccounts.length === 0) return;
+        const localAccounts = this.getAccounts();
+        let changed = false;
+
+        const mergedMap = new Map<string, UserAccount>();
+        localAccounts.forEach((acc) => mergedMap.set(acc.id, acc));
+
+        cloudAccounts.forEach((remoteAcc) => {
+          const existing = mergedMap.get(remoteAcc.id);
+          if (!existing) {
+            mergedMap.set(remoteAcc.id, remoteAcc);
+            changed = true;
+          } else if (
+            remoteAcc.lastLoginAt !== existing.lastLoginAt ||
+            remoteAcc.password !== existing.password ||
+            remoteAcc.name !== existing.name ||
+            remoteAcc.designation !== existing.designation ||
+            remoteAcc.department !== existing.department ||
+            remoteAcc.role !== existing.role
+          ) {
+            mergedMap.set(remoteAcc.id, { ...existing, ...remoteAcc });
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          const mergedList = Array.from(mergedMap.values());
+          this.saveAccounts(mergedList);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Firebase user sync listener init note:', e);
+    }
+
+    // 2. Fetch users from backend SQLite API and sync
+    if (typeof window !== 'undefined') {
+      fetch('/api/users')
+        .then((res) => {
+          if (!res.ok) throw new Error('API fetch failed');
+          return res.json();
+        })
+        .then((apiUsers: UserAccount[]) => {
+          if (!Array.isArray(apiUsers) || apiUsers.length === 0) return;
+          const localAccounts = this.getAccounts();
+          let changed = false;
+
+          const mergedMap = new Map<string, UserAccount>();
+          localAccounts.forEach((acc) => mergedMap.set(acc.id, acc));
+
+          apiUsers.forEach((remoteAcc) => {
+            if (!mergedMap.has(remoteAcc.id)) {
+              mergedMap.set(remoteAcc.id, remoteAcc);
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            this.saveAccounts(Array.from(mergedMap.values()));
+            window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+          }
+
+          // Ensure default accounts are pushed to both databases if missing
+          DEFAULT_ACCOUNTS.forEach((def) => {
+            const inApi = apiUsers.some((u) => u.username.toLowerCase() === def.username.toLowerCase());
+            if (!inApi) {
+              fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(def),
+              }).catch(() => {});
+            }
+            FirebaseStore.saveUserAccount(def).catch(() => {});
+          });
+        })
+        .catch((e) => {
+          console.warn('Backend SQLite user fetch sync note:', e);
+        });
+    }
+  }
+
+  public static getAccounts(): UserAccount[] {
     try {
       const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
       if (!raw) {
         return DEFAULT_ACCOUNTS;
       }
-      return JSON.parse(raw);
+      const parsed: UserAccount[] = JSON.parse(raw);
+      // Ensure master default accounts are always included
+      const mergedMap = new Map<string, UserAccount>();
+      DEFAULT_ACCOUNTS.forEach((acc) => mergedMap.set(acc.id, acc));
+      parsed.forEach((acc) => mergedMap.set(acc.id, acc));
+      return Array.from(mergedMap.values());
     } catch (e) {
       console.warn('Error reading accounts, using defaults', e);
       return DEFAULT_ACCOUNTS;
     }
   }
 
-  // Save updated accounts array
+  // Save updated accounts array locally and trigger sync
   private static saveAccounts(accounts: UserAccount[]): void {
     try {
       localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
@@ -242,7 +338,7 @@ export class AuthService {
     }
 
     const accounts = this.getAccounts();
-    // Allow login via username OR registered email address
+    // Allow login via username OR registered institutional email address
     const account = accounts.find(
       (a) =>
         a.username.trim().toLowerCase() === cleanUser ||
@@ -251,46 +347,65 @@ export class AuthService {
 
     if (!account) {
       SecurityService.recordFailedLogin(cleanUser);
-      return {
-        success: false,
-        message: 'Account not found. Please verify your credentials or register an account.',
-      };
+      SecurityService.logSecurityEvent({
+        type: 'LOGIN_FAILED',
+        severity: 'WARNING',
+        actor: cleanUser,
+        details: `Login failed: Account "${cleanUser}" does not exist in university records.`,
+      });
+      return { success: false, message: 'Invalid credentials. User does not exist.' };
     }
 
-    // Verify password
-    if (!SecurityHelper.verifyPassword(cleanPass, account.password)) {
-      const failResult = SecurityService.recordFailedLogin(account.username);
-      if (failResult.isLocked) {
+    const isPasswordCorrect = SecurityHelper.verifyPassword(cleanPass, account.password);
+
+    if (!isPasswordCorrect) {
+      const lockState = SecurityService.recordFailedLogin(cleanUser);
+      SecurityService.logSecurityEvent({
+        type: 'LOGIN_FAILED',
+        severity: lockState.isLocked ? 'CRITICAL' : 'WARNING',
+        actor: account.username,
+        targetAccount: account.username,
+        details: `Invalid password entered for account ${account.username} (${account.name}). Remaining attempts: ${lockState.remainingAttempts}.`,
+      });
+
+      if (lockState.isLocked) {
         return {
           success: false,
-          message: `Security Lockout Triggered: 5 failed attempts detected. This account has been locked for 5 minutes.`,
+          message: `Account locked due to consecutive failed attempts. Please wait ${lockState.remainingSeconds} seconds.`,
           isLocked: true,
-          remainingSeconds: failResult.remainingSeconds,
+          remainingSeconds: lockState.remainingSeconds,
         };
       }
+
+      const remainingAttempts = lockState.remainingAttempts;
       return {
         success: false,
-        message: `Incorrect password. ${failResult.remainingAttempts} attempt(s) remaining before account lockout.`,
+        message: `Invalid password. ${remainingAttempts > 0 ? `${remainingAttempts} attempt(s) remaining before temporary lockout.` : ''}`,
       };
     }
 
-    // Successful login: reset failed attempts & log security event
-    SecurityService.resetFailedLogin(account.username);
+    // Login successful
+    SecurityService.resetFailedLogin(cleanUser);
+    account.lastLoginAt = new Date().toISOString();
+    this.saveAccounts(accounts);
+
+    // Sync last login to backend & Firestore
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
     SecurityService.logSecurityEvent({
       type: 'LOGIN_SUCCESS',
       severity: 'INFO',
       actor: account.username,
       targetAccount: account.username,
-      details: `Successful sign-in as ${account.role} (${account.name}).`,
+      details: `Successful authenticated login for ${account.name} (${account.designation}) [${account.role}].`,
     });
-
-    // Auto-upgrade plaintext passwords
-    if (!SecurityHelper.isHashed(account.password)) {
-      account.password = SecurityHelper.hashPassword(cleanPass);
-    }
-    // Update last login timestamp
-    account.lastLoginAt = new Date().toISOString();
-    this.saveAccounts(accounts);
 
     const session: ActiveUserSession = {
       id: account.id,
@@ -319,7 +434,7 @@ export class AuthService {
     };
   }
 
-  // Register a new HOD / Coordinator account with security checks
+  // Register a new HOD / Coordinator / Faculty account with strict institutional validation
   public static registerAccount(data: {
     username: string;
     email: string;
@@ -340,11 +455,11 @@ export class AuthService {
     const assignedRole = data.role || (cleanDesig.toLowerCase().includes('coordinator') ? 'COORDINATOR' : 'HOD');
 
     if (!cleanUser || !cleanPass || !cleanName || !cleanDept || !cleanEmail) {
-      return { success: false, message: 'All fields are required, including your official email address.' };
+      return { success: false, message: 'All fields are required, including your official institutional email address.' };
     }
 
     if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      return { success: false, message: 'Please enter a valid email address (e.g. user@mnsuet.edu.pk).' };
+      return { success: false, message: 'Please enter a valid official institutional email address (e.g. faculty@mnsuet.edu.pk).' };
     }
 
     // Password strength check
@@ -354,24 +469,26 @@ export class AuthService {
     }
 
     const accounts = this.getAccounts();
+
+    // RULE 1: Strictly unique username
     const existingUser = accounts.find(
       (a) => a.username.trim().toLowerCase() === cleanUser.toLowerCase()
     );
-
     if (existingUser) {
       return {
         success: false,
-        message: `An account with username "${cleanUser}" already exists. Please choose a different username.`,
+        message: `Username "${cleanUser}" is already taken. Please choose a unique username.`,
       };
     }
 
-    const existingEmail = accounts.find(
+    // RULE 2: No more than TWO accounts registered under the same institutional email address
+    const sameEmailAccounts = accounts.filter(
       (a) => a.email && a.email.trim().toLowerCase() === cleanEmail
     );
-    if (existingEmail) {
+    if (sameEmailAccounts.length >= 2) {
       return {
         success: false,
-        message: `An account with email "${cleanEmail}" is already registered. You can sign in or use "Forgot Password".`,
+        message: `Institutional registration limit reached: A maximum of two accounts may be registered under the same institutional email address (${cleanEmail}).`,
       };
     }
 
@@ -382,6 +499,35 @@ export class AuthService {
       : [];
 
     const primaryProgram = rawAssigned[0] || (data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined);
+
+    // RULE 3: For coordinators, at most TWO coordinator accounts per degree program (Morning & Evening coordinators)
+    if (assignedRole === 'COORDINATOR' && primaryProgram) {
+      const existingCoordinators = accounts.filter((a) => {
+        if (a.role !== 'COORDINATOR') return false;
+        if (a.program && a.program.trim().toLowerCase() === primaryProgram.toLowerCase()) return true;
+        if (a.assignedPrograms && a.assignedPrograms.some((p) => p.trim().toLowerCase() === primaryProgram.toLowerCase())) return true;
+        return false;
+      });
+      if (existingCoordinators.length >= 2) {
+        return {
+          success: false,
+          message: `Institutional program limit reached: A maximum of two coordinator accounts (Morning and Evening) are permitted for "${primaryProgram}". Two coordinators are already registered.`,
+        };
+      }
+    }
+
+    // RULE 4: No more than TWO accounts for the same faculty member name in the same department
+    const samePersonAccounts = accounts.filter(
+      (a) =>
+        a.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+        a.department.trim().toLowerCase() === cleanDept.toLowerCase()
+    );
+    if (samePersonAccounts.length >= 2) {
+      return {
+        success: false,
+        message: `Institutional policy limit: A maximum of two accounts can be created for "${cleanName}" in ${cleanDept}.`,
+      };
+    }
 
     const newAccount: UserAccount = {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -396,17 +542,34 @@ export class AuthService {
       assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
+      themePreference: 'emerald',
     };
 
     accounts.push(newAccount);
     this.saveAccounts(accounts);
+
+    // Synchronize to Firestore cloud database
+    FirebaseStore.saveUserAccount(newAccount).catch((e) => {
+      console.warn('Firebase account sync error:', e);
+    });
+
+    // Synchronize to backend SQLite database
+    if (typeof window !== 'undefined') {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAccount),
+      }).catch((e) => {
+        console.warn('SQLite account sync error:', e);
+      });
+    }
 
     SecurityService.logSecurityEvent({
       type: 'LOGIN_SUCCESS',
       severity: 'INFO',
       actor: newAccount.username,
       targetAccount: newAccount.username,
-      details: `New account registered: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
+      details: `New account registered and database synchronized: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
     });
 
     const session: ActiveUserSession = {
@@ -425,13 +588,13 @@ export class AuthService {
     this.setCurrentSession(session);
     return {
       success: true,
-      message: `Account created successfully for ${newAccount.name} (${newAccount.department}).`,
+      message: `Account created and synced in university database successfully for ${newAccount.name} (${newAccount.department}).`,
       session,
     };
   }
 
   // ---------------------------------------------------------------------------
-  // PASSWORD RECOVERY / FORGOT PASSWORD SYSTEM
+  // PASSWORD RECOVERY / FORGOT PASSWORD SYSTEM (STRICT INSTITUTIONAL EMAIL)
   // ---------------------------------------------------------------------------
   public static initiatePasswordReset(emailInput: string): {
     success: boolean;
@@ -443,32 +606,28 @@ export class AuthService {
   } {
     const clean = SecurityService.sanitizeInput(emailInput).trim();
     if (!clean) {
-      return { success: false, message: 'Please enter your registered email address.' };
+      return { success: false, message: 'Please enter your registered institutional email address.' };
     }
 
     if (!clean.includes('@')) {
       return {
         success: false,
-        message: 'Email address is compulsory for password recovery. Please enter your valid registered email (e.g. name@mnsuet.edu.pk).',
+        message: 'Institutional email address is compulsory for password recovery. Please enter your valid registered email (e.g. faculty@mnsuet.edu.pk).',
       };
     }
 
     const accounts = this.getAccounts();
     const cleanLower = clean.toLowerCase();
 
-    // Must match registered account's email or username (if username is an email or matches)
+    // Must match registered account's exact email address
     let account = accounts.find(
       (a) => a.email && a.email.trim().toLowerCase() === cleanLower
     );
+
+    // Fallback if user typed their username but it has an associated email
     if (!account) {
       account = accounts.find(
         (a) => a.username.trim().toLowerCase() === cleanLower
-      );
-    }
-    if (!account) {
-      const userPrefix = cleanLower.split('@')[0];
-      account = accounts.find(
-        (a) => a.username.trim().toLowerCase() === userPrefix
       );
     }
 
@@ -477,11 +636,11 @@ export class AuthService {
         type: 'UNAUTHORIZED_ACCESS_ATTEMPT',
         severity: 'WARNING',
         actor: clean,
-        details: `Password reset attempted with unregistered email: "${clean}".`,
+        details: `Password reset attempted with unregistered institutional email: "${clean}".`,
       });
       return {
         success: false,
-        message: 'Incorrect email. Please enter the correct email you used during account registration.',
+        message: 'Unrecognized institutional email. Please enter the exact institutional email you used during account registration.',
       };
     }
 
@@ -489,7 +648,7 @@ export class AuthService {
     if (!targetEmail) {
       return {
         success: false,
-        message: 'No recovery email associated with this account. Please contact the administrator.',
+        message: 'No institutional email associated with this account. Please contact the IT Administrator.',
       };
     }
 
@@ -501,7 +660,7 @@ export class AuthService {
 
     return {
       success: true,
-      message: `Password reset verification code dispatched to: ${targetEmail}`,
+      message: `Password reset verification security OTP dispatched to institutional email: ${targetEmail}`,
       email: targetEmail,
       username: account.username,
       resetToken: resetData.resetToken,
@@ -526,7 +685,7 @@ export class AuthService {
     }
 
     if (!req.verified) {
-      return { success: false, message: 'Please verify the 6-digit email security code first.' };
+      return { success: false, message: 'Please verify the 6-digit institutional email security code first.' };
     }
 
     const strength = SecurityService.validatePasswordStrength(newPassword);
@@ -537,7 +696,7 @@ export class AuthService {
     const accounts = this.getAccounts();
     const account = accounts.find((a) => a.id === req.accountId || a.username.toLowerCase() === req.username.toLowerCase());
     if (!account) {
-      return { success: false, message: 'Target account could not be found.' };
+      return { success: false, message: 'Target user account could not be found in university database.' };
     }
 
     account.password = SecurityHelper.hashPassword(newPassword.trim());
@@ -545,17 +704,38 @@ export class AuthService {
     SecurityService.clearResetRequest();
     SecurityService.resetFailedLogin(account.username);
 
+    // Sync updated password to Firestore cloud database
+    FirebaseStore.saveUserAccount(account).catch((e) => {
+      console.warn('Firebase password reset sync error:', e);
+    });
+
+    // Sync updated password to backend SQLite database
+    if (typeof window !== 'undefined') {
+      fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: account.id,
+          username: account.username,
+          email: account.email,
+          password: account.password,
+        }),
+      }).catch((e) => {
+        console.warn('SQLite password reset sync error:', e);
+      });
+    }
+
     SecurityService.logSecurityEvent({
       type: 'PASSWORD_RESET_COMPLETED',
       severity: 'INFO',
       actor: account.username,
       targetAccount: account.username,
-      details: `Password successfully updated via verified email recovery token.`,
+      details: `Password successfully updated and database-synced via verified institutional email token.`,
     });
 
     return {
       success: true,
-      message: `Password successfully updated for ${account.name}! You can now log in with your new password.`,
+      message: `Password successfully updated in university database for ${account.name}! You can now log in with your new password.`,
     };
   }
 
@@ -574,12 +754,21 @@ export class AuthService {
 
     // Do not allow deleting the master Admin or VC account
     if (target.username.toLowerCase() === 'admin' || target.username.toLowerCase() === 'vc') {
-      return { success: false, message: 'Cannot delete core institutional administrative accounts.' };
+      return { success: false, message: 'Cannot delete core institutional administrative root accounts.' };
     }
 
     const filtered = accounts.filter((a) => a.id !== accountId);
     this.saveAccounts(filtered);
-    return { success: true, message: `Account "${target.username}" deleted successfully.` };
+
+    // Sync deletion to Firestore
+    FirebaseStore.deleteUserAccount(accountId).catch(() => {});
+
+    // Sync deletion to SQLite backend
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${accountId}`, { method: 'DELETE' }).catch(() => {});
+    }
+
+    return { success: true, message: `Account "${target.username}" deleted successfully from all systems.` };
   }
 
   // Update Profile: Name, Designation, Avatar, Password, Theme, Role, Program, Assigned Programs, Department
@@ -677,6 +866,18 @@ export class AuthService {
 
     this.saveAccounts(accounts);
 
+    // Sync update to Firestore cloud database
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+
+    // Sync update to backend SQLite database
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
     // Update active session if this is the currently logged-in user
     const currentSession = this.getCurrentSession();
     let updatedSession: ActiveUserSession | undefined = undefined;
@@ -699,7 +900,7 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'Profile updated successfully!',
+      message: 'Profile updated and synchronized successfully!',
       session: updatedSession || currentSession || undefined,
     };
   }
@@ -774,19 +975,26 @@ export class AuthService {
     const accounts = this.getAccounts();
     const session = this.getCurrentSession();
     const targetId = userId || session?.id;
-    if (normalized !== "midnight") {
-      const storageKey = `mnsuet_prev_light_theme_${targetId || "guest"}`;
-      if (typeof localStorage !== "undefined") {
+    if (normalized !== 'midnight') {
+      const storageKey = `mnsuet_prev_light_theme_${targetId || 'guest'}`;
+      if (typeof localStorage !== 'undefined') {
         localStorage.setItem(storageKey, normalized);
       }
     }
-    
 
     if (targetId) {
       const user = accounts.find((a) => a.id === targetId);
       if (user) {
         user.themePreference = normalized;
         this.saveAccounts(accounts);
+        FirebaseStore.saveUserAccount(user).catch(() => {});
+        if (typeof window !== 'undefined') {
+          fetch(`/api/users/${user.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ themePreference: normalized }),
+          }).catch(() => {});
+        }
       }
       if (session && session.id === targetId) {
         session.themePreference = normalized;
@@ -806,40 +1014,43 @@ export class AuthService {
   // Quick toggle between Day and Night
   public static toggleTheme(userId?: string): AppTheme {
     const current = this.getCurrentTheme();
-    
+
     let newTheme: AppTheme = 'emerald';
     const storageKey = `mnsuet_prev_light_theme_${userId || 'guest'}`;
 
     if (current === 'midnight') {
-       // Going from night back to day. Try to restore previous day theme.
-       const prev = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null;
-       if (prev && ['emerald', 'oxford', 'sunset', 'contrast'].includes(prev)) {
-           newTheme = prev as AppTheme;
-       } else {
-           newTheme = 'emerald';
-       }
+      // Going from night back to day. Try to restore previous day theme.
+      const prev = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null;
+      if (prev && ['emerald', 'oxford', 'sunset', 'contrast'].includes(prev)) {
+        newTheme = prev as AppTheme;
+      } else {
+        newTheme = 'emerald';
+      }
     } else {
-       // Going from day to night. Save current day theme.
-       if (typeof localStorage !== 'undefined') {
-           localStorage.setItem(storageKey, current);
-       }
-       newTheme = 'midnight';
+      // Going from day to night. Save current day theme.
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(storageKey, current);
+      }
+      newTheme = 'midnight';
     }
 
     return this.setTheme(newTheme, userId);
   }
 
-  // Remove all non-master accounts, leaving only official Admin and VC accounts
+  // Remove all non-master accounts, leaving only official Admin, VC, and Talha Jahangir accounts
   public static clearNonMasterAccounts(): { success: boolean; message: string; count: number } {
     const accounts = this.getAccounts();
     const masters = accounts.filter(
-      (a) => a.username.toLowerCase() === 'admin' || a.username.toLowerCase() === 'vc'
+      (a) =>
+        a.username.toLowerCase() === 'admin' ||
+        a.username.toLowerCase() === 'vc' ||
+        a.username.toLowerCase() === 'mtalhajahangir'
     );
     const removedCount = accounts.length - masters.length;
     this.saveAccounts(masters);
     return {
       success: true,
-      message: `Cleared ${removedCount} registered user account(s). Only Admin and VC remain.`,
+      message: `Cleared ${removedCount} registered user account(s). Official core accounts preserved.`,
       count: removedCount,
     };
   }

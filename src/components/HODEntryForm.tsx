@@ -146,22 +146,27 @@ export const HODEntryForm: React.FC<Props> = ({
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
 
   // Filter to show only programs that belong to the selected session
-  const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(true);
+  const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(false);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState<boolean>(false);
 
-  // Available programs for current department
+  // Available programs for current department (guaranteed to include all department offerings)
   const currentDeptPrograms = useMemo(() => {
     const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
     if (!dept) return [];
-    if (onlySessionFilter) {
+    if (onlySessionFilter && !isReadOnly) {
       const activeNames = StorageService.getSessionPrograms(department, session);
       const filtered = dept.programs.filter((p) => activeNames.includes(p.name));
-      return filtered;
+      return filtered.length > 0 ? filtered : dept.programs;
     }
     return dept.programs;
-  }, [department, session, onlySessionFilter, rosterVersion]);
+  }, [department, session, onlySessionFilter, isReadOnly, rosterVersion]);
+
+  const allDeptPrograms = useMemo(() => {
+    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
+    return dept ? dept.programs : [];
+  }, [department]);
 
   const [program, setProgram] = useState<string>(
     selectedProgramProp || (currentDeptPrograms[0]?.name || '')
@@ -372,10 +377,8 @@ export const HODEntryForm: React.FC<Props> = ({
     const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
     if (targetDept && targetDept.programs.length > 0) {
       const activeNames = StorageService.getSessionPrograms(newDept, session);
-      const available = onlySessionFilter
-        ? targetDept.programs.filter((p) => activeNames.includes(p.name))
-        : targetDept.programs;
-      const pick = available[0] || targetDept.programs[0];
+      const enrolled = targetDept.programs.filter((p) => activeNames.includes(p.name));
+      const pick = enrolled[0] || targetDept.programs[0];
       const progName = pick ? pick.name : '';
       setProgram(progName);
       if (onProgramChangedProp) onProgramChangedProp(progName);
@@ -386,9 +389,24 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   const handleProgramChange = (newProg: string) => {
+    const activeNames = StorageService.getSessionPrograms(department, session);
+    if (activeNames.length > 0 && !activeNames.includes(newProg)) {
+      return;
+    }
     setProgram(newProg);
     if (onProgramChangedProp) onProgramChangedProp(newProg);
   };
+
+  // Guard against off-cycle program selection when session or department changes
+  useEffect(() => {
+    if (!department || !session) return;
+    const activeNames = StorageService.getSessionPrograms(department, session);
+    if (activeNames.length > 0 && !activeNames.includes(program)) {
+      const validProg = activeNames[0];
+      setProgram(validProg);
+      if (onProgramChangedProp) onProgramChangedProp(validProg);
+    }
+  }, [department, session]);
 
   const handleShiftChange = (newShift: AcademicShift) => {
     setShift(newShift);
@@ -1097,9 +1115,52 @@ export const HODEntryForm: React.FC<Props> = ({
                   Vice Chancellor Academic Inspection
                 </span>
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-white mt-0.5">
-                {department} • {program} ({shift} Shift — Semester {semester})
-              </h3>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <span className="text-sm sm:text-base font-bold text-white">
+                  {department}
+                </span>
+                <span className="text-slate-500">•</span>
+                <div className="flex items-center gap-1.5 bg-slate-800 border border-emerald-500/60 rounded-lg px-2.5 py-1 shadow-2xs">
+                  <span className="text-[10px] uppercase font-bold text-emerald-300">Program:</span>
+                  <select
+                    id="executive-oversight-program-select"
+                    value={program}
+                    onChange={(e) => handleProgramChange(e.target.value)}
+                    className="bg-transparent text-emerald-200 hover:text-white font-bold text-xs focus:outline-none cursor-pointer pr-1"
+                    title="Switch inspected program to see its specific courses and LMS records"
+                  >
+                    <optgroup label={`Session ${session} Enrolled Programs`}>
+                      {allDeptPrograms
+                        .filter((p) => StorageService.getSessionPrograms(department, session).includes(p.name))
+                        .map((p) => (
+                          <option key={p.name} value={p.name} className="bg-slate-900 text-emerald-300 font-bold">
+                            {p.name} ({p.degreeLevel}) ✓ [Session {session}]
+                          </option>
+                        ))}
+                    </optgroup>
+                    {allDeptPrograms.some((p) => !StorageService.getSessionPrograms(department, session).includes(p.name)) && (
+                      <optgroup label={`Other Offerings (Not in Session ${session})`}>
+                        {allDeptPrograms
+                          .filter((p) => !StorageService.getSessionPrograms(department, session).includes(p.name))
+                          .map((p) => (
+                            <option
+                              key={p.name}
+                              value={p.name}
+                              disabled
+                              title={`Not applicable in selected session: Session ${session}`}
+                              className="bg-slate-900 text-slate-500 italic"
+                            >
+                              {p.name} ({p.degreeLevel}) — [Not applicable in Session {session}]
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+                <span className="text-xs text-slate-300">
+                  ({shift} Shift — Semester {semester})
+                </span>
+              </div>
               <p className="text-xs text-slate-300 mt-0.5">
                 Reviewing authenticated course records and LMS submission status. Modifications are restricted to authorized Department HOD and Course Instructors.
               </p>
@@ -1309,16 +1370,50 @@ export const HODEntryForm: React.FC<Props> = ({
               onChange={(e) => handleProgramChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
             >
-              {currentDeptPrograms.map((p) => {
-                const isCoordinated = currentUser?.assignedPrograms
-                  ? currentUser.assignedPrograms.includes(p.name)
-                  : currentUser?.program === p.name;
+              {(() => {
+                const activeNames = StorageService.getSessionPrograms(department, session);
+                const enrolled = allDeptPrograms.filter((p) => activeNames.includes(p.name));
+                const other = allDeptPrograms.filter((p) => !activeNames.includes(p.name));
+
                 return (
-                  <option key={p.name} value={p.name}>
-                    {p.name} {isCoordinated ? '★ (My Program)' : ''}
-                  </option>
+                  <>
+                    {enrolled.length > 0 && (
+                      <optgroup label={`Session ${session} Enrolled Offerings (${enrolled.length})`}>
+                        {enrolled.map((p) => {
+                          const isCoordinated = currentUser?.assignedPrograms
+                            ? currentUser.assignedPrograms.includes(p.name)
+                            : currentUser?.program === p.name;
+                          return (
+                            <option key={p.name} value={p.name} className="font-bold text-slate-900">
+                              {p.name} {isCoordinated ? '★ (My Program)' : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
+                    {other.length > 0 && (
+                      <optgroup label={`Other Offerings (Not Enrolled in Session ${session})`}>
+                        {other.map((p) => {
+                          const isCoordinated = currentUser?.assignedPrograms
+                            ? currentUser.assignedPrograms.includes(p.name)
+                            : currentUser?.program === p.name;
+                          return (
+                            <option
+                              key={p.name}
+                              value={p.name}
+                              disabled
+                              title={`Not applicable in selected session: Session ${session}`}
+                              className="text-slate-400 dark:text-slate-500 italic bg-slate-100 dark:bg-slate-800"
+                            >
+                              {p.name} — [Not applicable in Session {session}] {isCoordinated ? '★' : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </select>
             {/* Quick multi-program switcher chips for coordinators overseeing >1 program */}
             {currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 1 && (

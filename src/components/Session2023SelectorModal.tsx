@@ -19,20 +19,27 @@ export const Session2023SelectorModal: React.FC<Props> = ({
   onRosterUpdated,
 }) => {
   const [selectedDept, setSelectedDept] = useState<string>(departmentName);
+  const [currentConfigSession, setCurrentConfigSession] = useState<string>(sessionName);
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>([]);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const availableSessions = StorageService.getAvailableSessions();
 
   useEffect(() => {
     setSelectedDept(departmentName);
   }, [departmentName]);
 
   useEffect(() => {
-    if (selectedDept) {
-      const active = StorageService.getSessionPrograms(selectedDept, sessionName);
+    setCurrentConfigSession(sessionName);
+  }, [sessionName]);
+
+  useEffect(() => {
+    if (selectedDept && isOpen) {
+      const active = StorageService.getSessionPrograms(selectedDept, currentConfigSession);
       setSelectedPrograms(active);
       setSavedSuccess(false);
     }
-  }, [selectedDept, sessionName, isOpen]);
+  }, [selectedDept, currentConfigSession, isOpen]);
 
   if (!isOpen) return null;
 
@@ -56,7 +63,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
   const handleSelectDefaults = () => {
     setSavedSuccess(false);
     const defaults =
-      sessionName === '2023'
+      currentConfigSession === '2023'
         ? allDeptPrograms.filter((p) => p.session2023).map((p) => p.name)
         : allDeptPrograms.map((p) => p.name);
     setSelectedPrograms(defaults);
@@ -68,7 +75,7 @@ export const Session2023SelectorModal: React.FC<Props> = ({
   };
 
   const handleSave = () => {
-    StorageService.setSessionPrograms(selectedDept, selectedPrograms, sessionName);
+    StorageService.setSessionPrograms(selectedDept, selectedPrograms, currentConfigSession);
     onRosterUpdated(selectedPrograms);
     setSavedSuccess(true);
     setTimeout(() => {
@@ -92,9 +99,9 @@ export const Session2023SelectorModal: React.FC<Props> = ({
               <SlidersHorizontal className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Select Session {sessionName} Enrolled Programs</h2>
+              <h2 className="text-lg font-bold">Select Session {currentConfigSession} Enrolled Programs</h2>
               <p className="text-xs text-emerald-200">
-                Accurate Dashboard Tracking • Choose programs actively enrolled in Session {sessionName}
+                Accurate Dashboard Tracking • Configure programs actively offered in Session {currentConfigSession}
               </p>
             </div>
           </div>
@@ -110,23 +117,49 @@ export const Session2023SelectorModal: React.FC<Props> = ({
 
         {/* Content */}
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
-          {/* Department Switcher */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Department / School
-            </label>
-            <select
-              id="session-selector-dept"
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="w-full text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-hidden"
-            >
-              {UNIVERSITY_DEPARTMENTS.map((dept) => (
-                <option key={dept.name} value={dept.name}>
-                  {dept.name} ({dept.code})
-                </option>
-              ))}
-            </select>
+          {/* Session Switcher & Department Switcher Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Session Selector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Configured Academic Session
+              </label>
+              <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-300">
+                {availableSessions.map((sess) => (
+                  <button
+                    key={sess}
+                    type="button"
+                    onClick={() => setCurrentConfigSession(sess)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                      currentConfigSession === sess
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Session {sess}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Department Switcher */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Department / School
+              </label>
+              <select
+                id="session-selector-dept"
+                value={selectedDept}
+                onChange={(e) => setSelectedDept(e.target.value)}
+                className="w-full text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-600 focus:outline-hidden"
+              >
+                {UNIVERSITY_DEPARTMENTS.map((dept) => (
+                  <option key={dept.name} value={dept.name}>
+                    {dept.name} ({dept.code})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Explanation banner */}
@@ -134,11 +167,11 @@ export const Session2023SelectorModal: React.FC<Props> = ({
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-900 space-y-1">
               <p className="font-semibold">
-                Why this selection matters for Session {sessionName} tracking:
+                Dynamic Program Enrollment for Session {currentConfigSession}:
               </p>
               <p>
-                Departments may offer specific programs in each session. Selecting only the offered
-                programs ensures completion rates in executive dashboards accurately reflect true enrollment.
+                The department coordinator selects which degree programs are active in Session {currentConfigSession}.
+                The VC Dashboard and navigation filters will strictly show these offerings when Session {currentConfigSession} is selected.
               </p>
             </div>
           </div>

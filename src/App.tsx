@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { HODEntryForm } from './components/HODEntryForm';
 import { VCDashboard } from './components/VCDashboard';
@@ -13,6 +13,7 @@ import { SubmissionRecord, ActiveUserSession, AcademicShift, MonitoringModuleId 
 import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
 import { SidebarNavigation } from './components/SidebarNavigation';
 import { WorkOnDemandView } from './components/WorkOnDemandView';
+import { Session2023SelectorModal } from './components/Session2023SelectorModal';
 import {
   CheckCircle2,
   Database,
@@ -24,6 +25,12 @@ import {
   Lock,
   BookOpen,
   Briefcase,
+  ChevronDown,
+  Check,
+  SlidersHorizontal,
+  Sparkles,
+  Calendar,
+  Ban,
 } from 'lucide-react';
 
 export default function App() {
@@ -36,6 +43,24 @@ export default function App() {
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isInspectionMode, setIsInspectionMode] = useState<boolean>(false);
+
+  // Department dropdown menu state (to choose specific program when clicking a department)
+  const [openDeptDropdown, setOpenDeptDropdown] = useState<string | null>(null);
+  const deptDropdownContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close department dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        deptDropdownContainerRef.current &&
+        !deptDropdownContainerRef.current.contains(e.target as Node)
+      ) {
+        setOpenDeptDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   const [activeView, setActiveView] = useState<'HOD' | 'VC'>(() => {
     const session = AuthService.getCurrentSession();
@@ -65,8 +90,13 @@ export default function App() {
   const [targetProg, setTargetProg] = useState<string>('BS Computer Science');
   const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
   const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
+  const [activeSessions, setActiveSessions] = useState<string[]>(() => StorageService.getActiveSessions());
   const [targetSemester, setTargetSemester] = useState<string>('1');
   const [targetAcademicSection, setTargetAcademicSection] = useState<string>('A');
+
+  // Roster configuration modal for coordinators and VC
+  const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
+  const [rosterModalDept, setRosterModalDept] = useState<string>('Department of Computer Science');
 
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
@@ -94,7 +124,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for storage changes across tabs
+  // Listen for storage changes, active session switches and roster changes
   useEffect(() => {
     const handleStorageUpdate = () => {
       reloadRecords();
@@ -103,11 +133,27 @@ export default function App() {
       const session = AuthService.getCurrentSession();
       setCurrentUser(session);
     };
+    const handleSessionsUpdate = () => {
+      const currentActive = StorageService.getActiveSessions();
+      setActiveSessions(currentActive);
+      setTargetSession(StorageService.getSelectedSession());
+      reloadRecords();
+    };
+    const handleRosterUpdate = () => {
+      setActiveSessions([...StorageService.getActiveSessions()]);
+      reloadRecords();
+    };
+
     window.addEventListener('mnsuet_storage_updated', handleStorageUpdate);
     window.addEventListener('mnsuet_auth_changed', handleAuthUpdate);
+    window.addEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+    window.addEventListener('mnsuet_roster_updated', handleRosterUpdate);
+
     return () => {
       window.removeEventListener('mnsuet_storage_updated', handleStorageUpdate);
       window.removeEventListener('mnsuet_auth_changed', handleAuthUpdate);
+      window.removeEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+      window.removeEventListener('mnsuet_roster_updated', handleRosterUpdate);
     };
   }, []);
 
@@ -132,6 +178,15 @@ export default function App() {
       }
     }
   }, [currentUser]);
+
+  // Guard against off-cycle targetProg selection: dynamically select enrolled program for the active session
+  useEffect(() => {
+    if (!targetDept) return;
+    const sessionPrograms = StorageService.getSessionPrograms(targetDept, targetSession);
+    if (sessionPrograms.length > 0 && !sessionPrograms.includes(targetProg)) {
+      setTargetProg(sessionPrograms[0]);
+    }
+  }, [targetDept, targetSession, targetProg]);
 
   const handleAuthenticated = (session: ActiveUserSession) => {
     setCurrentUser(session);
@@ -357,35 +412,414 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {UNIVERSITY_DEPARTMENTS.map((dept) => {
-                  const isActive = targetDept === dept.name;
-                  const session2023Prog =
-                    dept.programs.find((p) => p.session2023) || dept.programs[0];
+              <div ref={deptDropdownContainerRef} className="flex flex-wrap items-center gap-2 relative">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {UNIVERSITY_DEPARTMENTS.map((dept) => {
+                    const isActive = targetDept === dept.name;
+                    const isMenuOpen = openDeptDropdown === dept.name;
+
+                    return (
+                      <div key={dept.name} className="relative">
+                        <button
+                          key={dept.name}
+                          type="button"
+                          id={`btn-dept-${dept.code}`}
+                          onClick={() => {
+                            setOpenDeptDropdown((prev) => (prev === dept.name ? null : dept.name));
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                            isActive && activeView === 'HOD'
+                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                              : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
+                          }`}
+                          title={`Click to view all ${dept.programs.length} programs in ${dept.name}`}
+                        >
+                          <span>{dept.code}</span>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${
+                              isMenuOpen ? 'rotate-180 text-emerald-300' : 'opacity-70'
+                            }`}
+                          />
+                        </button>
+
+                        {/* Dropdown Menu showing programs for this department with session-awareness */}
+                        {isMenuOpen && (() => {
+                          const deptProgDetails = dept.programs.map((prog) => ({
+                            prog,
+                            detail: StorageService.getProgramSessionDetail(
+                              dept.name,
+                              prog.name,
+                              activeSessions,
+                              allRecords
+                            ),
+                          }));
+                          const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
+                          const other = deptProgDetails.filter((d) => !d.detail.isApplicableInSelected);
+                          const isMulti = activeSessions.length > 1;
+
+                          return (
+                            <div
+                              id={`dropdown-menu-${dept.code}`}
+                              className="absolute left-0 sm:left-auto top-full mt-1.5 w-80 sm:w-96 max-h-[28rem] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 p-2.5 animate-in fade-in slide-in-from-top-1"
+                            >
+                              <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-2 bg-slate-50 dark:bg-slate-850 rounded-lg">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    {dept.name}
+                                  </span>
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                                    {dept.programs.length} Offerings
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-750 text-[11px]">
+                                  <span className="text-slate-600 dark:text-slate-400 font-medium">
+                                    {isMulti ? (
+                                      <span>Sessions: <strong className="text-emerald-700 dark:text-emerald-400">{activeSessions.join(' & ')}</strong></span>
+                                    ) : (
+                                      <span>Session <strong className="text-emerald-700 dark:text-emerald-400">{targetSession}</strong>: {enrolled.length} enrolled</span>
+                                    )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRosterModalDept(dept.name);
+                                      setIsRosterModalOpen(true);
+                                      setOpenDeptDropdown(null);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 font-bold bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 cursor-pointer transition-colors"
+                                    title="Configure which programs are enrolled in this academic session"
+                                  >
+                                    <SlidersHorizontal className="w-2.5 h-2.5" />
+                                    <span>Configure Roster</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* If multi-session: show all programs with their applicable session badges */}
+                              {isMulti ? (
+                                <div className="space-y-1">
+                                  <div className="text-[10px] uppercase font-bold text-slate-500 px-2 py-0.5">
+                                    Session Applicability Matrix ({dept.programs.length} Programs)
+                                  </div>
+                                  {deptProgDetails.map(({ prog, detail }) => {
+                                    const isSelected =
+                                      targetDept === dept.name && targetProg === prog.name;
+                                    const isApplicable = detail.isApplicableInSelected;
+                                    const dynamicSessionName = `Sessions: ${activeSessions.join(' & ')}`;
+                                    const notApplicableTooltip = `Not applicable in selected sessions (${dynamicSessionName})`;
+
+                                    if (!isApplicable) {
+                                      return (
+                                        <div
+                                          key={prog.name}
+                                          className="relative group/offcycle cursor-not-allowed"
+                                        >
+                                          <div
+                                            aria-disabled="true"
+                                            title={notApplicableTooltip}
+                                            className="w-full text-left px-3 py-2 rounded-lg text-xs flex flex-col gap-1 select-none border bg-slate-50/70 dark:bg-slate-850/40 text-slate-400 dark:text-slate-500 border-slate-200/50 dark:border-slate-800/50 group-hover/offcycle:bg-amber-50/20 dark:group-hover/offcycle:bg-amber-950/20 group-hover/offcycle:border-amber-300/60 dark:group-hover/offcycle:border-amber-700/60 transition-colors"
+                                          >
+                                            <div className="flex items-center justify-between gap-2">
+                                              <div className="flex items-center gap-1.5 min-w-0">
+                                                <span className="truncate font-semibold text-slate-400 dark:text-slate-500 line-through decoration-slate-300 dark:decoration-slate-600">
+                                                  {prog.name}
+                                                </span>
+                                                <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-400 font-bold shrink-0">
+                                                  {prog.degreeLevel}
+                                                </span>
+                                              </div>
+                                              <span className="text-[9px] text-amber-600 dark:text-amber-400/90 font-semibold italic shrink-0 flex items-center gap-1">
+                                                <Ban className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                                Off-cycle
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border opacity-70 ${detail.badgeClass}`}>
+                                                {detail.statusLabel}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {/* Hover Tooltip dynamically displaying selected session names */}
+                                          <div className="pointer-events-none opacity-0 group-hover/offcycle:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 px-2.5 py-1 text-[11px] font-medium text-white bg-slate-900/95 dark:bg-slate-950 border border-slate-700 dark:border-slate-750 rounded-md shadow-xl whitespace-nowrap flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                                            <span>{notApplicableTooltip}</span>
+                                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95 dark:border-t-slate-950" />
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <button
+                                        key={prog.name}
+                                        type="button"
+                                        id={`prog-opt-${dept.code}-${prog.name.replace(/\s+/g, '-').toLowerCase()}`}
+                                        onClick={() => {
+                                          setTargetDept(dept.name);
+                                          setTargetProg(prog.name);
+                                          if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                            setIsInspectionMode(true);
+                                          }
+                                          setActiveView('HOD');
+                                          setActiveModule('LMS');
+                                          setOpenDeptDropdown(null);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex flex-col gap-1 cursor-pointer ${
+                                          isSelected
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800'
+                                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`truncate font-semibold ${isSelected ? 'text-emerald-950 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-200'}`}>
+                                              {prog.name}
+                                            </span>
+                                            <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold shrink-0">
+                                              {prog.degreeLevel}
+                                            </span>
+                                          </div>
+                                          {isSelected && (
+                                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${detail.badgeClass}`}>
+                                            {detail.statusLabel}
+                                          </span>
+                                          {detail.hasUploadedRecords && (
+                                            <span className="text-[10px] text-emerald-800 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950 px-1.5 py-0.5 rounded font-bold border border-emerald-300 dark:border-emerald-800 flex items-center gap-0.5">
+                                              <CheckCircle2 className="w-2.5 h-2.5" />
+                                              LMS Active
+                                            </span>
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                /* Single session mode: cleanly group enrolled vs other offerings */
+                                <div className="space-y-2">
+                                  {/* Section 1: Enrolled in Target Session */}
+                                  <div>
+                                    <div className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded mb-1 flex items-center justify-between">
+                                      <span>Session {targetSession} Enrolled Offerings</span>
+                                      <span className="font-extrabold">{enrolled.length}</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {enrolled.map(({ prog, detail }) => {
+                                        const isSelected =
+                                          targetDept === dept.name && targetProg === prog.name;
+                                        return (
+                                          <button
+                                            key={prog.name}
+                                            type="button"
+                                            id={`prog-opt-${dept.code}-${prog.name.replace(/\s+/g, '-').toLowerCase()}`}
+                                            onClick={() => {
+                                              setTargetDept(dept.name);
+                                              setTargetProg(prog.name);
+                                              if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                                setIsInspectionMode(true);
+                                              }
+                                              setActiveView('HOD');
+                                              setActiveModule('LMS');
+                                              setOpenDeptDropdown(null);
+                                            }}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                              isSelected
+                                                ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 font-bold border border-emerald-300 dark:border-emerald-800'
+                                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <span className="truncate">{prog.name}</span>
+                                              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-bold shrink-0">
+                                                {prog.degreeLevel}
+                                              </span>
+                                              {detail.hasUploadedRecords && (
+                                                <span className="text-[9px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1 py-0.2 rounded font-bold shrink-0">
+                                                  LMS Active
+                                                </span>
+                                              )}
+                                            </div>
+                                            {isSelected && (
+                                              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Section 2: Other Department Offerings */}
+                                  {other.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                      <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 px-2 py-0.5 mb-1 flex items-center justify-between">
+                                        <span>Other Offerings (Not in Session {targetSession})</span>
+                                        <span className="font-semibold text-slate-400">{other.length}</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {other.map(({ prog }) => {
+                                          const isSelected =
+                                            targetDept === dept.name && targetProg === prog.name;
+                                          const dynamicSessionName = `Session ${targetSession}`;
+                                          const notApplicableTooltip = `Not applicable in selected session (${dynamicSessionName})`;
+
+                                          return (
+                                            <div
+                                              key={prog.name}
+                                              className="relative group/offcycle cursor-not-allowed"
+                                            >
+                                              {/* Non-clickable off-cycle program item */}
+                                              <div
+                                                aria-disabled="true"
+                                                title={notApplicableTooltip}
+                                                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 select-none border transition-colors ${
+                                                  isSelected
+                                                    ? 'bg-amber-50/50 dark:bg-amber-950/20 text-slate-500 dark:text-slate-400 border-amber-300/40 dark:border-amber-800/40'
+                                                    : 'bg-slate-50/70 dark:bg-slate-850/40 text-slate-400 dark:text-slate-500 border-slate-200/50 dark:border-slate-800/50 group-hover/offcycle:bg-amber-50/20 dark:group-hover/offcycle:bg-amber-950/20 group-hover/offcycle:border-amber-300/50 dark:group-hover/offcycle:border-amber-750'
+                                                }`}
+                                              >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                  <span className="truncate line-through decoration-slate-300 dark:decoration-slate-600">
+                                                    {prog.name}
+                                                  </span>
+                                                  <span className="text-[9px] px-1 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium shrink-0">
+                                                    {prog.degreeLevel}
+                                                  </span>
+                                                </div>
+                                                <span className="text-[9px] text-amber-600 dark:text-amber-400/90 font-semibold italic shrink-0 flex items-center gap-1">
+                                                  <Ban className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                                  Off-cycle
+                                                </span>
+                                              </div>
+
+                                              {/* Hover Tooltip dynamically showing the selected session name */}
+                                              <div className="pointer-events-none opacity-0 group-hover/offcycle:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 px-2.5 py-1 text-[11px] font-medium text-white bg-slate-900/95 dark:bg-slate-950 border border-slate-700 dark:border-slate-750 rounded-md shadow-xl whitespace-nowrap flex items-center gap-1.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                                                <span>{notApplicableTooltip}</span>
+                                                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95 dark:border-t-slate-950" />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Inline Active Department Program Quick Selector */}
+                {selectedDeptObj && (() => {
+                  const deptProgDetails = selectedDeptObj.programs.map((prog) => ({
+                    prog,
+                    detail: StorageService.getProgramSessionDetail(
+                      selectedDeptObj.name,
+                      prog.name,
+                      activeSessions,
+                      allRecords
+                    ),
+                  }));
+                  const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
+                  const other = deptProgDetails.filter((d) => !d.detail.isApplicableInSelected);
+                  const isMulti = activeSessions.length > 1;
 
                   return (
-                    <button
-                      key={dept.name}
-                      type="button"
-                      onClick={() => {
-                        setTargetDept(dept.name);
-                        if (session2023Prog) setTargetProg(session2023Prog.name);
-                        if (currentUser.role === 'VC') {
-                          setIsInspectionMode(true);
-                        }
-                        setActiveView('HOD');
-                        setActiveModule('LMS');
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                        isActive && activeView === 'HOD'
-                          ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
-                      }`}
-                    >
-                      {dept.code}
-                    </button>
+                    <div className="flex items-center gap-1.5 bg-emerald-50/80 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-600/50 rounded-lg px-2.5 py-1 shadow-2xs">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
+                        {selectedDeptObj.code} Program:
+                      </span>
+                      <select
+                        id="top-bar-active-program-select"
+                        value={targetProg}
+                        onChange={(e) => {
+                          const newProg = e.target.value;
+                          setTargetProg(newProg);
+                          if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                            setIsInspectionMode(true);
+                          }
+                          setActiveView('HOD');
+                          setActiveModule('LMS');
+                        }}
+                        className="text-xs font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[220px] sm:max-w-[320px] truncate"
+                        title="Select program within this department to inspect"
+                      >
+                        {isMulti ? (
+                          deptProgDetails.map(({ prog, detail }) => {
+                            const isApplicable = detail.isApplicableInSelected;
+                            return (
+                              <option
+                                key={prog.name}
+                                value={prog.name}
+                                disabled={!isApplicable}
+                                title={!isApplicable ? `Not applicable in selected sessions (${activeSessions.join(', ')})` : undefined}
+                                className={
+                                  isApplicable
+                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white'
+                                    : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic'
+                                }
+                              >
+                                {prog.name} ({prog.degreeLevel}) — [{detail.statusLabel}]{!isApplicable ? ' (Off-cycle)' : ''}
+                              </option>
+                            );
+                          })
+                        ) : (
+                          <>
+                            {enrolled.length > 0 && (
+                              <optgroup label={`Session ${targetSession} Enrolled Programs (${enrolled.length})`}>
+                                {enrolled.map(({ prog, detail }) => (
+                                  <option
+                                    key={prog.name}
+                                    value={prog.name}
+                                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
+                                  >
+                                    {prog.name} ({prog.degreeLevel}) {detail.hasUploadedRecords ? '✓ (LMS Active)' : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {other.length > 0 && (
+                              <optgroup label={`Other Offerings (Not in Session ${targetSession})`}>
+                                {other.map(({ prog }) => (
+                                  <option
+                                    key={prog.name}
+                                    value={prog.name}
+                                    disabled
+                                    title={`Not applicable in selected session: Session ${targetSession}`}
+                                    className="bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic"
+                                  >
+                                    {prog.name} ({prog.degreeLevel}) — [Not applicable in Session {targetSession}]
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRosterModalDept(selectedDeptObj.name);
+                          setIsRosterModalOpen(true);
+                        }}
+                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200 p-0.5 rounded transition-colors cursor-pointer"
+                        title={`Configure ${selectedDeptObj.code} session roster`}
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   );
-                })}
+                })()}
               </div>
             </>
           )}
@@ -544,6 +978,17 @@ export default function App() {
           isAdmin={isAdmin}
         />
       )}
+      {/* Session Program Roster Selector Modal for Coordinator / VC */}
+      <Session2023SelectorModal
+        isOpen={isRosterModalOpen}
+        onClose={() => setIsRosterModalOpen(false)}
+        departmentName={rosterModalDept}
+        sessionName={targetSession}
+        onRosterUpdated={() => {
+          setActiveSessions([...StorageService.getActiveSessions()]);
+          reloadRecords();
+        }}
+      />
     </div>
   );
 }

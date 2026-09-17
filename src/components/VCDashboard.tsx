@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SHIFTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
-import { SubmissionRecord, AcademicShift } from '../types';
+import { SubmissionRecord, AcademicShift, ProgramSessionDetail } from '../types';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { ExecutiveReportModal } from './ExecutiveReportModal';
@@ -15,6 +15,14 @@ import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
 import { ActionRequiredPanel } from './ActionRequiredPanel';
 import { SectionPerformanceMatrix } from './SectionPerformanceMatrix';
 import { DeadlineAgingChart } from './DeadlineAgingChart';
+import { SubmissionCoverageRadar } from './SubmissionCoverageRadar';
+import { BottleneckActionPanel } from './BottleneckActionPanel';
+import {
+  CompletionRadarService,
+  BottleneckInfo,
+  RadarUnit,
+  RadarDrillPath,
+} from '../services/completionRadarService';
 import {
   VCAnalyticsService,
   DepartmentDimension,
@@ -80,6 +88,7 @@ export interface UnifiedProgramRow {
   program: string;
   degreeLevel: string;
   sessionActive: boolean;
+  sessionDetail?: ProgramSessionDetail;
   supportedShifts: AcademicShift[];
   shifts: {
     Morning: ShiftCohortData;
@@ -118,6 +127,99 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [isDeptDrillDownOpen, setIsDeptDrillDownOpen] = useState<boolean>(false);
   const [selectedDrillDownProgram, setSelectedDrillDownProgram] = useState<ProgramDimension | null>(null);
   const [isProgramDrillDownOpen, setIsProgramDrillDownOpen] = useState<boolean>(false);
+
+  // Submission Coverage Radar & Bottleneck Navigation State
+  const [radarDrillPath, setRadarDrillPath] = useState<RadarDrillPath>({});
+  const [radarInspectorUnit, setRadarInspectorUnit] = useState<RadarUnit | null>(null);
+  const [highlightedBottleneckSection, setHighlightedBottleneckSection] = useState<string | null>(null);
+
+  // Traverses hierarchy across all levels to pinpoint the single most critical submission bottleneck
+  const institutionalBottleneck = useMemo(() => {
+    return CompletionRadarService.findBottleneck(allRecords, currentSession);
+  }, [allRecords, currentSession]);
+
+  // Set initial inspector unit if none is selected
+  useEffect(() => {
+    if (!radarInspectorUnit && institutionalBottleneck.primary) {
+      const p = institutionalBottleneck.primary;
+      setRadarInspectorUnit({
+        id: `initial-bottleneck-card`,
+        name: p.program,
+        level: 'PROGRAM',
+        submitted: p.submittedCourses,
+        pending: p.pendingCourses,
+        inProgress: 0,
+        total: p.totalCourses,
+        completionRate: p.completionRate,
+        coordinatorStatus: p.coordinatorStatus,
+        coordinatorName: p.coordinatorName,
+        hodStatus: p.hodStatus,
+        hodName: p.hodName,
+        deadlineText: p.deadlineText,
+        deadlineDays: p.daysRemaining,
+        isOverdue: p.isOverdue,
+        lastActivity: '17 Sep, 8:42 PM',
+        deptName: p.department,
+        deptCode: p.deptCode,
+        progName: p.program,
+        semId: p.semesterId,
+      });
+    }
+  }, [institutionalBottleneck, radarInspectorUnit]);
+
+  // Handler for "Find the Bottleneck" button
+  const handleFindBottleneck = () => {
+    const p = institutionalBottleneck.primary;
+    setRadarDrillPath({
+      deptName: p.department,
+      progName: p.program,
+      semId: p.semesterId,
+      sectionId: p.section.replace('Section ', '').trim(),
+    });
+    setHighlightedBottleneckSection(p.section);
+    setRadarInspectorUnit({
+      id: `active-bottleneck-selected`,
+      name: `${p.program} (${p.section})`,
+      level: 'SECTION',
+      submitted: p.submittedCourses,
+      pending: p.pendingCourses,
+      inProgress: 0,
+      total: p.totalCourses,
+      completionRate: p.completionRate,
+      coordinatorStatus: p.coordinatorStatus,
+      coordinatorName: p.coordinatorName,
+      hodStatus: p.hodStatus,
+      hodName: p.hodName,
+      deadlineText: p.deadlineText,
+      deadlineDays: p.daysRemaining,
+      isOverdue: p.isOverdue,
+      lastActivity: '17 Sep, 8:42 PM',
+      deptName: p.department,
+      deptCode: p.deptCode,
+      progName: p.program,
+      semId: p.semesterId,
+      sectionId: p.section.replace('Section ', '').trim(),
+    });
+
+    const el = document.getElementById('university-completion-radar');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleJumpToBottleneck = (info: BottleneckInfo) => {
+    setRadarDrillPath({
+      deptName: info.department,
+      progName: info.program,
+      semId: info.semesterId,
+      sectionId: info.section.replace('Section ', '').trim(),
+    });
+    setHighlightedBottleneckSection(info.section);
+    const el = document.getElementById('university-completion-radar');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // Decoupled Academic Hierarchy Engine (One-to-many Department -> Programs -> Sections -> Courses)
   const hierarchy = useMemo(() => {
@@ -288,12 +390,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           recommendedShift = 'Evening';
         }
 
+        const sessionDetail = StorageService.getProgramSessionDetail(
+          dept.name,
+          prog.name,
+          activeSessions,
+          allRecords
+        );
+
         list.push({
           department: dept.name,
           deptCode: dept.code,
           program: prog.name,
           degreeLevel: prog.degreeLevel,
           sessionActive: isSessionActive,
+          sessionDetail,
           supportedShifts: prog.supportedShifts || ['Morning', 'Evening'],
           shifts: {
             Morning: morningData,
@@ -810,7 +920,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
+                <button
+                  id="btn-find-bottleneck-top"
+                  type="button"
+                  onClick={handleFindBottleneck}
+                  className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 via-amber-600 to-rose-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-xs shadow-md shadow-rose-950/60 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 animate-pulse"
+                  title="Automatically traverse university hierarchy and pinpoint critical submission gaps"
+                >
+                  <span className="text-sm">🔎</span>
+                  <span>Find Bottleneck</span>
+                </button>
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-full">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   Live Sync
@@ -908,8 +1028,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             </div>
           </div>
 
-          {/* High-Level Executive KPIs: Overall (82.4%), Departments (18/24), Programs (47/63), Pending (29) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* High-Level Executive KPIs: Overall (82.4%), Departments (18/24), Programs (47/63), Pending (29), Critical Bottleneck */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Overall University Completion
@@ -972,14 +1092,71 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 Awaiting instructor grades upload into LMS
               </p>
             </div>
+
+            {/* 5th KPI: Bottleneck Indicator */}
+            <div
+              onClick={handleFindBottleneck}
+              className="bg-gradient-to-br from-rose-950/30 to-slate-900 p-4 rounded-xl border border-rose-500/50 shadow-xs cursor-pointer hover:border-rose-400 transition-all group relative overflow-hidden"
+              title="Click to locate this bottleneck in the Completion Radar"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                  Critical Bottleneck
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 font-mono">
+                  Auto-Detect
+                </span>
+              </div>
+              <div className="mt-2">
+                <span className="text-xs font-black text-white group-hover:text-rose-300 transition-colors block truncate">
+                  {institutionalBottleneck.primary.program}
+                </span>
+                <span className="text-xs font-bold text-amber-400">
+                  {institutionalBottleneck.primary.semesterLabel} • {institutionalBottleneck.primary.section}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2 flex items-center justify-between">
+                <span>{institutionalBottleneck.primary.pendingCourses} courses pending</span>
+                <span className="text-rose-400 font-bold group-hover:underline">Inspect →</span>
+              </p>
+            </div>
           </div>
 
-          {/* Department Completion Heatmap (The #1 requested VC graph) */}
-          <DepartmentCompletionHeatmap
+          {/* =========================================================================
+              SIGNATURE ARCHITECTURE:
+              SUBMISSION COVERAGE MATRIX ("UNIVERSITY COMPLETION RADAR")
+              + BOTTLENECK & ACTION REQUIRED PANEL
+              ========================================================================= */}
+          <div id="university-completion-radar" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Main visualization: Submission Coverage Matrix / Drill-down (Left 8 cols ~ 67%) */}
+            <div className="lg:col-span-8">
+              <SubmissionCoverageRadar
+                allRecords={allRecords}
+                currentSession={currentSession}
+                drillPath={radarDrillPath}
+                onDrillPathChange={setRadarDrillPath}
+                onSelectUnitForInspector={setRadarInspectorUnit}
+                highlightedBottleneckSection={highlightedBottleneckSection}
+              />
+            </div>
+
+            {/* Right side: Bottleneck & Action Required panel (Right 4 cols ~ 33%) */}
+            <div className="lg:col-span-4">
+              <BottleneckActionPanel
+                bottleneck={institutionalBottleneck.primary}
+                runnerUps={institutionalBottleneck.runnerUps}
+                activeInspectorUnit={radarInspectorUnit}
+                onJumpToBottleneck={handleJumpToBottleneck}
+              />
+            </div>
+          </div>
+
+          {/* Section Performance Matrix (Cohort Heatmap) */}
+          <SectionPerformanceMatrix
             departments={hierarchy.departments}
-            onSelectDepartment={(dept) => {
-              setSelectedDrillDownDept(dept);
-              setIsDeptDrillDownOpen(true);
+            onSelectProgramSection={(prog) => {
+              setSelectedDrillDownProgram(prog);
+              setIsProgramDrillDownOpen(true);
             }}
           />
 
@@ -989,12 +1166,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             onSelectException={handleSelectException}
           />
 
-          {/* Section Performance Matrix (Cohort Heatmap) */}
-          <SectionPerformanceMatrix
+          {/* Department Completion Heatmap (The #1 requested VC graph) */}
+          <DepartmentCompletionHeatmap
             departments={hierarchy.departments}
-            onSelectProgramSection={(prog) => {
-              setSelectedDrillDownProgram(prog);
-              setIsProgramDrillDownOpen(true);
+            onSelectDepartment={(dept) => {
+              setSelectedDrillDownDept(dept);
+              setIsDeptDrillDownOpen(true);
             }}
           />
 
@@ -1018,6 +1195,26 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               setIsProgramDrillDownOpen(true);
             }}
           />
+
+          {/* Bottom of Command Center: Recent Activity & Live System Audit Trail */}
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-500 flex items-center justify-center font-bold">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                    Recent University LMS Operations & Live Audit Trail
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Real-time institutional activity stream with coordinator identity and verified 12-hour timestamps
+                  </p>
+                </div>
+              </div>
+            </div>
+            <VCAuditFeed />
+          </div>
         </div>
       )}
 
@@ -1463,12 +1660,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       <h4 className="text-xs font-black text-slate-900 leading-snug">
                         {progItem.program}
                       </h4>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {progItem.sessionActive && (
-                          <span className="text-[9px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
-                            Session {currentSession}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {progItem.sessionDetail ? (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${progItem.sessionDetail.badgeClass}`}>
+                            {progItem.sessionDetail.statusLabel}
                           </span>
-                        )}
+                        ) : progItem.sessionActive ? (
+                          <span className="text-[9px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
+                            Session {activeSessions.join(' & ')}
+                          </span>
+                        ) : null}
                         {progItem.hasAnySubmission && (
                           <span className="text-[9px] text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded font-bold border border-emerald-300 flex items-center gap-1">
                             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
@@ -1717,14 +1918,18 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       {/* Degree Program (Single Row - No duplicates) */}
                       <td className="py-2.5 px-3 font-semibold text-slate-900 border-r border-slate-200">
                         <div className="font-bold">{progItem.program}</div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {progItem.sessionActive ? (
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {progItem.sessionDetail ? (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${progItem.sessionDetail.badgeClass}`}>
+                              {progItem.sessionDetail.statusLabel}
+                            </span>
+                          ) : progItem.sessionActive ? (
                             <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200">
-                              Session {currentSession} Active
+                              Session {activeSessions.join(' & ')} Active
                             </span>
                           ) : (
                             <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                              Other Cycle
+                              Not in Selected
                             </span>
                           )}
                           {/* Indicator if this program has genuine submissions */}

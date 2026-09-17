@@ -1,24 +1,95 @@
 {
-  "collections": [
-    {
-      "name": "records",
-      "description": "LMS Upload Records"
+  "entities": {
+    "Record": {
+      "title": "SubmissionRecord",
+      "description": "LMS Result Upload Submission Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "department": { "type": "string" },
+        "program": { "type": "string" },
+        "degreeLevel": { "type": "string" },
+        "shift": { "type": "string" },
+        "section": { "type": "string" },
+        "session": { "type": "string" },
+        "semester": { "type": "string" },
+        "hodCoordinator": { "type": "string" },
+        "submissionDate": { "type": "string" },
+        "accessedBy": { "type": "string" },
+        "userDesignation": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "department", "program", "session", "semester"]
     },
-    {
-      "name": "config",
-      "description": "Global config (deadline, sessions, roster)"
+    "User": {
+      "title": "UserAccount",
+      "description": "Registered faculty and administrative user accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "department": { "type": "string" },
+        "designation": { "type": "string" },
+        "role": { "type": "string" },
+        "program": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "email", "name", "role", "department"]
     },
-    {
-      "name": "users",
-      "description": "User accounts"
+    "Config": {
+      "title": "SystemConfig",
+      "description": "Global institutional configuration parameters",
+      "type": "object",
+      "properties": {
+        "data": { "type": "string" }
+      }
     },
-    {
-      "name": "logs",
-      "description": "Audit and access logs"
+    "AccessLog": {
+      "title": "AccessLogEntry",
+      "description": "Audit and access inspection logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" }
+      }
     },
-    {
-      "name": "requisitions",
-      "description": "Work on demand requisitions"
+    "Requisition": {
+      "title": "WorkOnDemandRequisition",
+      "description": "Custom departmental automation requisition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "moduleName": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" }
+      }
     }
-  ]
+  },
+  "firestore": {
+    "/records/{recordId}": {
+      "schema": "Record",
+      "description": "LMS result upload submission records"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User accounts and authentication profiles"
+    },
+    "/config/{configKey}": {
+      "schema": "Config",
+      "description": "Global deadlines and session roster configurations"
+    },
+    "/logs/{logId}": {
+      "schema": "AccessLog",
+      "description": "Audit and access logging"
+    },
+    "/requisitions/{reqId}": {
+      "schema": "Requisition",
+      "description": "Departmental automation work-on-demand requisitions"
+    }
+  }
 }
