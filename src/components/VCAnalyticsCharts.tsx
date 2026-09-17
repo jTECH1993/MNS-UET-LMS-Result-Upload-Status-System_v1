@@ -108,7 +108,10 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
            inProgress = 0;
         }
 
-        const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+        // Calculate percentage by averaging the completion rate of ALL active programs in this department
+      const percentage = deptProgs.length > 0 
+        ? Math.round(deptProgs.reduce((acc, curr) => acc + curr.Percentage, 0) / deptProgs.length)
+        : 0;
         
         list.push({
           deptCode: dept.code,
@@ -135,7 +138,10 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
       const uploaded = deptProgs.reduce((acc, curr) => acc + curr.Uploaded, 0);
       const pending = deptProgs.reduce((acc, curr) => acc + curr.Pending, 0);
       const inProgress = deptProgs.reduce((acc, curr) => acc + curr['In Progress'], 0);
-      const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+      // Calculate percentage by averaging the completion rate of ALL active programs in this department
+      const percentage = deptProgs.length > 0 
+        ? Math.round(deptProgs.reduce((acc, curr) => acc + curr.Percentage, 0) / deptProgs.length)
+        : 0;
 
       return {
         name: dept.code,
@@ -154,15 +160,18 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
     const uploaded = deptPerformanceData.reduce((acc, curr) => acc + curr.Uploaded, 0);
     const pending = deptPerformanceData.reduce((acc, curr) => acc + curr.Pending, 0);
     const inProgress = deptPerformanceData.reduce((acc, curr) => acc + curr['In Progress'], 0);
-    const pct = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+    const totalActivePrograms = programLevelData.length;
+    const pct = totalActivePrograms > 0 
+      ? Math.round(programLevelData.reduce((acc, curr) => acc + curr.Percentage, 0) / totalActivePrograms)
+      : 0;
     return { uploadPercentage: pct, totalSubjects: total, totalUploaded: uploaded, totalPending: pending, inProgress };
-  }, [deptPerformanceData]);
+  }, [deptPerformanceData, programLevelData]);
 
   const topDepartment = useMemo(() => {
     const deptsWithData = deptPerformanceData.filter((d) => d.Total > 0);
     if (deptsWithData.length === 0) return null;
     return [...deptsWithData].sort((a, b) => b.Percentage - a.Percentage)[0];
-  }, [deptPerformanceData]);
+  }, [deptPerformanceData, programLevelData]);
 
     const trendData = useMemo(() => {
     const dates = [];

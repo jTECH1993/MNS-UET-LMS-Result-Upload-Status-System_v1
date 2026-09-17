@@ -314,7 +314,7 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [currentUser]);
 
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
-  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(8, 'Morning', '1', 'A'));
+  const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning', '1', 'A'));
 
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record")
   useEffect(() => {
@@ -426,7 +426,7 @@ export const HODEntryForm: React.FC<Props> = ({
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
       );
       const rows = [...validRows];
-      while (rows.length < 8) {
+      while (rows.length < 1) {
         rows.push(createEmptySubjectRow(rows.length + 1, shift, semester, section));
       }
       setSubjects(rows);
@@ -447,7 +447,7 @@ export const HODEntryForm: React.FC<Props> = ({
         setHodCoordinator(`${currentUser.name} (${currentUser.designation})`);
       }
 
-      setSubjects(createInitialBlankRows(8, shift, semester, section));
+      setSubjects(createInitialBlankRows(1, shift, semester, section));
 
       setSelectedRowIds(new Set());
       showFeedback(
@@ -784,9 +784,9 @@ export const HODEntryForm: React.FC<Props> = ({
     }));
 
     if (mode === 'replace') {
-      const total = Math.max(newRows.length, 6);
+      const total = Math.max(newRows.length, 1);
       const filledRows: SubjectRow[] = [...newRows];
-      while (filledRows.length < total) {
+      while (filledRows.length < 1) {
         filledRows.push(createEmptySubjectRow(filledRows.length + 1, shift, semester, effectiveSection));
       }
       setSubjects(filledRows);
@@ -840,7 +840,7 @@ export const HODEntryForm: React.FC<Props> = ({
       let finalRows: SubjectRow[] = [];
       if (mode === 'replace' || !existingRec) {
         finalRows = [...newRows];
-        while (finalRows.length < 8) {
+        while (finalRows.length < 1) {
           finalRows.push(createEmptySubjectRow(finalRows.length + 1, shift, semester, secKey));
         }
       } else {
@@ -927,7 +927,7 @@ export const HODEntryForm: React.FC<Props> = ({
       uploadedBy: currentUser?.name || '',
       remarks: '',
     }));
-    while (copiedRows.length < 8) {
+    while (copiedRows.length < 1) {
       copiedRows.push(createEmptySubjectRow(copiedRows.length + 1, shift, semester, section));
     }
     setSubjects(copiedRows);
@@ -2654,6 +2654,7 @@ export const HODEntryForm: React.FC<Props> = ({
                                 : 'bg-slate-100 text-slate-700 border-slate-300 focus:ring-slate-500'
                             }`}
                           >
+                            <option value="" disabled>-- Select Status --</option>
                             <option value="Uploaded">✓ Uploaded (Complete)</option>
                             <option value="In Progress">⏳ In Progress</option>
                             <option value="Pending">⚠ Pending (Not Uploaded)</option>
