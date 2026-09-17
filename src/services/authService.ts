@@ -1,6 +1,76 @@
-import { UserAccount, ActiveUserSession, UserRole } from '../types';
+import { UserAccount, ActiveUserSession, UserRole, AppTheme } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SecurityService } from './securityService';
+
+export interface ThemeDefinition {
+  id: AppTheme;
+  name: string;
+  category: 'day' | 'night' | 'special';
+  badge: string;
+  description: string;
+  primaryPreview: string;
+  accentPreview: string;
+  bgPreview: string;
+  isDark: boolean;
+}
+
+export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
+  {
+    id: 'emerald',
+    name: 'Institutional Emerald',
+    category: 'day',
+    badge: 'Official Day Mode',
+    description: 'Official MNS-UET green & slate daylight canvas with pristine readability.',
+    primaryPreview: 'bg-emerald-700',
+    accentPreview: 'bg-emerald-100 border-emerald-300',
+    bgPreview: 'bg-slate-50',
+    isDark: false,
+  },
+  {
+    id: 'midnight',
+    name: 'Executive Midnight',
+    category: 'night',
+    badge: 'Night Mode',
+    description: 'Deep midnight slate canvas with luminous emerald highlights, tailored for night grading.',
+    primaryPreview: 'bg-emerald-500',
+    accentPreview: 'bg-slate-800 border-slate-700',
+    bgPreview: 'bg-[#0b1320]',
+    isDark: true,
+  },
+  {
+    id: 'oxford',
+    name: 'Oxford Academic Navy',
+    category: 'special',
+    badge: 'Executive Council',
+    description: 'Prestigious collegiate royal navy & deep sapphire tones preferred by Deans & Council.',
+    primaryPreview: 'bg-blue-800',
+    accentPreview: 'bg-blue-50 border-blue-200',
+    bgPreview: 'bg-slate-100',
+    isDark: false,
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset Scholar',
+    category: 'day',
+    badge: 'Warm Daylight',
+    description: 'Warm stone & golden amber tones to reduce eye fatigue during long monitoring sessions.',
+    primaryPreview: 'bg-amber-700',
+    accentPreview: 'bg-amber-50 border-amber-200',
+    bgPreview: 'bg-[#faf8f5]',
+    isDark: false,
+  },
+  {
+    id: 'contrast',
+    name: 'Auditor High-Contrast',
+    category: 'special',
+    badge: 'Projector & Audit',
+    description: 'Ultra-crisp monochrome with high-contrast borders for projector presentations & audits.',
+    primaryPreview: 'bg-black',
+    accentPreview: 'bg-white border-black',
+    bgPreview: 'bg-white',
+    isDark: false,
+  },
+];
 
 const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v2';
 const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v2';
@@ -201,10 +271,10 @@ export class AuthService {
   }
 
   // Login handler with anti-hacking lockout, rate limiting, and email/username matching
-  public static login(
+  public static async login(
     usernameInput: string,
     passwordInput: string
-  ): { success: boolean; message: string; session?: ActiveUserSession; isLocked?: boolean; remainingSeconds?: number } {
+  ): Promise<{ success: boolean; message: string; session?: ActiveUserSession; isLocked?: boolean; remainingSeconds?: number }> {
     const cleanUser = SecurityService.sanitizeInput(usernameInput).trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
@@ -570,7 +640,7 @@ export class AuthService {
       avatarUrl?: string;
       oldPassword?: string;
       newPassword?: string;
-      themePreference?: 'light' | 'dark';
+      themePreference?: AppTheme | 'light' | 'dark';
       role?: UserRole;
       department?: string;
       program?: string;
@@ -682,39 +752,73 @@ export class AuthService {
     };
   }
 
-  // Initialize theme mode
-  public static initTheme(): 'light' | 'dark' {
+  // Normalize legacy and custom themes
+  public static normalizeTheme(theme: string | null | undefined): AppTheme {
+    if (!theme) return 'emerald';
+    if (theme === 'light') return 'emerald';
+    if (theme === 'dark') return 'midnight';
+    if (['emerald', 'midnight', 'oxford', 'sunset', 'contrast'].includes(theme)) {
+      return theme as AppTheme;
+    }
+    return 'emerald';
+  }
+
+  // Get metadata descriptor for theme
+  public static getThemeDefinition(theme: AppTheme): ThemeDefinition {
+    const normalized = this.normalizeTheme(theme);
+    return INSTITUTIONAL_THEMES.find((t) => t.id === normalized) || INSTITUTIONAL_THEMES[0];
+  }
+
+  // Get all available institutional themes
+  public static getAvailableThemes(): ThemeDefinition[] {
+    return INSTITUTIONAL_THEMES;
+  }
+
+  // Initialize theme mode on app boot
+  public static initTheme(): AppTheme {
     try {
       const activeSession = this.getCurrentSession();
-      const stored = localStorage.getItem('mnsuet_theme_mode') as 'light' | 'dark' | null;
-      const theme: 'light' | 'dark' = activeSession?.themePreference || stored || 'light';
+      const stored = localStorage.getItem('mnsuet_theme_mode');
+      const theme = this.normalizeTheme(activeSession?.themePreference || stored);
       this.applyTheme(theme);
       return theme;
     } catch (e) {
-      return 'light';
+      return 'emerald';
     }
   }
 
-  // Apply theme to HTML root element
-  public static applyTheme(theme: 'light' | 'dark'): void {
+  // Retrieve current active theme
+  public static getCurrentTheme(): AppTheme {
     if (typeof document !== 'undefined') {
-      if (theme === 'dark') {
+      const current = document.documentElement.getAttribute('data-theme');
+      if (current) return this.normalizeTheme(current);
+      if (document.documentElement.classList.contains('dark')) return 'midnight';
+    }
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('mnsuet_theme_mode') : null;
+    return this.normalizeTheme(stored);
+  }
+
+  // Apply theme to HTML root element
+  public static applyTheme(theme: AppTheme | 'light' | 'dark'): AppTheme {
+    const normalized = this.normalizeTheme(theme);
+    const def = this.getThemeDefinition(normalized);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', normalized);
+      if (def.isDark) {
         document.documentElement.classList.add('dark');
       } else {
         document.documentElement.classList.remove('dark');
       }
     }
     try {
-      localStorage.setItem('mnsuet_theme_mode', theme);
+      localStorage.setItem('mnsuet_theme_mode', normalized);
     } catch (e) {}
+    return normalized;
   }
 
-  // Toggle theme mode for active user / guest
-  public static toggleTheme(userId?: string): 'light' | 'dark' {
-    const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-    const newTheme: 'light' | 'dark' = isDark ? 'light' : 'dark';
-    this.applyTheme(newTheme);
-
+  // Set explicit theme with persistence & user profile sync
+  public static setTheme(newTheme: AppTheme | 'light' | 'dark', userId?: string): AppTheme {
+    const normalized = this.applyTheme(newTheme);
     const accounts = this.getAccounts();
     const session = this.getCurrentSession();
     const targetId = userId || session?.id;
@@ -722,22 +826,29 @@ export class AuthService {
     if (targetId) {
       const user = accounts.find((a) => a.id === targetId);
       if (user) {
-        user.themePreference = newTheme;
+        user.themePreference = normalized;
         this.saveAccounts(accounts);
       }
       if (session && session.id === targetId) {
-        session.themePreference = newTheme;
+        session.themePreference = normalized;
         this.setCurrentSession(session);
       }
     }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
-        new CustomEvent('mnsuet_theme_changed', { detail: { theme: newTheme } })
+        new CustomEvent('mnsuet_theme_changed', { detail: { theme: normalized } })
       );
     }
 
-    return newTheme;
+    return normalized;
+  }
+
+  // Quick toggle between Day (Emerald) and Night (Midnight)
+  public static toggleTheme(userId?: string): AppTheme {
+    const current = this.getCurrentTheme();
+    const newTheme: AppTheme = current === 'midnight' ? 'emerald' : 'midnight';
+    return this.setTheme(newTheme, userId);
   }
 
   // Remove all non-master accounts, leaving only official Admin and VC accounts

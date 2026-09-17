@@ -15,6 +15,9 @@ import {
   Area,
   LineChart,
   Line,
+  ScatterChart,
+  Scatter,
+  ZAxis,
 } from 'recharts';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SubmissionRecord, AcademicShift } from '../types';
@@ -40,11 +43,14 @@ import {
   ArrowRight,
   ExternalLink,
   Check,
+  Activity,
+  Map,
 } from 'lucide-react';
 
 interface Props {
   allRecords: SubmissionRecord[];
   currentSession: string;
+  activeSessions?: string[];
   selectedSemesterFilter?: string;
   selectedShiftFilter?: 'ALL' | AcademicShift;
   selectedSectionFilter?: string;
@@ -75,6 +81,7 @@ const COLORS = {
 export const VCAnalyticsCharts: React.FC<Props> = ({
   allRecords,
   currentSession,
+  activeSessions,
   selectedSemesterFilter = 'ALL',
   selectedShiftFilter = 'ALL',
   selectedSectionFilter = 'ALL',
@@ -83,8 +90,13 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
   onFilterBySection,
   onInspectProgram,
 }) => {
+  const effectiveSessions = useMemo(() => {
+    if (activeSessions && activeSessions.length > 0) return activeSessions;
+    return [currentSession || '2023'];
+  }, [activeSessions, currentSession]);
+
   const [chartViewTab, setChartViewTab] = useState<
-    'ALL' | 'DEPTS' | 'SECTIONS' | 'SEMESTERS' | 'REASONS' | 'STATS'
+    'ALL' | 'DEPTS' | 'SECTIONS' | 'SEMESTERS' | 'REASONS' | 'STATS' | 'HEATMAP' | 'TIMELINE'
   >('ALL');
 
   // Compute departmental performance stats, respecting active section filter if specified
@@ -95,10 +107,10 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
       let inProgress = 0;
       let total = 0;
 
-      // Filter all matching records in database
+      // Filter all matching records in database across active sessions
       const matching = allRecords.filter((r) => {
         if (r.department.trim() !== dept.name.trim()) return false;
-        if ((r.session || '2023') !== currentSession) return false;
+        if (!effectiveSessions.includes(r.session || '2023')) return false;
         if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return false;
         if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return false;
         if (
@@ -132,7 +144,13 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         Percentage: percentage,
       };
     });
-  }, [allRecords, currentSession, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter]);
+  }, [allRecords, effectiveSessions, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter]);
+
+  const globalPercentage = useMemo(() => {
+    const total = deptPerformanceData.reduce((acc, curr) => acc + curr.Total, 0);
+    const uploaded = deptPerformanceData.reduce((acc, curr) => acc + curr.Uploaded, 0);
+    return total > 0 ? Math.round((uploaded / total) * 100) : 0;
+  }, [deptPerformanceData]);
 
   // Shift Comparison: Morning vs Evening
   const shiftComparison = useMemo(() => {
@@ -142,7 +160,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
     let eveningTotal = 0;
 
     allRecords.forEach((r) => {
-      if (r.session === currentSession && r.subjects) {
+      if (effectiveSessions.includes(r.session || '2023') && r.subjects) {
         const sum = StorageService.calculateSummary(r.subjects);
         if (r.shift === 'Evening') {
           eveningUploaded += sum.uploaded;
@@ -165,7 +183,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
       eveningTotal,
       eveningRate,
     };
-  }, [allRecords, currentSession]);
+  }, [allRecords, effectiveSessions]);
 
   // Overall university result breakdown
   const statusDistributionData = useMemo(() => {
@@ -203,20 +221,22 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
               : [selectedShiftFilter];
 
           shifts.forEach((sh) => {
-            const sub = StorageService.getSubmission(
-              dept.name,
-              prog.name,
-              prog.degreeLevel || 'BS',
-              sh,
-              currentSession,
-              sem
-            );
-            if (sub && sub.subjects && sub.subjects.length > 0) {
-              const summary = StorageService.calculateSummary(sub.subjects);
-              semUploaded += summary.uploaded;
-              semPending += summary.pending;
-              semTotal += summary.totalSubjects;
-            }
+            effectiveSessions.forEach((sess) => {
+              const sub = StorageService.getSubmission(
+                dept.name,
+                prog.name,
+                prog.degreeLevel || 'BS',
+                sh,
+                sess,
+                sem
+              );
+              if (sub && sub.subjects && sub.subjects.length > 0) {
+                const summary = StorageService.calculateSummary(sub.subjects);
+                semUploaded += summary.uploaded;
+                semPending += summary.pending;
+                semTotal += summary.totalSubjects;
+              }
+            });
           });
         });
       });
@@ -231,14 +251,14 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         Completion: completion,
       };
     });
-  }, [allRecords, currentSession, selectedShiftFilter]);
+  }, [allRecords, effectiveSessions, selectedShiftFilter]);
 
   // Delay reasons / bottleneck analysis
   const delayReasonsData = useMemo(() => {
     const reasonCounts: Record<string, number> = {};
 
     allRecords.forEach((rec) => {
-      if (rec.session === currentSession && rec.subjects) {
+      if (effectiveSessions.includes(rec.session || '2023') && rec.subjects) {
         rec.subjects.forEach((subj) => {
           if (subj.status === 'Pending') {
             const reason = subj.remarks?.trim() || 'Awaiting Teacher Submission';
@@ -257,7 +277,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
 
     entries.sort((a, b) => b.count - a.count);
     return entries.slice(0, 6);
-  }, [allRecords, currentSession]);
+  }, [allRecords, effectiveSessions]);
 
   // Overall university KPI stats
   const aggregateKPIs = useMemo(() => {
@@ -300,12 +320,12 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
   const activeSections = useMemo(() => {
     const set = new Set<string>(['A', 'B']);
     allRecords.forEach((r) => {
-      if ((r.session || '2023') === currentSession && r.section) {
+      if (effectiveSessions.includes(r.session || '2023') && r.section) {
         set.add(r.section.trim().toUpperCase());
       }
     });
     return Array.from(set).sort();
-  }, [allRecords, currentSession]);
+  }, [allRecords, effectiveSessions]);
 
   const sectionMetrics = useMemo(() => {
     return activeSections.map((sec) => {
@@ -316,7 +336,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
       const progSet = new Set<string>();
 
       allRecords.forEach((r) => {
-        if ((r.session || '2023') !== currentSession) return;
+        if (!effectiveSessions.includes(r.session || '2023')) return;
         if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
         if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
 
@@ -346,7 +366,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         programsCount: progSet.size,
       };
     });
-  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter, activeSections]);
+  }, [allRecords, effectiveSessions, selectedShiftFilter, selectedSemesterFilter, activeSections]);
 
   const secAStats = useMemo(() => {
     return (
@@ -425,7 +445,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
 
       allRecords.forEach((r) => {
         if (r.department.trim() !== dept.name.trim()) return;
-        if ((r.session || '2023') !== currentSession) return;
+        if (!effectiveSessions.includes(r.session || '2023')) return;
         if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
         if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
 
@@ -457,7 +477,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         hasDisparity: (aTotal > 0 || bTotal > 0) && disparity >= 20,
       };
     });
-  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter]);
+  }, [allRecords, effectiveSessions, selectedShiftFilter, selectedSemesterFilter]);
 
   // Semester Trajectory by Section (Semesters 1 through 8)
   const semesterSectionTrajectoryData = useMemo(() => {
@@ -468,7 +488,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
       let bTotal = 0;
 
       allRecords.forEach((r) => {
-        if ((r.session || '2023') !== currentSession) return;
+        if (!effectiveSessions.includes(r.session || '2023')) return;
         if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
         if ((r.semester || '1') !== sem) return;
 
@@ -494,7 +514,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
         'Section B (Count)': bUploaded,
       };
     });
-  }, [allRecords, currentSession, selectedShiftFilter]);
+  }, [allRecords, effectiveSessions, selectedShiftFilter]);
 
   // Cohort Section Disparity Actionable Alert List
   const sectionDisparityAlerts = useMemo(() => {
@@ -516,7 +536,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
     const cohortGroups: Record<string, { secA?: SubmissionRecord; secB?: SubmissionRecord }> = {};
 
     allRecords.forEach((r) => {
-      if ((r.session || '2023') !== currentSession) return;
+      if (!effectiveSessions.includes(r.session || '2023')) return;
       if (selectedShiftFilter !== 'ALL' && (r.shift || 'Morning') !== selectedShiftFilter) return;
       if (selectedSemesterFilter !== 'ALL' && (r.semester || '1') !== selectedSemesterFilter) return;
 
@@ -565,7 +585,7 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
     });
 
     return alerts.sort((a, b) => b.disparity - a.disparity);
-  }, [allRecords, currentSession, selectedShiftFilter, selectedSemesterFilter]);
+  }, [allRecords, effectiveSessions, selectedShiftFilter, selectedSemesterFilter]);
 
   return (
     <div className="space-y-5">
@@ -648,6 +668,32 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
           >
             <Percent className="w-3.5 h-3.5" />
             <span>Statistical Metrics</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setChartViewTab('HEATMAP')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              chartViewTab === 'HEATMAP'
+                ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Map className="w-3.5 h-3.5" />
+            <span>Heatmap Grid</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setChartViewTab('TIMELINE')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              chartViewTab === 'TIMELINE'
+                ? 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Timeline</span>
           </button>
         </div>
 
@@ -1510,6 +1556,127 @@ export const VCAnalyticsCharts: React.FC<Props> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* HEATMAP TAB */}
+      {(chartViewTab === 'HEATMAP' || chartViewTab === 'ALL') && (
+        <div className="grid grid-cols-1 gap-4 mt-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Map className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Institutional Completion Heatmap
+                </h3>
+              </div>
+              <span className="text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full dark:bg-indigo-900/50 dark:text-indigo-300">
+                Density Overview
+              </span>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <div className="min-w-[800px]">
+                <div className="grid grid-cols-[150px_repeat(8,1fr)] gap-1 mb-2">
+                  <div className="text-xs font-bold text-slate-500">Department</div>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                    <div key={sem} className="text-xs font-bold text-slate-500 text-center">Sem {sem}</div>
+                  ))}
+                </div>
+                {UNIVERSITY_DEPARTMENTS.map(dept => (
+                  <div key={dept.name} className="grid grid-cols-[150px_repeat(8,1fr)] gap-1 mb-1 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 p-1 rounded transition-colors">
+                    <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate pr-2" title={dept.name}>
+                      {dept.name.substring(0, 22)}...
+                    </div>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => {
+                      // Calculate completion % for this dept and semester across all records
+                      const semRecords = allRecords.filter(r => r.department === dept.name && r.semester === String(sem));
+                      const totalSubjects = semRecords.reduce((acc, curr) => acc + (curr.subjects.length || 0), 0);
+                      const notApplicable = semRecords.reduce((acc, curr) => acc + ((curr.subjects.filter(s => s.status === 'Not Applicable').length) || 0), 0);
+                      const baseScore = Math.max(0, totalSubjects - notApplicable);
+                      const uploaded = semRecords.reduce((acc, curr) => acc + ((curr.subjects.filter(s => s.status === 'Uploaded').length) || 0), 0);
+                      
+                      let pct = 0;
+                      if (baseScore > 0) {
+                        pct = Math.round((uploaded / baseScore) * 100);
+                      }
+                      
+                      let bgColor = 'bg-slate-100 dark:bg-slate-800'; // No data / 0%
+                      let textColor = 'text-transparent';
+                      
+                      if (baseScore > 0) {
+                        textColor = 'text-white dark:text-white';
+                        if (pct >= 100) bgColor = 'bg-emerald-500';
+                        else if (pct >= 80) bgColor = 'bg-emerald-400';
+                        else if (pct >= 50) bgColor = 'bg-amber-400';
+                        else if (pct >= 25) bgColor = 'bg-orange-400';
+                        else if (pct > 0) bgColor = 'bg-rose-400';
+                        else bgColor = 'bg-rose-500';
+                      }
+
+                      return (
+                        <div 
+                          key={sem} 
+                          className={`h-8 rounded flex items-center justify-center text-[10px] font-bold transition-all hover:scale-105 cursor-crosshair ${bgColor} ${textColor}`}
+                          title={`${dept.name} - Sem ${sem}: ${pct}% Uploaded`}
+                        >
+                          {baseScore > 0 ? `${pct}%` : '-'}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TIMELINE TAB */}
+      {(chartViewTab === 'TIMELINE' || chartViewTab === 'ALL') && (
+        <div className="grid grid-cols-1 gap-4 mt-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  University Progress Trajectory
+                </h3>
+              </div>
+              <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/50 dark:text-blue-300">
+                Simulated Trajectory
+              </span>
+            </div>
+            
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={[
+                  { day: 'Day 1', progress: 5 },
+                  { day: 'Day 2', progress: 12 },
+                  { day: 'Day 3', progress: 28 },
+                  { day: 'Day 4', progress: 45 },
+                  { day: 'Day 5', progress: 62 },
+                  { day: 'Day 6', progress: Math.min(100, Math.max(70, globalPercentage - 5)) },
+                  { day: 'Today', progress: globalPercentage }
+                ]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorProgress" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 100]} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                    formatter={(value: any) => [`${value}%`, 'Completion']}
+                  />
+                  <Area type="monotone" dataKey="progress" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorProgress)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       )}
     </div>

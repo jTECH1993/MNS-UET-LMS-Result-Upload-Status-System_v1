@@ -185,7 +185,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     });
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
@@ -196,7 +196,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
     }
 
     setIsSubmitting(true);
-    const result = AuthService.login(loginUsername, loginPassword);
+    const result = await AuthService.login(loginUsername, loginPassword);
     setIsSubmitting(false);
 
     if (result.success && result.session) {

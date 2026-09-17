@@ -78,8 +78,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    reloadRecords();
+    // Initialize Theme on startup
+    const savedTheme = AuthService.getCurrentTheme();
+    AuthService.applyTheme(savedTheme);
+
+    StorageService.apiSyncSubmissions().then(() => {
+      reloadRecords();
+    });
     StorageService.logAccess('Accessed MNS-UET Result Portal', targetDept);
+    
+    // Live database data polling (Requirement 2 & 8)
+    const interval = setInterval(() => {
+      StorageService.apiSyncSubmissions().then(() => {
+        reloadRecords();
+      });
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Listen for storage changes across tabs

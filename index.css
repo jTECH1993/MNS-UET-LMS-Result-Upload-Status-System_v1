@@ -10,7 +10,38 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* 1. Institutional Emerald (Official Day Mode) */
+html[data-theme="emerald"] body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* 2. Executive Midnight (Night / Dark Mode) */
+html[data-theme="midnight"] body,
 html.dark body {
   background-color: #0b1320;
   color: #f1f5f9;
 }
+
+/* 3. Oxford Academic Navy Mode */
+html[data-theme="oxford"] body {
+  background-color: #f4f6f9;
+  color: #0f172a;
+}
+html[data-theme="oxford"] header.bg-white {
+  background-color: #f8fafc;
+  border-bottom-color: #cbd5e1;
+}
+
+/* 4. Sunset Scholar (Warm Amber / Daylight) */
+html[data-theme="sunset"] body {
+  background-color: #faf8f5;
+  color: #1c1917;
+}
+
+/* 5. Auditor High-Contrast Clarity */
+html[data-theme="contrast"] body {
+  background-color: #ffffff;
+  color: #050505;
+}
+

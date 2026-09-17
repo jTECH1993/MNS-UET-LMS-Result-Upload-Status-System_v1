@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SHIFTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
 import { SubmissionRecord, AcademicShift } from '../types';
@@ -79,7 +79,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   // Default to Semester 1 as requested by user so Vice Chancellor genuinely inspects Semester 1 data without clutter
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('1');
-  const [currentSession, setCurrentSession] = useState<string>(() => StorageService.getSelectedSession());
+  const [activeSessions, setActiveSessions] = useState<string[]>(() => StorageService.getActiveSessions());
+  const [currentSession, setCurrentSession] = useState<string>(() => {
+    const list = StorageService.getActiveSessions();
+    return list[0] || StorageService.getSelectedSession() || '2023';
+  });
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'PENDING'>('ALL');
@@ -90,6 +94,19 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
   const [dashboardViewMode, setDashboardViewMode] = useState<'ANALYTICS' | 'ROSTER' | 'COMBINED'>('COMBINED');
+
+  // Synchronize when active sessions change anywhere across the app
+  useEffect(() => {
+    const handleSessionsUpdate = (e: any) => {
+      const list = e.detail || StorageService.getActiveSessions();
+      if (Array.isArray(list) && list.length > 0) {
+        setActiveSessions(list);
+        setCurrentSession(list[0]);
+      }
+    };
+    window.addEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+    return () => window.removeEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+  }, []);
 
   // Per-row shift selection state (allows user/VC to toggle Morning/Evening on an individual program row)
   const [rowShiftOverrides, setRowShiftOverrides] = useState<Record<string, AcademicShift>>({});
@@ -121,7 +138,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     const list: UnifiedProgramRow[] = [];
 
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
-      const activeProgNames = StorageService.getSessionPrograms(dept.name, currentSession);
+      const activeProgNames = Array.from(
+        new Set(activeSessions.flatMap((s) => StorageService.getSessionPrograms(dept.name, s)))
+      );
 
       dept.programs.forEach((prog) => {
         const isSessionActive = activeProgNames.includes(prog.name);
@@ -138,13 +157,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           ACADEMIC_SEMESTERS.forEach((sem) => {
             semSectionMap[sem.id] = {};
 
-            // Find all matching submissions in database for this department, program, shift, session & semester
+            // Find all matching submissions in database for this department, program, shift, active sessions & semester
             const matchingRecords = allRecords.filter(
               (r) =>
                 r.department.trim() === dept.name.trim() &&
                 r.program.trim() === prog.name.trim() &&
                 (r.shift || 'Morning') === shiftName &&
-                (r.session || '2023') === currentSession &&
+                activeSessions.includes(r.session || '2023') &&
                 (r.semester || '1') === sem.id
             );
 
@@ -234,7 +253,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     });
 
     return list;
-  }, [recordMap, currentSession, rosterVersion, selectedSectionFilter]);
+  }, [allRecords, activeSessions, rosterVersion, selectedSectionFilter]);
 
   // Dynamic list of all sections present in system database (e.g. A, B, C, D)
   const availableSectionsInDb = useMemo(() => {
@@ -491,10 +510,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <button
                 type="button"
                 onClick={() => setIsSessionModalOpen(true)}
-                className="text-emerald-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-0.5 rounded text-xs font-semibold flex items-center gap-1 border border-slate-700 transition-colors cursor-pointer"
+                className="text-emerald-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-0.5 rounded text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                title="Manage and activate single or multiple academic sessions"
               >
                 <Calendar className="w-3 h-3 text-emerald-400" />
-                Session {currentSession}
+                <span>
+                  {activeSessions.length > 1
+                    ? `Sessions: ${activeSessions.join(', ')} (${activeSessions.length} Active)`
+                    : `Session ${currentSession}`}
+                </span>
               </button>
               <span className="text-emerald-400 font-bold text-xs bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
                 {selectedSemesterFilter === 'ALL'
@@ -696,6 +720,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <VCAnalyticsCharts
             allRecords={allRecords}
             currentSession={currentSession}
+            activeSessions={activeSessions}
             selectedSemesterFilter={selectedSemesterFilter}
             selectedShiftFilter={selectedShiftFilter}
             selectedSectionFilter={selectedSectionFilter}
@@ -1737,6 +1762,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         currentSession={currentSession}
         onSessionSelect={(newSess) => {
           setCurrentSession(newSess);
+          setActiveSessions(StorageService.getActiveSessions());
+        }}
+        onSessionChanged={(newSess) => {
+          setCurrentSession(newSess);
+          setActiveSessions(StorageService.getActiveSessions());
+        }}
+        onActiveSessionsChanged={(sessions) => {
+          setActiveSessions(sessions);
+          if (sessions.length > 0) setCurrentSession(sessions[0]);
         }}
       />
 

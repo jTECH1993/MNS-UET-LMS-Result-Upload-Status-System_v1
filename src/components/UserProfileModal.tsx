@@ -22,9 +22,10 @@ import {
   Layers,
   Plus,
   Star,
+  Palette,
 } from 'lucide-react';
-import { ActiveUserSession, UserRole } from '../types';
-import { AuthService } from '../services/authService';
+import { ActiveUserSession, UserRole, AppTheme } from '../types';
+import { AuthService, INSTITUTIONAL_THEMES, ThemeDefinition } from '../services/authService';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 
 interface Props {
@@ -48,13 +49,14 @@ export const UserProfileModal: React.FC<Props> = ({
   const [program, setProgram] = useState<string>('');
   const [assignedPrograms, setAssignedPrograms] = useState<string[]>([]);
   const [isMultiProgramCoord, setIsMultiProgramCoord] = useState<boolean>(false);
+  const [interDeptProgToAdd, setInterDeptProgToAdd] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [showCurrentPassword, setShowCurrentPassword] = useState<boolean>(false);
   const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
-  const [themePreference, setThemePreference] = useState<'light' | 'dark'>('light');
+  const [themePreference, setThemePreference] = useState<AppTheme>('emerald');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -112,10 +114,10 @@ export const UserProfileModal: React.FC<Props> = ({
       setSuccessMessage(null);
 
       // Current theme
-      const isDark =
-        typeof document !== 'undefined' &&
-        document.documentElement.classList.contains('dark');
-      setThemePreference(currentUser.themePreference || (isDark ? 'dark' : 'light'));
+      const currentTheme = currentUser.themePreference
+        ? AuthService.normalizeTheme(currentUser.themePreference)
+        : AuthService.getCurrentTheme();
+      setThemePreference(currentTheme);
     }
   }, [isOpen, currentUser]);
 
@@ -196,9 +198,9 @@ export const UserProfileModal: React.FC<Props> = ({
   };
 
   // Instant Theme Switcher
-  const handleThemeChange = (newTheme: 'light' | 'dark') => {
+  const handleThemeChange = (newTheme: AppTheme) => {
     setThemePreference(newTheme);
-    AuthService.applyTheme(newTheme);
+    AuthService.setTheme(newTheme, currentUser.id);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -387,48 +389,49 @@ export const UserProfileModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Section 2: Day / Night Mode Switcher */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2">
+          {/* Section 2: Visual Interface Theme & Day/Night Mode */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                {themePreference === 'dark' ? (
-                  <Moon className="w-4 h-4 text-indigo-400" />
-                ) : (
-                  <Sun className="w-4 h-4 text-amber-500" />
-                )}
-                Display Theme (Day / Night Mode)
+                <Palette className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                Visual Theme &amp; Day/Night Palette
               </label>
               <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Current: <strong className="text-emerald-700 dark:text-emerald-400 capitalize">{themePreference} Mode</strong>
+                Active: <strong className="text-emerald-700 dark:text-emerald-400">{AuthService.getThemeDefinition(themePreference).name}</strong>
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleThemeChange('light')}
-                className={`py-2 px-3 rounded-lg border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
-                  themePreference === 'light'
-                    ? 'bg-white text-slate-900 border-amber-400 shadow-sm ring-2 ring-amber-400/30'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700'
-                }`}
-              >
-                <Sun className="w-4 h-4 text-amber-500" />
-                <span>Day Mode (Light)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleThemeChange('dark')}
-                className={`py-2 px-3 rounded-lg border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
-                  themePreference === 'dark'
-                    ? 'bg-slate-900 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-500/30'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700'
-                }`}
-              >
-                <Moon className="w-4 h-4 text-indigo-400" />
-                <span>Night Mode (Dark)</span>
-              </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {INSTITUTIONAL_THEMES.map((th) => {
+                const isSelected = themePreference === th.id;
+                return (
+                  <button
+                    key={th.id}
+                    type="button"
+                    onClick={() => handleThemeChange(th.id)}
+                    className={`p-2.5 rounded-lg border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-50/80 dark:bg-emerald-950/70 border-emerald-600 dark:border-emerald-500 ring-2 ring-emerald-500/30 text-slate-900 dark:text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded-full mt-0.5 shrink-0 ${th.primaryPreview} shadow-xs`}></span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-xs truncate">{th.name}</span>
+                        {isSelected && (
+                          <span className="text-[9px] px-1 py-0.2 rounded font-extrabold bg-emerald-600 text-white shrink-0">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 block mt-0.5">
+                        {th.badge} &bull; {th.description}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -673,17 +676,77 @@ export const UserProfileModal: React.FC<Props> = ({
                             );
                           })}
                         </div>
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-[10px] font-bold text-teal-900 dark:text-teal-200">Selected:</span>
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-teal-900 dark:text-teal-200">Selected Coordinated Programs ({assignedPrograms.length}):</span>
                           {assignedPrograms.map((pName) => (
                             <span
                               key={pName}
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900 text-teal-950 dark:text-teal-100 border border-teal-300 dark:border-teal-700 inline-flex items-center gap-1"
+                              className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900 text-teal-950 dark:text-teal-100 border border-teal-300 dark:border-teal-700 inline-flex items-center gap-1.5"
                             >
                               {program === pName && <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />}
                               <span>{pName}</span>
+                              {assignedPrograms.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const updated = assignedPrograms.filter((p) => p !== pName);
+                                    setAssignedPrograms(updated);
+                                    if (program === pName && updated.length > 0) {
+                                      handleProgramSelect(updated[0]);
+                                    }
+                                  }}
+                                  className="text-teal-700 dark:text-teal-300 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 cursor-pointer rounded"
+                                  title={`Remove ${pName}`}
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              )}
                             </span>
                           ))}
+                        </div>
+
+                        {/* Cross-Department / Interdisciplinary Program Add Picker */}
+                        <div className="pt-2 border-t border-teal-200 dark:border-teal-800 space-y-1">
+                          <label className="block text-[10px] font-bold text-teal-900 dark:text-teal-200">
+                            + Add Degree Program from Another Department (Interdisciplinary Coordination)
+                          </label>
+                          <div className="flex gap-1.5">
+                            <select
+                              value={interDeptProgToAdd}
+                              onChange={(e) => setInterDeptProgToAdd(e.target.value)}
+                              className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-150 focus:ring-1 focus:ring-teal-500"
+                            >
+                              <option value="">-- Select from all university faculties --</option>
+                              {UNIVERSITY_DEPARTMENTS.map((d) => (
+                                <optgroup key={d.name} label={`${d.name} (${d.code})`}>
+                                  {d.programs.map((p) => (
+                                    <option
+                                      key={p.name}
+                                      value={p.name}
+                                      disabled={assignedPrograms.includes(p.name)}
+                                    >
+                                      {p.name} ({p.degreeLevel}) {assignedPrograms.includes(p.name) ? '• (Already Added)' : ''}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (interDeptProgToAdd && !assignedPrograms.includes(interDeptProgToAdd)) {
+                                  setAssignedPrograms((prev) => [...prev, interDeptProgToAdd]);
+                                  setInterDeptProgToAdd('');
+                                }
+                              }}
+                              disabled={!interDeptProgToAdd || assignedPrograms.includes(interDeptProgToAdd)}
+                              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shrink-0 flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Add</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

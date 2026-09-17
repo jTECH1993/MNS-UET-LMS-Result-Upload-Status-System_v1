@@ -20,10 +20,12 @@ import {
   Briefcase,
   Menu,
   X,
+  Palette,
 } from 'lucide-react';
-import { ActiveUserSession, MonitoringModuleId } from '../types';
+import { ActiveUserSession, MonitoringModuleId, AppTheme } from '../types';
 import { AuthService } from '../services/authService';
 import { MnsUetLogo } from './MnsUetLogo';
+import { ThemeSelectorModal } from './ThemeSelectorModal';
 
 interface Props {
   activeView: 'HOD' | 'VC';
@@ -135,6 +137,9 @@ export const Header: React.FC<Props> = ({
 
   const badgeInfo = getRoleBadge();
 
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState<boolean>(false);
+  const [currentTheme, setCurrentTheme] = useState<AppTheme>(() => AuthService.getCurrentTheme());
+
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof document !== 'undefined') {
       return document.documentElement.classList.contains('dark');
@@ -144,8 +149,12 @@ export const Header: React.FC<Props> = ({
 
   useEffect(() => {
     const handleThemeChange = (e: Event) => {
-      const customEvt = e as CustomEvent<{ theme: 'light' | 'dark' }>;
-      setIsDark(customEvt.detail?.theme === 'dark');
+      const customEvt = e as CustomEvent<{ theme: AppTheme }>;
+      if (customEvt.detail?.theme) {
+        setCurrentTheme(customEvt.detail.theme);
+        const def = AuthService.getThemeDefinition(customEvt.detail.theme);
+        setIsDark(def.isDark);
+      }
     };
     window.addEventListener('mnsuet_theme_changed', handleThemeChange);
     return () => {
@@ -155,7 +164,9 @@ export const Header: React.FC<Props> = ({
 
   const handleToggleTheme = () => {
     const newTheme = AuthService.toggleTheme(currentUser.id);
-    setIsDark(newTheme === 'dark');
+    setCurrentTheme(newTheme);
+    const def = AuthService.getThemeDefinition(newTheme);
+    setIsDark(def.isDark);
   };
 
   const handleLogoutClick = (e?: React.MouseEvent) => {
@@ -472,13 +483,26 @@ export const Header: React.FC<Props> = ({
             </button>
           )}
 
-          {/* Day / Night Toggle In Header */}
+          {/* Visual Theme Palette Modal Trigger */}
+          <button
+            id="btn-main-theme-palette"
+            type="button"
+            onClick={() => setIsThemeModalOpen(true)}
+            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+            title={`Interface Theme: ${AuthService.getThemeDefinition(currentTheme).name}. Click to customize day/night mode and institutional palettes.`}
+          >
+            <Palette className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+            <span className="hidden xl:inline">{AuthService.getThemeDefinition(currentTheme).name}</span>
+            <span className="xl:hidden">Theme</span>
+          </button>
+
+          {/* Quick Day / Night Toggle In Header */}
           <button
             id="btn-main-theme-toggle"
             type="button"
             onClick={handleToggleTheme}
             className="p-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-700 shadow-2xs cursor-pointer transition-colors"
-            title={isDark ? 'Switch to Day Mode' : 'Switch to Night Mode'}
+            title={isDark ? 'Quick switch to Day Mode (Emerald)' : 'Quick switch to Night Mode (Midnight)'}
           >
             {isDark ? (
               <Sun className="w-4 h-4 text-amber-500" />
@@ -641,6 +665,18 @@ export const Header: React.FC<Props> = ({
                 Database: Admin
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsThemeModalOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              className="py-2 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer col-span-2"
+            >
+              <Palette className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Visual Theme: {AuthService.getThemeDefinition(currentTheme).name}</span>
+            </button>
           </div>
 
           {/* Mobile Sign Out */}
@@ -654,6 +690,14 @@ export const Header: React.FC<Props> = ({
           </button>
         </div>
       )}
+
+      {/* Visual Theme Selector Modal */}
+      <ThemeSelectorModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        currentUser={currentUser}
+        onThemeSelected={(t) => setCurrentTheme(t)}
+      />
     </header>
   );
 };

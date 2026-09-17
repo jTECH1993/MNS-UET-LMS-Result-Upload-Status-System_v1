@@ -137,7 +137,7 @@ export const HODEntryForm: React.FC<Props> = ({
     if (onlySessionFilter) {
       const activeNames = StorageService.getSessionPrograms(department, session);
       const filtered = dept.programs.filter((p) => activeNames.includes(p.name));
-      return filtered.length > 0 ? filtered : dept.programs;
+      return filtered;
     }
     return dept.programs;
   }, [department, session, onlySessionFilter, rosterVersion]);
@@ -909,7 +909,7 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   // Save / Update handler
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!department || !program) {
       showFeedback('warning', 'Please select both Department and Program before saving.');
       return;
@@ -944,7 +944,7 @@ export const HODEntryForm: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    const result = StorageService.saveSubmission(recordToSave);
+    const result = await StorageService.saveSubmission(recordToSave);
     setIsSaving(false);
 
     if (result.success) {
@@ -953,9 +953,9 @@ export const HODEntryForm: React.FC<Props> = ({
       setSubjects(activeRows);
       showFeedback(
         'success',
-        result.isUpdate
-          ? `Record updated successfully for ${program} [${shift} Shift – Semester ${semester} – Section ${section}] (${activeRows.length} subjects). Changes saved to database.`
-          : `New record saved successfully for ${program} [${shift} Shift – Semester ${semester} – Section ${section}] (${activeRows.length} subjects) in database.`
+        result.isUpdate ? "Record updated successfully." : "Record created successfully."
+           
+          
       );
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     }
@@ -971,8 +971,8 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift/section record)
-  const handleDeleteConfirm = () => {
-    const success = StorageService.deleteSubmission(
+  const handleDeleteConfirm = async () => {
+    const success = await StorageService.deleteSubmission(
       department,
       program,
       degreeLevel,
@@ -988,7 +988,7 @@ export const HODEntryForm: React.FC<Props> = ({
       setIsExistingRecord(false);
       setLastSavedTime(null);
       setSubjects(createInitialBlankRows(1, shift, semester, section));
-      showFeedback('success', `Record permanently deleted from database for ${program} [${shift} Shift – Semester ${semester} – Section ${section}].`);
+      showFeedback('success', 'Record deleted successfully.');
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     } else {
       showFeedback('warning', 'No saved database record was found to delete.');

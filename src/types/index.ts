@@ -43,6 +43,15 @@ export type UserRole =
   | 'LECTURER'
   | 'VISITING_LECTURER';
 
+export type AppTheme = 
+  | 'emerald'   // Institutional Emerald & Slate (Default Day Mode)
+  | 'midnight'  // Executive Midnight (Dark Mode)
+  | 'oxford'    // Oxford Academic Navy & Royal Blue
+  | 'sunset'    // Sunset Scholar Warm Amber
+  | 'contrast'  // High-Contrast Audit Clarity
+  | 'light'     // Alias for emerald
+  | 'dark';     // Alias for midnight
+
 export interface UserAccount {
   id: string;
   username: string; // e.g. "admin", "VC", "hod_cs", or "coordinator"
@@ -60,7 +69,7 @@ export interface UserAccount {
   isLocked?: boolean;
   lockoutUntil?: string;
   avatarUrl?: string; // base64 or photo URL
-  themePreference?: 'light' | 'dark';
+  themePreference?: AppTheme;
 }
 
 export interface ActiveUserSession {
@@ -75,7 +84,7 @@ export interface ActiveUserSession {
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   token?: string;
   avatarUrl?: string;
-  themePreference?: 'light' | 'dark';
+  themePreference?: AppTheme;
 }
 
 export interface AuditChangeDetail {

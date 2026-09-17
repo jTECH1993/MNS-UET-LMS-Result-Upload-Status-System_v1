@@ -23,6 +23,7 @@ const ACCESS_LOG_KEY = 'mnsuet_lms_access_logs_v2';
 const SESSION_ROSTER_KEY = 'mnsuet_session_active_roster_v4';
 const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v1';
 const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v1';
+const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v2';
 const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v1';
 
 
@@ -73,10 +74,70 @@ export class StorageService {
   public static setSelectedSession(session: string): void {
     try {
       localStorage.setItem(CURRENT_SESSION_KEY, session);
+      // Ensure the selected session is included in active sessions
+      const currentActive = this.getActiveSessions();
+      if (!currentActive.includes(session)) {
+        this.setActiveSessions([session, ...currentActive]);
+      }
       this.logAccess(`Switched active academic session to Session ${session}`);
     } catch (e) {
       console.error('Could not save selected session', e);
     }
+  }
+
+  // Multi-Session Management: Allows activating more than one session at a time
+  public static getActiveSessions(): string[] {
+    try {
+      const stored = localStorage.getItem(ACTIVE_SESSIONS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read active sessions', e);
+    }
+    const single = this.getSelectedSession();
+    return [single || '2023'];
+  }
+
+  public static setActiveSessions(sessions: string[]): void {
+    try {
+      const clean = Array.from(new Set(sessions.map((s) => s.trim()).filter(Boolean)));
+      const toSave = clean.length > 0 ? clean : ['2023'];
+      localStorage.setItem(ACTIVE_SESSIONS_KEY, JSON.stringify(toSave));
+      if (toSave.length > 0) {
+        localStorage.setItem(CURRENT_SESSION_KEY, toSave[0]);
+      }
+      this.logAccess(`Updated active academic sessions: [${toSave.join(', ')}]`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: toSave }));
+      }
+    } catch (e) {
+      console.error('Could not save active sessions', e);
+    }
+  }
+
+  public static toggleActiveSession(session: string): string[] {
+    const current = this.getActiveSessions();
+    let updated: string[];
+    if (current.includes(session)) {
+      // Keep at least 1 session active
+      if (current.length > 1) {
+        updated = current.filter((s) => s !== session);
+      } else {
+        updated = current;
+      }
+    } else {
+      updated = [...current, session];
+    }
+    this.setActiveSessions(updated);
+    return updated;
+  }
+
+  public static isSessionActive(session: string): boolean {
+    return this.getActiveSessions().includes(session);
   }
 
   // Session Enrolled Programs Management (Generic per session or department)
@@ -293,73 +354,72 @@ export class StorageService {
     return matched || null;
   }
 
-  public static saveSubmission(record: SubmissionRecord): { success: boolean; isUpdate: boolean } {
-    const store = this.getStore();
-    const sec = (record.section || 'A').trim().toUpperCase();
-    const key = getRecordKey(
+  public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean }> {
+    const activeUser = this.getActiveUser();
+    const isUpdate = !!this.getSubmission(
       record.department,
       record.program,
       record.degreeLevel,
       record.shift || 'Morning',
       record.session || '2023',
       record.semester || '1',
-      sec
+      record.section || 'A'
     );
-
-    // Clean up any legacy duplicate key if existing for Section A
-    if (sec === 'A') {
-      const legKey = getLegacyRecordKey(
+    
+    try {
+      const res = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...record, accessedBy: activeUser.name, userDesignation: activeUser.designation })
+      });
+      if (!res.ok) throw new Error('Failed to save to database');
+      
+      // Update local store to reflect changes instantly (optional but good for sync)
+      const sec = (record.section || 'A').trim().toUpperCase();
+      const key = getRecordKey(
         record.department,
         record.program,
         record.degreeLevel,
         record.shift || 'Morning',
         record.session || '2023',
-        record.semester || '1'
+        record.semester || '1',
+        sec
       );
-      if (legKey !== key && store[legKey]) {
-        delete store[legKey];
+      const store = this.getStore();
+      store[key] = {
+        ...record,
+        id: key,
+        section: sec,
+        shift: record.shift || 'Morning',
+        session: (record.session || '2023').trim(),
+        semester: (record.semester || '1').trim(),
+        accessedBy: activeUser.name,
+        userDesignation: activeUser.designation,
+        updatedAt: new Date().toISOString(),
+        createdAt: isUpdate ? store[key]?.createdAt || new Date().toISOString() : new Date().toISOString(),
+      };
+      this.setStore(store);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: store[key] } }));
       }
+
+      this.logAccess(
+        isUpdate
+          ? `Updated result upload status for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`
+          : `Submitted new LMS record for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`,
+        record.department,
+        record.program
+      );
+
+      return { success: true, isUpdate };
+    } catch (e) {
+      console.error(e);
+      throw e;
     }
-
-    const isUpdate = Boolean(store[key]);
-    const activeUser = this.getActiveUser();
-
-    const recordToSave: SubmissionRecord = {
-      ...record,
-      id: key,
-      section: sec,
-      shift: record.shift || 'Morning',
-      session: (record.session || '2023').trim(),
-      semester: (record.semester || '1').trim(),
-      accessedBy: activeUser.name || record.accessedBy || 'University HOD',
-      userDesignation: activeUser.designation || record.userDesignation || 'HOD / Coordinator',
-      updatedAt: new Date().toISOString(),
-      createdAt: isUpdate
-        ? store[key].createdAt || new Date().toISOString()
-        : new Date().toISOString(),
-    };
-
-    store[key] = recordToSave;
-    this.setStore(store);
-
-    // Real-time synchronization event across app components
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: recordToSave } }));
-    }
-
-    // Audit log
-    this.logAccess(
-      isUpdate
-        ? `Updated result upload status for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`
-        : `Submitted new LMS record for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses)`,
-      record.department,
-      record.program
-    );
-
-    return { success: true, isUpdate };
   }
 
-  public static deleteSubmission(
+  public static async deleteSubmission(
     department: string,
     program: string,
     degreeLevel?: string,
@@ -367,31 +427,61 @@ export class StorageService {
     session: string = '2023',
     semester: string = '1',
     section: string = 'A'
-  ): boolean {
+  ): Promise<boolean> {
     const sec = (section || 'A').trim().toUpperCase();
     const key = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
-    const store = this.getStore();
-    let deleted = false;
-    if (store[key]) {
-      delete store[key];
-      deleted = true;
-    }
-    if (sec === 'A') {
-      const legKey = getLegacyRecordKey(department, program, degreeLevel, shift, session, semester);
-      if (store[legKey]) {
-        delete store[legKey];
+    
+    try {
+      const res = await fetch(`/api/submissions/${key}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete from database');
+      
+      const store = this.getStore();
+      let deleted = false;
+      if (store[key]) {
+        delete store[key];
         deleted = true;
       }
-    }
-    if (deleted) {
-      this.setStore(store);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      if (sec === 'A') {
+        const legKey = getLegacyRecordKey(department, program, degreeLevel, shift, session, semester);
+        if (store[legKey]) {
+          delete store[legKey];
+          deleted = true;
+        }
       }
-      this.logAccess(`Permanently deleted LMS record for ${program} [${shift} - Sec ${sec}]`, department, program);
-      return true;
+      if (deleted) {
+        this.setStore(store);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+        }
+        this.logAccess(`Permanently deleted LMS record for ${program} [${shift} - Sec ${sec}]`, department, program);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error(e);
+      return false;
     }
-    return false;
+  }
+
+  public static async apiSyncSubmissions(): Promise<void> {
+    try {
+      const res = await fetch('/api/submissions');
+      if (res.ok) {
+        const records = await res.json();
+        const store: Record<string, SubmissionRecord> = {};
+        records.forEach((r: any) => {
+          store[r.id] = r;
+        });
+        this.setStore(store);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+        }
+      }
+    } catch (e) {
+      console.error('Sync failed', e);
+    }
   }
 
   public static getAllSubmissions(): SubmissionRecord[] {
