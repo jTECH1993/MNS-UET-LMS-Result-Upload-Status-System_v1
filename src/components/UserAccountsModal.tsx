@@ -29,6 +29,18 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    const handleAccountsUpdate = () => {
+      if (isOpen) loadAccounts();
+    };
+    window.addEventListener('mnsuet_accounts_updated', handleAccountsUpdate);
+    window.addEventListener('mnsuet_auth_changed', handleAccountsUpdate);
+    return () => {
+      window.removeEventListener('mnsuet_accounts_updated', handleAccountsUpdate);
+      window.removeEventListener('mnsuet_auth_changed', handleAccountsUpdate);
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const executeDelete = (id: string, username: string) => {

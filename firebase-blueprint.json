@@ -1,0 +1,24 @@
+{
+  "collections": [
+    {
+      "name": "records",
+      "description": "LMS Upload Records"
+    },
+    {
+      "name": "config",
+      "description": "Global config (deadline, sessions, roster)"
+    },
+    {
+      "name": "users",
+      "description": "User accounts"
+    },
+    {
+      "name": "logs",
+      "description": "Audit and access logs"
+    },
+    {
+      "name": "requisitions",
+      "description": "Work on demand requisitions"
+    }
+  ]
+}

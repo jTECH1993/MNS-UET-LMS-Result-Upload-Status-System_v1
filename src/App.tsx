@@ -83,6 +83,7 @@ export default function App() {
     const savedTheme = AuthService.getCurrentTheme();
     AuthService.applyTheme(savedTheme);
 
+    StorageService.initFirebaseSync();
     StorageService.apiSyncSubmissions().then(() => {
       reloadRecords();
     });
