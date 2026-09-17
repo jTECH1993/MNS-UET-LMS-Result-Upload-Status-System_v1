@@ -6,7 +6,6 @@ import { FirebaseSchemaModal } from './components/FirebaseSchemaModal';
 import { UserIdentificationModal } from './components/UserIdentificationModal';
 import { UserAccountsModal } from './components/UserAccountsModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { SplashScreen } from './components/SplashScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
@@ -26,12 +25,8 @@ import {
   BookOpen,
   Briefcase,
 } from 'lucide-react';
-import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
-  // Splash screen state: show once on fresh launch
-  const [showSplash, setShowSplash] = useState<boolean>(true);
-
   // Authenticated user session
   const [currentUser, setCurrentUser] = useState<ActiveUserSession | null>(() =>
     AuthService.getCurrentSession()
@@ -199,11 +194,6 @@ export default function App() {
     setActiveModule('LMS');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // If splash screen is still active, show it
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  }
 
   // If no user is logged in, show the Authentication screen
   if (!currentUser) {
@@ -554,9 +544,6 @@ export default function App() {
           isAdmin={isAdmin}
         />
       )}
-
-      {/* Vercel Analytics */}
-      <Analytics />
     </div>
   );
 }

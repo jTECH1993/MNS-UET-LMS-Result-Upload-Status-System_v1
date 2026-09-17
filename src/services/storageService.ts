@@ -413,7 +413,9 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
           await FirebaseStore.deleteSubmission(record.id).catch(console.error);
         }
       }
+      this.setStore({});
       localStorage.setItem('mnsuet_submission_records_v99', JSON.stringify([]));
+      this.logAccess('Purged all LMS submission records to pristine fresh state (accounts preserved)');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
@@ -476,12 +478,8 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
   }
 
   // Clear all data to ensure 100% clean database (Zero Dummy Data Guarantee)
-  public static clearAllData(): void {
-    this.setStore({});
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
-    }
-    this.logAccess('Purged database to clean state (zero records)');
+  public static async clearAllData(): Promise<void> {
+    await this.wipeAllSubmissions();
   }
 
   // Diagnostic & Connectivity verification test

@@ -102,8 +102,8 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
     reader.readAsText(file);
   };
 
-  const handleClearDatabase = () => {
-    StorageService.clearAllData();
+  const handleClearDatabase = async () => {
+    await StorageService.clearAllData();
     setAccessLogs(StorageService.getAccessLogs());
     setShowConfirmClearDb(false);
     window.location.reload();

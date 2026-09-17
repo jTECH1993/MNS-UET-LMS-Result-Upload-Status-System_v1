@@ -9,6 +9,19 @@ import { VCAnalyticsCharts } from './VCAnalyticsCharts';
 import { VCAuditFeed } from './VCAuditFeed';
 import { MnsUetLogo } from './MnsUetLogo';
 import { DeadlineBanner } from './DeadlineBanner';
+import { DepartmentCompletionHeatmap } from './DepartmentCompletionHeatmap';
+import { DepartmentDrillDownModal } from './DepartmentDrillDownModal';
+import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
+import { ActionRequiredPanel } from './ActionRequiredPanel';
+import { SectionPerformanceMatrix } from './SectionPerformanceMatrix';
+import { DeadlineAgingChart } from './DeadlineAgingChart';
+import {
+  VCAnalyticsService,
+  DepartmentDimension,
+  ProgramDimension,
+  SectionBreakdown,
+  ActionRequiredException,
+} from '../services/vcAnalyticsService';
 import {
   Building2,
   CheckCircle2,
@@ -98,7 +111,44 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
-  const [dashboardViewMode, setDashboardViewMode] = useState<'ANALYTICS' | 'ROSTER' | 'COMBINED' | 'ACTIVITY'>('COMBINED');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ANALYTICS' | 'ROSTER' | 'COMBINED' | 'ACTIVITY'>('COMMAND_CENTER');
+
+  // Executive Hierarchy & Drill-Down State
+  const [selectedDrillDownDept, setSelectedDrillDownDept] = useState<DepartmentDimension | null>(null);
+  const [isDeptDrillDownOpen, setIsDeptDrillDownOpen] = useState<boolean>(false);
+  const [selectedDrillDownProgram, setSelectedDrillDownProgram] = useState<ProgramDimension | null>(null);
+  const [isProgramDrillDownOpen, setIsProgramDrillDownOpen] = useState<boolean>(false);
+
+  // Decoupled Academic Hierarchy Engine (One-to-many Department -> Programs -> Sections -> Courses)
+  const hierarchy = useMemo(() => {
+    return VCAnalyticsService.buildAcademicHierarchy({
+      allRecords,
+      currentSession,
+      semesterFilter: selectedSemesterFilter,
+      shiftFilter: selectedShiftFilter,
+      sectionFilter: selectedSectionFilter,
+    });
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter]);
+
+  const handleSelectException = (exc: ActionRequiredException) => {
+    const dept = hierarchy.departments.find(
+      (d) => d.code === exc.deptCode || d.name.toLowerCase() === exc.department.toLowerCase()
+    );
+    if (dept) {
+      if (exc.program) {
+        const prog = dept.programs.find(
+          (p) => p.program.toLowerCase() === exc.program?.toLowerCase()
+        );
+        if (prog) {
+          setSelectedDrillDownProgram(prog);
+          setIsProgramDrillDownOpen(true);
+          return;
+        }
+      }
+      setSelectedDrillDownDept(dept);
+      setIsDeptDrillDownOpen(true);
+    }
+  };
   useEffect(() => {
     const handleSessionsUpdate = (e: any) => {
       const list = e.detail || StorageService.getActiveSessions();
@@ -700,13 +750,26 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </button>
       </div>
 
-      {/* Executive View Selector (Analytics Graphs vs Roster Table vs Combined) */}
+      {/* Executive View Selector (Command Center vs Analytics vs Roster vs Activity) */}
       <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
           <BarChart3 className="w-4 h-4 text-emerald-600" />
           <span>Dashboard Display Mode:</span>
         </div>
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <button
+            id="btn-vc-mode-command-center"
+            type="button"
+            onClick={() => setDashboardViewMode('COMMAND_CENTER')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'COMMAND_CENTER'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Command Center</span>
+          </button>
           <button
             id="btn-vc-mode-combined"
             type="button"
@@ -749,26 +812,219 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
-      {/* Analytics Charts Section (Rendered in COMBINED or ANALYTICS modes) */}
-      {(dashboardViewMode === 'COMBINED' || dashboardViewMode === 'ANALYTICS') && (
-        <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-emerald-600" />
-              <div>
-                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                  Executive Intelligence &amp; Multi-Graph Analytics
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Comprehensive performance charts: Departmental uploads, status breakdown, semester trajectory &amp; delay root-causes
-                </p>
+      {/* VC Command Center (The Unified Command Center requested by VC) */}
+      {(dashboardViewMode === 'COMMAND_CENTER' || dashboardViewMode === 'COMBINED') && (
+        <div className="space-y-6">
+          {/* Command Center Quick Filters Bar */}
+          <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-xl border border-slate-800 shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-sm">
+                  🎓
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-100">
+                    LMS RESULT MONITORING COMMAND CENTER
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Direct executive oversight with decoupled academic hierarchy and exception surfacing
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Sync
+                </span>
               </div>
             </div>
-            <span className="text-[11px] font-bold bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-md">
-              MNS-UET Central Analytics
-            </span>
+
+            {/* Filters Row: Session ▼ Semester ▼ Shift/Faculty ▼ Department ▼ Section ▼ */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Session
+                </label>
+                <select
+                  value={currentSession}
+                  onChange={(e) => setCurrentSession(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  {activeSessions.map((s) => (
+                    <option key={s} value={s}>
+                      Session {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Semester
+                </label>
+                <select
+                  value={selectedSemesterFilter}
+                  onChange={(e) => setSelectedSemesterFilter(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="ALL">All Semesters (1–8)</option>
+                  {ACADEMIC_SEMESTERS.map((sem) => (
+                    <option key={sem.id} value={sem.id}>
+                      {sem.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Faculty / Shift
+                </label>
+                <select
+                  value={selectedShiftFilter}
+                  onChange={(e) => setSelectedShiftFilter(e.target.value as any)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="ALL">All Shifts (M/E)</option>
+                  {ACADEMIC_SHIFTS.map((sh) => (
+                    <option key={sh.id} value={sh.id}>
+                      {sh.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Department
+                </label>
+                <select
+                  value={selectedDeptFilter}
+                  onChange={(e) => setSelectedDeptFilter(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="ALL">All Departments</option>
+                  {UNIVERSITY_DEPARTMENTS.map((d) => (
+                    <option key={d.code} value={d.name}>
+                      {d.code} - {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Section
+                </label>
+                <select
+                  value={selectedSectionFilter}
+                  onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="ALL">All Sections (A–D)</option>
+                  <option value="A">Section A</option>
+                  <option value="B">Section B</option>
+                  <option value="C">Section C</option>
+                  <option value="D">Section D</option>
+                </select>
+              </div>
+            </div>
           </div>
 
+          {/* High-Level Executive KPIs: Overall (82.4%), Departments (18/24), Programs (47/63), Pending (29) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Overall University Completion
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
+                  {hierarchy.overallCompletionRate}%
+                </span>
+                <span className="text-xs font-bold text-emerald-600">Verified</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
+                <div
+                  className="bg-emerald-600 h-full rounded-full transition-all"
+                  style={{ width: `${hierarchy.overallCompletionRate}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Active Departments
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
+                  {hierarchy.completedDepartments} / {hierarchy.totalDepartments}
+                </span>
+                <span className="text-xs font-bold text-indigo-600">100% Done</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                Decoupled hierarchy tracks all academic entities
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Degree Programs
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
+                  {hierarchy.activePrograms} / {hierarchy.totalPrograms}
+                </span>
+                <span className="text-xs font-bold text-emerald-600">Submitting</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                Across {hierarchy.totalDepartments} university departments
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50/20 dark:bg-rose-950/10 shadow-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                Pending Courses
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                  {hierarchy.pendingCourses}
+                </span>
+                <span className="text-xs font-bold text-rose-600">Require Action</span>
+              </div>
+              <p className="text-[11px] text-rose-600/80 mt-2">
+                Awaiting instructor grades upload into LMS
+              </p>
+            </div>
+          </div>
+
+          {/* Department Completion Heatmap (The #1 requested VC graph) */}
+          <DepartmentCompletionHeatmap
+            departments={hierarchy.departments}
+            onSelectDepartment={(dept) => {
+              setSelectedDrillDownDept(dept);
+              setIsDeptDrillDownOpen(true);
+            }}
+          />
+
+          {/* Action Required Exceptions Surfacing Panel */}
+          <ActionRequiredPanel
+            exceptions={hierarchy.exceptions}
+            onSelectException={handleSelectException}
+          />
+
+          {/* Section Performance Matrix (Cohort Heatmap) */}
+          <SectionPerformanceMatrix
+            departments={hierarchy.departments}
+            onSelectProgramSection={(prog) => {
+              setSelectedDrillDownProgram(prog);
+              setIsProgramDrillDownOpen(true);
+            }}
+          />
+
+          {/* Deadline Monitoring / Aging Risk Chart */}
+          <DeadlineAgingChart risk={hierarchy.agingRisk} />
+
+          {/* Core Analytics Visualizations (Status Distribution Donut, Program Grouped Bar, Trend) */}
           <VCAnalyticsCharts
             allRecords={allRecords}
             currentSession={currentSession}
@@ -776,33 +1032,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedSemesterFilter={selectedSemesterFilter}
             selectedShiftFilter={selectedShiftFilter}
             selectedSectionFilter={selectedSectionFilter}
-            onFilterByDepartment={(dept) => {
-              setSelectedDeptFilter(dept);
-              setStatusFilter('ALL');
-              setOnlyGenuineSubmissions(false);
-              setTimeout(() => {
-                const el = document.getElementById('lms-roster-section');
-                if (el) {
-                  const y = el.getBoundingClientRect().top + window.scrollY - 40;
-                  window.scrollTo({ top: y, behavior: 'smooth' });
-                }
-              }, 100);
+            onSelectDepartment={(dept) => {
+              setSelectedDrillDownDept(dept);
+              setIsDeptDrillDownOpen(true);
             }}
-            onFilterByStatus={(status) => {
-              setStatusFilter(status);
-              setSelectedDeptFilter('ALL');
-              setOnlyGenuineSubmissions(false);
-              setTimeout(() => {
-                const el = document.getElementById('lms-roster-section');
-                if (el) {
-                  const y = el.getBoundingClientRect().top + window.scrollY - 40;
-                  window.scrollTo({ top: y, behavior: 'smooth' });
-                }
-              }, 100);
-            }}
-            onFilterBySection={(section) => setSelectedSectionFilter(section)}
-            onInspectProgram={(dept, prog, shift, sess, sem, sec) => {
-              onSelectProgramToEdit(dept, prog, shift, sess, sem, sec);
+            onSelectProgram={(prog) => {
+              setSelectedDrillDownProgram(prog);
+              setIsProgramDrillDownOpen(true);
             }}
           />
         </div>
@@ -1920,6 +2156,36 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           totalUploadedSubjects: stats.totalUploadedAcrossUni,
           totalPendingSubjects: stats.totalPendingAcrossUni,
           uploadPercentage: stats.uniUploadPercentage,
+        }}
+      />
+
+      {/* Department Drill-Down Modal */}
+      <DepartmentDrillDownModal
+        isOpen={isDeptDrillDownOpen}
+        onClose={() => setIsDeptDrillDownOpen(false)}
+        department={selectedDrillDownDept}
+        onSelectProgram={(prog) => {
+          setSelectedDrillDownProgram(prog);
+          setIsProgramDrillDownOpen(true);
+        }}
+      />
+
+      {/* Program & Section Drill-Down Modal */}
+      <ProgramSectionDrillDownModal
+        isOpen={isProgramDrillDownOpen}
+        onClose={() => setIsProgramDrillDownOpen(false)}
+        program={selectedDrillDownProgram}
+        onEditProgramSubmission={(dept, prog, sec) => {
+          setIsProgramDrillDownOpen(false);
+          setIsDeptDrillDownOpen(false);
+          onSelectProgramToEdit(
+            dept,
+            prog,
+            selectedShiftFilter === 'ALL' ? 'Morning' : selectedShiftFilter,
+            currentSession,
+            selectedSemesterFilter === 'ALL' ? '1' : selectedSemesterFilter,
+            sec
+          );
         }}
       />
     </div>

@@ -73,6 +73,37 @@ export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
   },
 ];
 
+export const SecurityHelper = {
+  isHashed: (str: string): boolean => {
+    if (!str || typeof str !== 'string') return false;
+    return str.startsWith('$2a$') || str.startsWith('$2b$') || str.startsWith('$2y$');
+  },
+  verifyPassword: (input: string, stored: string): boolean => {
+    if (!input || !stored) return false;
+    try {
+      if (SecurityHelper.isHashed(stored)) {
+        return bcrypt.compareSync(input, stored);
+      }
+      return input === stored;
+    } catch (e) {
+      console.error('Password verification error', e);
+      return input === stored;
+    }
+  },
+  hashPassword: (input: string): string => {
+    if (!input) return '';
+    try {
+      if (SecurityHelper.isHashed(input)) {
+        return input;
+      }
+      return bcrypt.hashSync(input, 10);
+    } catch (e) {
+      console.error('Password hashing error', e);
+      return input;
+    }
+  },
+};
+
 const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v99';
 const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v99';
 
