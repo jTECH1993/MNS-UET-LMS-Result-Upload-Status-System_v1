@@ -424,7 +424,19 @@ export const HODEntryForm: React.FC<Props> = ({
       // Filter to existing non-empty rows, pad up to 8 for fast entry
       const validRows = existing.subjects.filter(
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
-      );
+      ).map(r => {
+        // AUTO-HEAL: If the record was saved with an empty status but has course info, 
+        // the user saw "Uploaded" visually due to the old HTML select bug. 
+        // We auto-correct it to 'Uploaded' to match their intent.
+        if (r.status === '' && (r.courseCode.trim() || r.subjectTitle.trim())) {
+          return { ...r, status: 'Uploaded' };
+        }
+        // Also auto-heal any that might have been explicitly set to empty string.
+        if (r.status === '') {
+           return { ...r, status: 'Pending' };
+        }
+        return r;
+      });
       const rows = [...validRows];
       while (rows.length < 8) {
         rows.push(createEmptySubjectRow(rows.length + 1, shift, semester, section));
@@ -922,7 +934,7 @@ export const HODEntryForm: React.FC<Props> = ({
       subjectTitle: s.subjectTitle,
       creditHours: s.creditHours,
       sectionShift: `${shift} - Sem ${semester} (Sec ${section})`,
-      status: '' as LMSStatus,
+      status: 'Pending' as LMSStatus,
       dateUploaded: '',
       uploadedBy: currentUser?.name || '',
       remarks: '',
@@ -2654,6 +2666,7 @@ export const HODEntryForm: React.FC<Props> = ({
                                 : 'bg-slate-100 text-slate-700 border-slate-300 focus:ring-slate-500'
                             }`}
                           >
+                            <option value="" disabled>-- Select Status --</option>
                             <option value="Uploaded">✓ Uploaded (Complete)</option>
                             <option value="In Progress">⏳ In Progress</option>
                             <option value="Pending">⚠ Pending (Not Uploaded)</option>
