@@ -82,7 +82,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | AcademicShift>('ALL');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('ALL');
   // Default to Semester 1 as requested by user so Vice Chancellor genuinely inspects Semester 1 data without clutter
-  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('1');
+  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('ALL');
   const [activeSessions, setActiveSessions] = useState<string[]>(() => StorageService.getActiveSessions());
   const [currentSession, setCurrentSession] = useState<string>(() => {
     const list = StorageService.getActiveSessions();

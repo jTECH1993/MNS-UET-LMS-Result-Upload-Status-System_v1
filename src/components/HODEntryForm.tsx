@@ -111,8 +111,28 @@ export const HODEntryForm: React.FC<Props> = ({
   onSwitchToVC,
   readOnly,
 }) => {
+  
   const isVC = currentUser?.role === 'VC';
-  const isReadOnly = Boolean(readOnly || isVC);
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  const [isDeadlineExpired, setIsDeadlineExpired] = useState<boolean>(() => StorageService.isSystemDeadlineExpired());
+
+  useEffect(() => {
+    const handleDeadlineUpdated = () => {
+      setIsDeadlineExpired(StorageService.isSystemDeadlineExpired());
+    };
+    // Re-check periodically just in case it crosses the threshold while they are typing
+    const interval = setInterval(handleDeadlineUpdated, 10000);
+    window.addEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
+    };
+  }, []);
+
+  // Lock form if readonly, or if VC, or if deadline expired and NOT VC/ADMIN
+  const isReadOnly = Boolean(readOnly || isVC || (isDeadlineExpired && !isVC && !isAdmin));
+
 
   // Master Selections
   const [department, setDepartment] = useState<string>(
@@ -2840,7 +2860,11 @@ export const HODEntryForm: React.FC<Props> = ({
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Vice Chancellor Academic Oversight • Read-Only Inspection Mode</span>
+              <span>
+    {isDeadlineExpired && !isVC && !isAdmin 
+      ? 'Deadline Expired • Form is Locked (Contact VC to Edit)'
+      : 'Vice Chancellor Academic Oversight • Read-Only Inspection Mode'}
+  </span>
             </div>
           </>
         ) : (

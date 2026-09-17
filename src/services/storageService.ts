@@ -130,6 +130,12 @@ export class StorageService {
             if (key === 'mnsuet_user_accounts_v99') {
               window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
             }
+            if (key === ACTIVE_SESSIONS_KEY || key === CURRENT_SESSION_KEY) {
+              window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated'));
+            }
+            if (key.startsWith(SESSION_ROSTER_KEY)) {
+              window.dispatchEvent(new CustomEvent('mnsuet_roster_updated'));
+            }
           }
         }
       });
@@ -150,13 +156,20 @@ export class StorageService {
     return localStorage.getItem('mnsuet_system_deadline_v99');
   }
 
+  
   public static setSystemDeadline(isoString: string | null): void {
     if (isoString) {
       localStorage.setItem('mnsuet_system_deadline_v99', isoString);
+      try { FirebaseStore.setSystemDeadline(isoString); } catch(e) {}
     } else {
       localStorage.removeItem('mnsuet_system_deadline_v99');
+      try { FirebaseStore.setSystemDeadline(null); } catch(e) {}
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: isoString }));
     }
   }
+
 
   public static getAvailableSessions(): string[] {
     try {
@@ -328,7 +341,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     
     try {
       // Update local store to reflect changes instantly (optional but good for sync)
-      FirebaseStore.saveSubmission(record).catch(e => console.error('Firebase save failed', e));
       const sec = (record.section || 'A').trim().toUpperCase();
       const key = getRecordKey(
         record.department,
@@ -340,7 +352,7 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
         sec
       );
       const store = this.getStore();
-      store[key] = {
+      const completeRecord = {
         ...record,
         id: key,
         section: sec,
@@ -352,7 +364,13 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
         updatedAt: new Date().toISOString(),
         createdAt: isUpdate ? store[key]?.createdAt || new Date().toISOString() : new Date().toISOString(),
       };
+      
+      store[key] = completeRecord;
       this.setStore(store);
+      
+      // Update Firebase with the FULL record
+      const firebaseReadyRecord = JSON.parse(JSON.stringify(completeRecord));
+      FirebaseStore.saveSubmission(firebaseReadyRecord).catch(e => console.error('Firebase save failed', e));
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: store[key] } }));

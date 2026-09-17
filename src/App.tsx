@@ -76,6 +76,7 @@ export default function App() {
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
     setAllRecords(list);
+    console.log('DEBUG ALLRECORDS:', list);
   };
 
   useEffect(() => {
