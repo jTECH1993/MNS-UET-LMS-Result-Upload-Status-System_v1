@@ -274,7 +274,7 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Programs: Submitted Results
+                Course Sheets: Submitted Results
               </h3>
             </div>
           </div>
@@ -312,7 +312,7 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Programs: Pending / Missing Results
+                Course Sheets: Pending / Missing Results
               </h3>
             </div>
           </div>

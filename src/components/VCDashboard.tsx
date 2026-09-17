@@ -67,6 +67,7 @@ export interface UnifiedProgramRow {
   program: string;
   degreeLevel: string;
   sessionActive: boolean;
+  supportedShifts: AcademicShift[];
   shifts: {
     Morning: ShiftCohortData;
     Evening: ShiftCohortData;
@@ -243,6 +244,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           program: prog.name,
           degreeLevel: prog.degreeLevel,
           sessionActive: isSessionActive,
+          supportedShifts: prog.supportedShifts || ['Morning', 'Evening'],
           shifts: {
             Morning: morningData,
             Evening: eveningData,
@@ -288,8 +290,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     trackedPrograms.forEach((p) => {
       const shiftsToInspect: AcademicShift[] =
         selectedShiftFilter === 'ALL'
-          ? ['Morning', 'Evening']
-          : [selectedShiftFilter];
+          ? p.supportedShifts
+          : p.supportedShifts.includes(selectedShiftFilter)
+          ? [selectedShiftFilter]
+          : [];
 
       shiftsToInspect.forEach((sh) => {
         totalCohortSlots++;
@@ -612,7 +616,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             />
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            {stats.pendingSlots} cohort slot(s) awaiting HOD entry
+            {stats.pendingSlots} course sheet(s) awaiting HOD entry
           </p>
         </button>
 
@@ -941,7 +945,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 <div className="mt-2.5 pt-2 border-t border-slate-200/80">
                   <div className="flex flex-col gap-0.5 mb-1.5">
                     <span className="text-[10px] text-slate-500 font-medium">
-                      Programs: <strong className="text-slate-800">{dept.submittedCohorts} / {dept.programsCount}</strong> Uploaded
+                      Course Sheets: <strong className="text-slate-800">{dept.submittedCohorts}</strong> Submitted
                     </span>
                     <span className="text-[10px] text-slate-500 font-medium">
                       {dept.totalSubjects > 0 

@@ -238,9 +238,10 @@ export class StorageService {
 
   public static getSessionPrograms(departmentName: string, sessionName: string = '2023'): string[] {
     const roster = this.getAllSessionRoster(sessionName);
-    if (roster[departmentName]) return roster[departmentName];
-    // fallback to DEFAULT_ACADEMIC_SESSIONS or empty
-    return [];
+    if (roster[departmentName] && roster[departmentName].length > 0) return roster[departmentName];
+    // fallback to ALL programs in the department if no roster is defined
+    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === departmentName);
+    return dept ? dept.programs.map((p) => p.name) : [];
   }
 
   public static getSession2023Programs(departmentName: string): string[] {

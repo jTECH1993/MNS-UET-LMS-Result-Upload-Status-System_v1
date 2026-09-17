@@ -115,14 +115,17 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
 
 export class AuthService {
   // Retrieve all accounts from localStorage or seed defaults
+  
   public static getAccounts(): UserAccount[] {
     try {
       const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
       if (!raw) {
-        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(DEFAULT_ACCOUNTS));
+        // Do NOT overwrite Firebase synchronously on first load.
+        // Just return defaults for now. Firebase will push the real data shortly if it exists.
         return DEFAULT_ACCOUNTS;
       }
       let parsed: UserAccount[] = JSON.parse(raw);
+
 
       // Automatically purge legacy dummy test accounts (hod_cs, hod_ee) so system is completely fresh
       let modified = false;
