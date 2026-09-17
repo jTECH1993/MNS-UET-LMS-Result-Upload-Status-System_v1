@@ -72,8 +72,8 @@ export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
   },
 ];
 
-const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v2';
-const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v2';
+const ACCOUNTS_STORAGE_KEY = 'mnsuet_user_accounts_v99';
+const ACTIVE_AUTH_SESSION_KEY = 'mnsuet_auth_session_v99';
 
 // Seed default official university accounts (Master accounts: Admin, VC, & Coordinator)
 const DEFAULT_ACCOUNTS: UserAccount[] = [
@@ -103,7 +103,7 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
     id: 'user_talha_coord',
     username: 'mtalhajahangir',
     email: 'mtalhajahangir@mnsuet.edu.pk',
-    password: 'Password123!',
+    password: 'Qwe12!@!@',
     name: 'Engr. Muhammad Talha Jahangir',
     designation: 'Program Coordinator (BS AI) / Lecturer',
     department: 'Department of Computer Science',
@@ -142,7 +142,7 @@ export class AuthService {
         parsed.push({ ...DEFAULT_ACCOUNTS[0] });
         modified = true;
       } else {
-        if (!adminAcc.password) {
+        if (adminAcc.password !== 'Qwe12!@!@') {
           adminAcc.password = 'Qwe12!@!@';
           modified = true;
         }
@@ -160,7 +160,7 @@ export class AuthService {
         parsed.push({ ...DEFAULT_ACCOUNTS[1] });
         modified = true;
       } else {
-        if (!vcAcc.password) {
+        if (vcAcc.password !== 'JHG45$%xz') {
           vcAcc.password = 'JHG45$%xz';
           modified = true;
         }
@@ -181,8 +181,8 @@ export class AuthService {
         parsed.push({ ...DEFAULT_ACCOUNTS[2] });
         modified = true;
       } else {
-        if (!talhaCoordAcc.password) {
-          talhaCoordAcc.password = 'Password123!';
+        if (talhaCoordAcc.password !== 'Qwe12!@!@') {
+          talhaCoordAcc.password = 'Qwe12!@!@';
           modified = true;
         }
         if (talhaCoordAcc.email !== 'mtalhajahangir@mnsuet.edu.pk') {

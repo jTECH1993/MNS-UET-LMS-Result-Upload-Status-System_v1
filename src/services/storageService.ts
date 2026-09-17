@@ -17,14 +17,14 @@ import {
   getLegacyRecordKey,
 } from '../data/departmentsData';
 
-const STORAGE_KEY = 'mnsuet_lms_result_records_v3';
-const USER_KEY = 'mnsuet_lms_active_user_v2';
-const ACCESS_LOG_KEY = 'mnsuet_lms_access_logs_v2';
-const SESSION_ROSTER_KEY = 'mnsuet_session_active_roster_v4';
-const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v1';
-const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v1';
-const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v2';
-const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v1';
+const STORAGE_KEY = 'mnsuet_lms_result_records_v99';
+const USER_KEY = 'mnsuet_lms_active_user_v99';
+const ACCESS_LOG_KEY = 'mnsuet_lms_access_logs_v99';
+const SESSION_ROSTER_KEY = 'mnsuet_session_active_roster_v99';
+const AVAILABLE_SESSIONS_KEY = 'mnsuet_available_sessions_v99';
+const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v99';
+const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v99';
+const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v99';
 
 
 export class StorageService {

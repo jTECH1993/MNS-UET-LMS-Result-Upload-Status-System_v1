@@ -622,7 +622,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 Anti-Brute Force &amp; Intrusion Defense Active
               </span>
-              <span className="font-bold text-slate-500">MNS-UET IT Directorate</span>
+              
             </div>
           </div>
         )}
