@@ -1029,29 +1029,29 @@ export const HODEntryForm: React.FC<Props> = ({
       {feedbackMessage && (
         <div
           id="status-feedback-banner"
-          className={`px-4 py-3 rounded-lg border text-sm flex items-center justify-between shadow-xs transition-all animate-in fade-in slide-in-from-top-2 ${
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3.5 rounded-xl border text-sm flex items-center justify-between shadow-2xl transition-all animate-in fade-in slide-in-from-bottom-5 w-[90%] max-w-md ${
             feedbackMessage.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 dark:bg-emerald-950 dark:border-emerald-600 dark:text-emerald-100'
               : feedbackMessage.type === 'warning'
-              ? 'bg-amber-50 border-amber-300 text-amber-900'
-              : 'bg-blue-50 border-blue-300 text-blue-900'
+              ? 'bg-amber-50 border-amber-400 text-amber-950 dark:bg-amber-950 dark:border-amber-600 dark:text-amber-100'
+              : 'bg-blue-50 border-blue-400 text-blue-950 dark:bg-blue-950 dark:border-blue-600 dark:text-blue-100'
           }`}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             {feedbackMessage.type === 'success' && (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             )}
             {feedbackMessage.type === 'warning' && (
-              <Info className="w-5 h-5 text-amber-600 shrink-0" />
+              <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
             )}
             {feedbackMessage.type === 'info' && (
-              <Clock className="w-5 h-5 text-blue-600 shrink-0" />
+              <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
             )}
-            <span className="font-medium">{feedbackMessage.text}</span>
+            <span className="font-bold text-[15px]">{feedbackMessage.text}</span>
           </div>
           <button
             onClick={() => setFeedbackMessage(null)}
-            className="text-xs font-semibold underline ml-4 hover:opacity-75"
+            className="text-xs font-bold underline ml-4 hover:opacity-75"
           >
             Dismiss
           </button>

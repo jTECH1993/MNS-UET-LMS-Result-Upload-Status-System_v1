@@ -37,6 +37,20 @@ export const Header: React.FC<Props> = ({
     return false;
   });
 
+  useEffect(() => {
+    const handleThemeChange = (e: Event) => {
+      const customEvt = e as CustomEvent<{ theme: AppTheme }>;
+      if (customEvt.detail?.theme) {
+        const def = AuthService.getThemeDefinition(customEvt.detail.theme);
+        setIsDark(def.isDark);
+      }
+    };
+    window.addEventListener('mnsuet_theme_changed', handleThemeChange);
+    return () => {
+      window.removeEventListener('mnsuet_theme_changed', handleThemeChange);
+    };
+  }, []);
+
   const isAdmin = currentUser.role === 'ADMIN';
   const isVC = currentUser.role === 'VC';
   const isLecturer = currentUser.role === 'LECTURER';
