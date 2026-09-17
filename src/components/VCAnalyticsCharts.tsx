@@ -343,38 +343,6 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
           </div>
         </div>
       </div>
-      
-      {/* Chart 3: Department Aggregated Progress */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Departmental Overall Compliance
-            </h3>
-          </div>
-        </div>
-        <div className="h-[250px] w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={deptPerformanceData}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.6} />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', color: '#fff', borderRadius: '8px', fontSize: '12px', border: 'none' }}
-                itemStyle={{ color: '#fff' }}
-              />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-              <Bar dataKey="Uploaded" stackId="a" fill={COLORS.uploaded} radius={[0, 0, 0, 0]} barSize={40} />
-              <Bar dataKey="In Progress" stackId="a" fill={COLORS.inProgress} radius={[0, 0, 0, 0]} barSize={40} />
-              <Bar dataKey="Pending" stackId="a" fill={COLORS.pending} radius={[4, 4, 0, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
 
     </div>
   );

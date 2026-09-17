@@ -60,9 +60,13 @@ export const ExecutiveReportModal: React.FC<Props> = ({
     return `MNSUET/VC-LMS/${currentSession}/S${selectedSemester}-0842`;
   }, [currentSession, selectedSemester]);
 
+  const activePrograms = useMemo(() => {
+    return allPrograms.filter((p) => p.sessionActive);
+  }, [allPrograms]);
+
   // Extract non-compliant / pending programs for the notice
   const pendingPrograms = useMemo(() => {
-    return allPrograms.filter((p) => {
+    return activePrograms.filter((p) => {
       // If semester is specific, check that shift cohort
       const mCohort = p.shifts.Morning;
       const eCohort = p.shifts.Evening;
@@ -72,7 +76,7 @@ export const ExecutiveReportModal: React.FC<Props> = ({
       // Incomplete if either active shift has pending subjects or hasn't submitted
       return !mSubmitted || mCohort.totalPending > 0 || (p.hasEveningSubmission && eCohort.totalPending > 0);
     });
-  }, [allPrograms]);
+  }, [activePrograms]);
 
   if (!isOpen) return null;
 
@@ -278,7 +282,7 @@ Director, Academic Affairs & Examination Directorate`;
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {allPrograms.map((prog, idx) => {
+                      {activePrograms.map((prog, idx) => {
                         const m = prog.shifts.Morning;
                         const e = prog.shifts.Evening;
                         const totalSubjects = m.totalSubjects + e.totalSubjects;

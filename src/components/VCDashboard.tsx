@@ -143,8 +143,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       );
 
       dept.programs.forEach((prog) => {
-        const isSessionActive = activeProgNames.includes(prog.name);
-
         const buildShiftData = (shiftName: AcademicShift): ShiftCohortData => {
           const semRecords: Record<string, SubmissionRecord | null> = {};
           const semSectionMap: Record<string, Record<string, SubmissionRecord>> = {};
@@ -227,6 +225,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         const hasMorning = morningData.hasSubmission;
         const hasEvening = eveningData.hasSubmission;
         const hasAny = hasMorning || hasEvening;
+
+        // Dynamically activate program if it has submissions, overriding static cache
+        const isSessionActive = activeProgNames.includes(prog.name) || hasAny;
 
         // If department coordinator entered Evening, automatically prioritize Evening!
         let recommendedShift: AcademicShift = 'Morning';
@@ -568,12 +569,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       {/* University Metric Highlights */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Genuine Upload Progress */}
-        <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('ALL');
+            setSelectedDeptFilter('ALL');
+            setOnlyGenuineSubmissions(false);
+            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+          }}
+          className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs text-left hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 group-hover:text-emerald-700 transition-colors">
             {selectedSemesterFilter === 'ALL' ? 'Total Submissions' : `Semester ${selectedSemesterFilter} Submissions`}
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-black text-slate-900">
+            <span className="text-2xl font-black text-slate-900 group-hover:text-emerald-900 transition-colors">
               {stats.submittedSlots} / {stats.totalCohortSlots}
             </span>
             <span className="text-xs font-bold text-emerald-700">
@@ -597,15 +607,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <p className="text-[11px] text-slate-500 mt-2">
             {stats.pendingSlots} cohort slot(s) awaiting HOD entry
           </p>
-        </div>
+        </button>
 
         {/* Total Subjects Logged */}
-        <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('ALL');
+            setSelectedDeptFilter('ALL');
+            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+          }}
+          className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs text-left hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 group-hover:text-indigo-700 transition-colors">
             Active Subjects Logged
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-black text-slate-900">
+            <span className="text-2xl font-black text-slate-900 group-hover:text-indigo-900 transition-colors">
               {stats.totalSubjectsAcrossUni}
             </span>
             <span className="text-xs text-slate-500">courses</span>
@@ -613,15 +631,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <p className="text-[11px] text-slate-500 mt-3">
             Across {stats.submittedSlots} submitted course sheet(s)
           </p>
-        </div>
+        </button>
 
         {/* Uploaded Subjects */}
-        <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('SUBMITTED');
+            setSelectedDeptFilter('ALL');
+            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+          }}
+          className="bg-white p-4 rounded-lg border border-emerald-200 shadow-2xs text-left hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
+        >
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
             LMS Uploaded &amp; Verified
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-black text-emerald-700">
+            <span className="text-2xl font-black text-emerald-700 group-hover:text-emerald-900 transition-colors">
               {stats.totalUploadedAcrossUni}
             </span>
             <span className="text-xs font-bold text-emerald-600">
@@ -635,15 +661,24 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <p className="text-[11px] text-emerald-700 mt-3">
             Finalized marks and result sheets in LMS
           </p>
-        </div>
+        </button>
 
         {/* Pending Results */}
-        <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setSelectedDeptFilter('ALL');
+            setOnlyGenuineSubmissions(false);
+            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+          }}
+          className="bg-white p-4 rounded-lg border border-amber-200 shadow-2xs text-left hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
+        >
           <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
             Results Incomplete / Pending
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-black text-amber-700">
+            <span className="text-2xl font-black text-amber-700 group-hover:text-amber-900 transition-colors">
               {stats.totalPendingAcrossUni}
             </span>
             <span className="text-xs text-amber-600">courses awaiting upload</span>
@@ -651,7 +686,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <p className="text-[11px] text-amber-700 mt-3">
             Action required by respective course instructors
           </p>
-        </div>
+        </button>
       </div>
 
       {/* Executive View Selector (Analytics Graphs vs Roster Table vs Combined) */}
@@ -1635,8 +1670,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                   Semester {selectedSemesterFilter} Submitted
                                 </span>
                                 {activeSub && (
-                                  <div className="text-[10px] text-slate-600 truncate max-w-[160px]">
-                                    By: <strong>{activeSub.accessedBy || activeSub.hodCoordinator}</strong>
+                                  <div className="text-[10px] text-slate-600 max-w-[160px] flex flex-col items-center leading-tight mt-1">
+                                    <span className="truncate w-full text-center" title={`By: ${activeSub.accessedBy || 'N/A'} (${activeSub.userDesignation || 'User'})`}>
+                                      By: <strong>{activeSub.accessedBy || 'N/A'}</strong>
+                                    </span>
+                                    {activeSub.hodCoordinator && activeSub.hodCoordinator !== activeSub.accessedBy && (
+                                      <span className="truncate w-full text-center" title={`Coord: ${activeSub.hodCoordinator}`}>
+                                        Coord: <strong>{activeSub.hodCoordinator}</strong>
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </div>
