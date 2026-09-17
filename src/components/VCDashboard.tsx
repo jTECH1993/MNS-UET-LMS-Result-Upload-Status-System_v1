@@ -732,8 +732,18 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedSemesterFilter={selectedSemesterFilter}
             selectedShiftFilter={selectedShiftFilter}
             selectedSectionFilter={selectedSectionFilter}
-            onFilterByDepartment={(dept) => setSelectedDeptFilter(dept)}
-            onFilterByStatus={(status) => setStatusFilter(status)}
+            onFilterByDepartment={(dept) => {
+              setSelectedDeptFilter(dept);
+              setTimeout(() => {
+                document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }}
+            onFilterByStatus={(status) => {
+              setStatusFilter(status);
+              setTimeout(() => {
+                document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }}
             onFilterBySection={(section) => setSelectedSectionFilter(section)}
             onInspectProgram={(dept, prog, shift, sess, sem, sec) => {
               onSelectProgramToEdit(dept, prog, shift, sess, sem, sec);
@@ -1071,7 +1081,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       </div>
 
       {/* Program Status Master Table */}
-      <div className="bg-white rounded-lg border border-slate-300 shadow-xs overflow-hidden">
+      <div id="lms-roster-section" className="bg-white rounded-lg border border-slate-300 shadow-xs overflow-hidden">
         {/* Table Top Header */}
         <div className="bg-slate-800 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
