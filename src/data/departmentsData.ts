@@ -187,7 +187,7 @@ export function createEmptySubjectRow(
     subjectTitle: '',
     creditHours: '',
     sectionShift: `${defaultShift} - Sem ${semester} (Sec ${secLabel})`,
-    status: 'Pending' as const,
+    status: '' as const,
     dateUploaded: '',
     uploadedBy: '',
     remarks: '',

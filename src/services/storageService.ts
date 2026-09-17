@@ -582,17 +582,10 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     let notApplicable = 0;
 
     activeSubjects.forEach((row) => {
-      // AUTO-HEAL: If status is empty but they filled out the course, they saw "Uploaded" in the UI 
-      // due to the old HTML select default bug. Treat it as Uploaded.
-      let effectiveStatus = row.status;
-      if (effectiveStatus === '' && (row.courseCode.trim() || row.subjectTitle.trim())) {
-        effectiveStatus = 'Uploaded';
-      }
-
-      if (effectiveStatus === 'Uploaded') uploaded++;
-      else if (effectiveStatus === 'Pending') pending++;
-      else if (effectiveStatus === 'In Progress') inProgress++;
-      else if (effectiveStatus === 'Not Applicable') notApplicable++;
+      if (row.status === 'Uploaded') uploaded++;
+      else if (row.status === 'Pending') pending++;
+      else if (row.status === 'In Progress') inProgress++;
+      else if (row.status === 'Not Applicable') notApplicable++;
     });
 
     const uploadPercentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
