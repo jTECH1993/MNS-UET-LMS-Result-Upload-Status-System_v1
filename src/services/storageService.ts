@@ -327,17 +327,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     );
     
     try {
-      try {
-        const res = await fetch('/api/submissions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...record, accessedBy: activeUser.name, userDesignation: activeUser.designation })
-        });
-        if (!res.ok) console.warn('Server sync failed, continuing with local storage');
-      } catch (apiError) {
-        console.warn('Server fetch failed, continuing with local storage (Vercel mode)');
-      }
-      
       // Update local store to reflect changes instantly (optional but good for sync)
       FirebaseStore.saveSubmission(record).catch(e => console.error('Firebase save failed', e));
       const sec = (record.section || 'A').trim().toUpperCase();
@@ -397,15 +386,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     const key = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
     
     try {
-      try {
-        const res = await fetch(`/api/submissions/${key}`, {
-          method: 'DELETE'
-        });
-        if (!res.ok) console.warn('Server delete failed, falling back to local');
-      } catch (apiError) {
-        console.warn('Server delete fetch failed, continuing with local storage');
-      }
-      
       const store = this.getStore();
       let deleted = false;
       if (store[key]) {
@@ -435,22 +415,8 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
   }
 
   public static async apiSyncSubmissions(): Promise<void> {
-    try {
-      const res = await fetch('/api/submissions');
-      if (res.ok) {
-        const records = await res.json();
-        const store: Record<string, SubmissionRecord> = {};
-        records.forEach((r: any) => {
-          store[r.id] = r;
-        });
-        this.setStore(store);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
-        }
-      }
-    } catch (e) {
-      console.error('Sync failed', e);
-    }
+    // Replaced by initFirebaseSync real-time listeners
+    return Promise.resolve();
   }
 
   public static getAllSubmissions(): SubmissionRecord[] {
