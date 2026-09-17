@@ -822,6 +822,13 @@ export class AuthService {
     const accounts = this.getAccounts();
     const session = this.getCurrentSession();
     const targetId = userId || session?.id;
+    if (normalized !== "midnight") {
+      const storageKey = `mnsuet_prev_light_theme_${targetId || "guest"}`;
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(storageKey, normalized);
+      }
+    }
+    
 
     if (targetId) {
       const user = accounts.find((a) => a.id === targetId);
@@ -844,10 +851,29 @@ export class AuthService {
     return normalized;
   }
 
-  // Quick toggle between Day (Emerald) and Night (Midnight)
+  // Quick toggle between Day and Night
   public static toggleTheme(userId?: string): AppTheme {
     const current = this.getCurrentTheme();
-    const newTheme: AppTheme = current === 'midnight' ? 'emerald' : 'midnight';
+    
+    let newTheme: AppTheme = 'emerald';
+    const storageKey = `mnsuet_prev_light_theme_${userId || 'guest'}`;
+
+    if (current === 'midnight') {
+       // Going from night back to day. Try to restore previous day theme.
+       const prev = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null;
+       if (prev && ['emerald', 'oxford', 'sunset', 'contrast'].includes(prev)) {
+           newTheme = prev as AppTheme;
+       } else {
+           newTheme = 'emerald';
+       }
+    } else {
+       // Going from day to night. Save current day theme.
+       if (typeof localStorage !== 'undefined') {
+           localStorage.setItem(storageKey, current);
+       }
+       newTheme = 'midnight';
+    }
+
     return this.setTheme(newTheme, userId);
   }
 
