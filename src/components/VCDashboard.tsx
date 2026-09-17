@@ -206,14 +206,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               sumSubjects += semSubCount;
               sumUploaded += semUploaded;
               sumPending += semPending;
-            } else {
-              // Inject estimated genuine completion data for pending programs
-              // Only expect data if we are explicitly filtering for this semester, or if it's Semester 1 as a default baseline for 'ALL'
-              const shouldExpect = selectedSemesterFilter === sem.id || (selectedSemesterFilter === 'ALL' && sem.id === '1');
-              if (shouldExpect && shiftName === 'Morning') {
-                 sumSubjects += 6; // Assume 6 courses minimum for genuine compliance calculation
-                 sumPending += 6;
-              }
             }
           });
 
@@ -361,10 +353,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       let totalCohorts = 0;
 
       deptPrograms.forEach((prog) => {
-        const shifts = [prog.shifts.Morning, prog.shifts.Evening];
-        shifts.forEach((shift) => {
-          totalCohorts += 1;
+        const shifts = [
+          { name: 'Morning', data: prog.shifts.Morning },
+          { name: 'Evening', data: prog.shifts.Evening }
+        ];
+        shifts.forEach(({ name, data: shift }) => {
           if (selectedSemesterFilter === 'ALL') {
+            if (shift.totalSubjects > 0) totalCohorts += 1;
             totalSubjects += shift.totalSubjects;
             totalUploaded += shift.totalUploaded;
             totalPending += shift.totalPending;
@@ -373,10 +368,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             const rec = shift.semesterRecords[selectedSemesterFilter];
             if (rec) {
               submittedCohorts += 1;
+              totalCohorts += 1;
               const s = StorageService.calculateSummary(rec.subjects);
               totalSubjects += s.totalSubjects;
               totalUploaded += s.uploaded;
               totalPending += s.pending;
+            } else if (name === 'Morning') {
+              totalCohorts += 1;
             }
           }
         });
@@ -734,14 +732,26 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedSectionFilter={selectedSectionFilter}
             onFilterByDepartment={(dept) => {
               setSelectedDeptFilter(dept);
+              setStatusFilter('ALL');
+              setOnlyGenuineSubmissions(false);
               setTimeout(() => {
-                document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+                const el = document.getElementById('lms-roster-section');
+                if (el) {
+                  const y = el.getBoundingClientRect().top + window.scrollY - 40;
+                  window.scrollTo({ top: y, behavior: 'smooth' });
+                }
               }, 100);
             }}
             onFilterByStatus={(status) => {
               setStatusFilter(status);
+              setSelectedDeptFilter('ALL');
+              setOnlyGenuineSubmissions(false);
               setTimeout(() => {
-                document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth' });
+                const el = document.getElementById('lms-roster-section');
+                if (el) {
+                  const y = el.getBoundingClientRect().top + window.scrollY - 40;
+                  window.scrollTo({ top: y, behavior: 'smooth' });
+                }
               }, 100);
             }}
             onFilterBySection={(section) => setSelectedSectionFilter(section)}
@@ -885,7 +895,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       Programs: <strong className="text-slate-800">{dept.submittedCohorts} / {dept.programsCount}</strong> Uploaded
                     </span>
                     <span className="text-[10px] text-slate-500 font-medium">
-                      Courses: {dept.totalUploaded} / {dept.totalSubjects} (Est.)
+                      {dept.totalSubjects > 0 
+                        ? `Courses: ${dept.totalUploaded} / ${dept.totalSubjects} Uploaded`
+                        : 'Courses: Awaiting Data Entry'}
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between text-[11px] mb-1">

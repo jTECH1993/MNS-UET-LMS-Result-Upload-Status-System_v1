@@ -94,13 +94,12 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
           }
         });
 
-        // Inject estimated genuine completion data for pending programs
+        // If no data has been uploaded yet, it just remains at 0 until the HOD enters it dynamically.
         if (!hasData) {
-           const shouldExpect = selectedSemesterFilter !== 'ALL' || selectedSemesterFilter === 'ALL';
-           if (shouldExpect && (selectedShiftFilter === 'ALL' || selectedShiftFilter === 'Morning')) {
-               total = 6;
-               pending = 6;
-           }
+           total = 0;
+           pending = 0;
+           uploaded = 0;
+           inProgress = 0;
         }
 
         const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
@@ -337,7 +336,7 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
                      itemStyle={{ color: '#fff' }}
                    />
                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                   <Bar dataKey="Pending" name="Courses Delayed (Estimated)" stackId="a" fill={COLORS.pending} radius={[0, 4, 4, 0]} barSize={20} />
+                   <Bar dataKey="Pending" name="Courses Delayed" stackId="a" fill={COLORS.pending} radius={[0, 4, 4, 0]} barSize={20} />
                  </BarChart>
                </ResponsiveContainer>
             )}
