@@ -26,6 +26,7 @@ import {
   BookOpen,
   Briefcase,
 } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   // Splash screen state: show once on fresh launch
@@ -551,6 +552,9 @@ export default function App() {
           isAdmin={isAdmin}
         />
       )}
+
+      {/* Vercel Analytics */}
+      <Analytics />
     </div>
   );
 }

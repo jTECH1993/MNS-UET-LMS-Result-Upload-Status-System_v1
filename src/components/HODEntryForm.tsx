@@ -1217,9 +1217,9 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
 
         {/* 6 Form Fields Grid: Dept, Program, Level, Semester, Shift, and Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3.5">
           {/* Department */}
-          <div>
+          <div className="lg:col-span-2">
             <label
               htmlFor="select-department"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1253,7 +1253,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Program */}
-          <div>
+          <div className="lg:col-span-3">
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="select-program"
@@ -1262,7 +1262,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 Program <span className="text-rose-600">*</span>
                 {currentUser?.role === 'COORDINATOR' && (
                   (currentUser.assignedPrograms ? currentUser.assignedPrograms.includes(program) : currentUser.program === program) ? (
-                    <span className="text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-bold">
+                    <span className="text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-bold whitespace-nowrap">
                       ★ Coordinated by You
                     </span>
                   ) : null
@@ -1272,7 +1272,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsRosterModalOpen(true)}
-                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer"
+                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer shrink-0 ml-1"
                   title="Configure active roster for this session"
                 >
                   Configure
@@ -1323,7 +1323,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Level */}
-          <div>
+          <div className="lg:col-span-2">
             <label
               htmlFor="select-degree-level"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1345,7 +1345,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Semester Dropdown */}
-          <div>
+          <div className="lg:col-span-2">
             <label
               htmlFor="select-semester"
               className="block text-xs font-bold text-slate-700 mb-1.5"
@@ -1367,7 +1367,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Shift (Morning / Evening toggle) */}
-          <div>
+          <div className="lg:col-span-2">
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Shift <span className="text-rose-600">*</span>
             </label>
@@ -1402,7 +1402,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Section (Section A, Section B, etc. - Strictly Isolated Partition) */}
-          <div>
+          <div className="lg:col-span-1">
             <div className="flex items-center justify-between mb-1.5">
               <label
                 htmlFor="select-section"

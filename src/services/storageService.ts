@@ -367,12 +367,16 @@ export class StorageService {
     );
     
     try {
-      const res = await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...record, accessedBy: activeUser.name, userDesignation: activeUser.designation })
-      });
-      if (!res.ok) throw new Error('Failed to save to database');
+      try {
+        const res = await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...record, accessedBy: activeUser.name, userDesignation: activeUser.designation })
+        });
+        if (!res.ok) console.warn('Server sync failed, continuing with local storage');
+      } catch (apiError) {
+        console.warn('Server fetch failed, continuing with local storage (Vercel mode)');
+      }
       
       // Update local store to reflect changes instantly (optional but good for sync)
       const sec = (record.section || 'A').trim().toUpperCase();
@@ -432,10 +436,14 @@ export class StorageService {
     const key = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
     
     try {
-      const res = await fetch(`/api/submissions/${key}`, {
-        method: 'DELETE'
-      });
-      if (!res.ok) throw new Error('Failed to delete from database');
+      try {
+        const res = await fetch(`/api/submissions/${key}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) console.warn('Server delete failed, falling back to local');
+      } catch (apiError) {
+        console.warn('Server delete fetch failed, continuing with local storage');
+      }
       
       const store = this.getStore();
       let deleted = false;
