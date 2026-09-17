@@ -241,9 +241,13 @@ export class StorageService {
   public static getSessionPrograms(departmentName: string, sessionName: string = '2023'): string[] {
     const roster = this.getAllSessionRoster(sessionName);
     if (roster[departmentName] && roster[departmentName].length > 0) return roster[departmentName];
-    // fallback to ALL programs in the department if no roster is defined
+    // Fallback: strictly consider ONLY programs configured for session 2023 if session is 2023
     const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === departmentName);
-    return dept ? dept.programs.map((p) => p.name) : [];
+    if (!dept) return [];
+    if (sessionName === '2023' || sessionName.includes('23')) {
+      return dept.programs.filter((p) => p.session2023).map((p) => p.name);
+    }
+    return dept.programs.map((p) => p.name);
   }
 
   public static getSession2023Programs(departmentName: string): string[] {
@@ -308,18 +312,56 @@ export class StorageService {
     return [];
   }
 
-  public static logAccess(action: string, department?: string, program?: string): void {
+  public static logAccess(action: string, department?: string, program?: string, shift?: AcademicShift): void {
     try {
       const logs = this.getAccessLogs();
-      const user = this.getActiveUser();
+      let sessionUser: any = null;
+      try {
+        const rawAuth = localStorage.getItem('mnsuet_auth_session_v99');
+        if (rawAuth) sessionUser = JSON.parse(rawAuth);
+      } catch (e) {}
+
+      const activeUser = sessionUser || this.getActiveUser();
+
+      let accounts: any[] = [];
+      try {
+        const rawAcc = localStorage.getItem('mnsuet_user_accounts_v99');
+        if (rawAcc) accounts = JSON.parse(rawAcc);
+      } catch (e) {}
+
+      const targetDept = department || activeUser?.department || 'Department of Computer Science';
+      const targetProg = program || activeUser?.program;
+
+      // Find coordinator details for this program or department
+      let coordName = '';
+      let coordDesig = '';
+      if (activeUser?.role === 'COORDINATOR' || activeUser?.role === 'LECTURER') {
+        coordName = activeUser.name;
+        coordDesig = activeUser.designation;
+      } else {
+        const coord = accounts.find((a: any) => {
+          if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
+          if (targetProg && (a.program === targetProg || (a.assignedPrograms && a.assignedPrograms.includes(targetProg)))) return true;
+          if (a.department && a.department.trim().toLowerCase() === targetDept.trim().toLowerCase()) return true;
+          return false;
+        });
+        if (coord) {
+          coordName = coord.name;
+          coordDesig = coord.designation;
+        }
+      }
+
       const entry: AccessLogEntry = {
-        id: Date.now().toString(),
-        userName: user?.name || 'System',
-        designation: user?.designation || 'System',
-        department: department || user?.department || 'System',
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userName: activeUser?.name || (coordName ? coordName : 'Executive Monitoring System'),
+        designation: activeUser?.designation || (coordDesig ? coordDesig : 'Institutional Automation Engine'),
+        department: targetDept,
         action,
-        program,
-        timestamp: new Date().toISOString()
+        program: targetProg || (targetDept.includes('Computer Science') ? 'BS Computer Science' : undefined),
+        shift,
+        coordinatorName: coordName || (targetDept.includes('Computer Science') ? 'Engr. Muhammad Talha Jahangir' : undefined),
+        coordinatorDesignation: coordDesig || (targetDept.includes('Computer Science') ? 'Program Coordinator (BS AI) / Lecturer' : undefined),
+        timestamp: new Date().toISOString(),
       };
       const updated = [entry, ...logs].slice(0, 100);
       localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify(updated));

@@ -245,15 +245,10 @@ export const HODEntryForm: React.FC<Props> = ({
     });
   }, [department, program, degreeLevel, shift, session, section, lastSavedTime, isExistingRecord]);
 
-  // Status of common sections (A, B, etc.) for the currently selected semester & shift
+  // Status of standard sections (A and B) for the currently selected semester & shift
   const sectionStatuses = useMemo(() => {
     const defaultSections = ['A', 'B'];
-    const activeSecUpper = (section || 'A').trim().toUpperCase();
-    const allSecs = [...defaultSections];
-    if (!allSecs.includes(activeSecUpper)) {
-      allSecs.push(activeSecUpper);
-    }
-    return allSecs.map((secId) => {
+    return defaultSections.map((secId) => {
       const existing = StorageService.getSubmission(
         department,
         program,
@@ -1445,24 +1440,14 @@ export const HODEntryForm: React.FC<Props> = ({
             </div>
             <select
               id="select-section"
-              value={['A', 'B', 'C', 'D'].includes(section) ? section : 'CUSTOM'}
+              value={section === 'B' ? 'B' : 'A'}
               onChange={(e) => {
-                if (e.target.value === 'CUSTOM') {
-                  setIsCustomSectionOpen(true);
-                } else {
-                  handleSectionChange(e.target.value);
-                }
+                handleSectionChange(e.target.value);
               }}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer"
             >
               <option value="A">Section A</option>
               <option value="B">Section B</option>
-              <option value="C">Section C</option>
-              <option value="D">Section D</option>
-              {!['A', 'B', 'C', 'D'].includes(section) && (
-                <option value={section}>Section {section}</option>
-              )}
-              <option value="CUSTOM">+ Other Section...</option>
             </select>
           </div>
         </div>

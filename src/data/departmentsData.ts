@@ -38,8 +38,6 @@ export interface SectionOption {
 export const STANDARD_ACADEMIC_SECTIONS: SectionOption[] = [
   { id: 'A', label: 'Section A', shortLabel: 'Sec A' },
   { id: 'B', label: 'Section B', shortLabel: 'Sec B' },
-  { id: 'C', label: 'Section C', shortLabel: 'Sec C' },
-  { id: 'D', label: 'Section D', shortLabel: 'Sec D' },
 ];
 
 export const DEFAULT_ACADEMIC_SESSIONS: string[] = ['2023', '2024', '2022', '2025'];

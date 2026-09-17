@@ -75,7 +75,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
               Section Performance Matrix (Cohort Heatmap)
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Pinpoints exact section-level lags (Section A vs B vs C) across academic programs
+              Pinpoints exact section-level lags (Section A vs Section B) across academic programs
             </p>
           </div>
         </div>
@@ -95,12 +95,11 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
               <th className="p-2.5">Degree Program</th>
               <th className="p-2.5 text-center w-28">Section A</th>
               <th className="p-2.5 text-center w-28">Section B</th>
-              <th className="p-2.5 text-center w-28">Section C</th>
               <th className="p-2.5 text-center w-24">Overall</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {matrixRows.slice(0, 10).map((row) => (
+            {matrixRows.slice(0, 12).map((row) => (
               <tr
                 key={`${row.deptCode}-${row.program.program}`}
                 className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
@@ -128,15 +127,6 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
                   }}
                 >
                   {getCellBadge(row.sections['B'])}
-                </td>
-                <td
-                  className="p-2 text-center cursor-pointer hover:opacity-80"
-                  onClick={() => {
-                    const sec = row.sections['C'];
-                    if (sec) onSelectProgramSection(row.program, sec);
-                  }}
-                >
-                  {getCellBadge(row.sections['C'])}
                 </td>
                 <td className="p-2.5 text-center font-bold text-slate-900 dark:text-white">
                   {row.program.completionRate}%

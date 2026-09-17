@@ -111,7 +111,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ANALYTICS' | 'ROSTER' | 'COMBINED' | 'ACTIVITY'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY'>('COMMAND_CENTER');
 
   // Executive Hierarchy & Drill-Down State
   const [selectedDrillDownDept, setSelectedDrillDownDept] = useState<DepartmentDimension | null>(null);
@@ -310,16 +310,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return list;
   }, [allRecords, activeSessions, rosterVersion, selectedSectionFilter]);
 
-  // Dynamic list of all sections present in system database (e.g. A, B, C, D)
-  const availableSectionsInDb = useMemo(() => {
-    const secSet = new Set<string>(['A', 'B']);
-    allRecords.forEach((r) => {
-      if (r.section) {
-        secSet.add(r.section.trim().toUpperCase());
-      }
-    });
-    return Array.from(secSet).sort();
-  }, [allRecords]);
+  // Standard list of sections: strictly Section A and Section B as required
+  const availableSectionsInDb = useMemo(() => ['A', 'B'], []);
 
   // High-level statistics based on active Session, Shift, and Semester filters
   const stats = useMemo(() => {
@@ -750,70 +742,57 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </button>
       </div>
 
-      {/* Executive View Selector (Command Center vs Analytics vs Roster vs Activity) */}
+      {/* Executive View Selector (Command Center vs Department Roster vs Live Audit Trail) */}
       <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
           <BarChart3 className="w-4 h-4 text-emerald-600" />
-          <span>Dashboard Display Mode:</span>
+          <span>Dashboard View:</span>
         </div>
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <button
             id="btn-vc-mode-command-center"
             type="button"
             onClick={() => setDashboardViewMode('COMMAND_CENTER')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               dashboardViewMode === 'COMMAND_CENTER'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Command Center</span>
-          </button>
-          <button
-            id="btn-vc-mode-combined"
-            type="button"
-            onClick={() => setDashboardViewMode('COMBINED')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              dashboardViewMode === 'COMBINED'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Executive Analytics</span>
+            <span>Executive Command Center</span>
           </button>
           <button
             id="btn-vc-mode-roster"
             type="button"
             onClick={() => setDashboardViewMode('ROSTER')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               dashboardViewMode === 'ROSTER'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <GraduationCap className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Department Roster</span>
+            <span>Department & Program Roster</span>
           </button>
           <button
             id="btn-vc-mode-activity"
             type="button"
             onClick={() => setDashboardViewMode('ACTIVITY')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               dashboardViewMode === 'ACTIVITY'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Live Activity Feed</span>
+            <span>Live System Audit Trail</span>
           </button>
         </div>
       </div>
 
       {/* VC Command Center (The Unified Command Center requested by VC) */}
-      {(dashboardViewMode === 'COMMAND_CENTER' || dashboardViewMode === 'COMBINED') && (
+      {dashboardViewMode === 'COMMAND_CENTER' && (
         <div className="space-y-6">
           {/* Command Center Quick Filters Bar */}
           <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-xl border border-slate-800 shadow-md">
@@ -921,11 +900,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                   onChange={(e) => setSelectedSectionFilter(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                 >
-                  <option value="ALL">All Sections (A–D)</option>
+                  <option value="ALL">Both Sections (A & B)</option>
                   <option value="A">Section A</option>
                   <option value="B">Section B</option>
-                  <option value="C">Section C</option>
-                  <option value="D">Section D</option>
                 </select>
               </div>
             </div>
@@ -1051,8 +1028,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       )}
 
-      {/* Academic Programs LMS Roster Section (Rendered in COMBINED or ROSTER modes) */}
-      {(dashboardViewMode === 'COMBINED' || dashboardViewMode === 'ROSTER') && (
+      {/* Academic Programs LMS Roster Section (Rendered in ROSTER mode) */}
+      {dashboardViewMode === 'ROSTER' && (
         <>
           {/* Primary Semester Selection Tabs Strip (Requirement: When user selects Semester 1, show Semester 1 genuinely) */}
           <div className="bg-white p-3 rounded-lg border border-slate-300 shadow-2xs">

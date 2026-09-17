@@ -2,7 +2,7 @@ export type LMSStatus = 'Uploaded' | 'Pending' | 'In Progress' | 'Not Applicable
 
 export type AcademicShift = 'Morning' | 'Evening';
 
-export type AcademicSection = 'A' | 'B' | 'C' | 'D' | string;
+export type AcademicSection = 'A' | 'B' | string;
 
 export interface SubjectRow {
   id: string;
@@ -32,6 +32,8 @@ export interface AccessLogEntry {
   action: string;
   program?: string;
   shift?: AcademicShift;
+  coordinatorName?: string;
+  coordinatorDesignation?: string;
   timestamp: string;
 }
 

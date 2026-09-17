@@ -1,7 +1,7 @@
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { AuthService } from './authService';
 import { StorageService } from './storageService';
-import { SubmissionRecord, AcademicShift, SubjectRow } from '../types';
+import { SubmissionRecord, AcademicShift, SubjectRow, ProgramInfo } from '../types';
 
 export interface CoordinatorDimension {
   name: string;
@@ -183,13 +183,53 @@ export class VCAnalyticsService {
         });
       }
 
-      // 2. Resolve Programs Dimension
+      // 2. Resolve Programs Dimension - Strictly for currentSession (e.g. Session 2023)
+      // Only consider programs configured for this session, or registered via submission/coordinator
+      const sessionRoster = StorageService.getSessionPrograms(dept.name, currentSession);
+      const registeredProgramNames = new Set<string>(sessionRoster);
+
+      // Dynamically include any program that has submitted LMS records in this department for this session
+      allRecords.forEach((r) => {
+        if (
+          r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+          r.session === currentSession
+        ) {
+          registeredProgramNames.add(r.program.trim());
+        }
+      });
+
+      // Dynamically include any program that has a coordinator account assigned
+      accounts.forEach((acc) => {
+        if (acc.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) {
+          const assignedList = acc.assignedPrograms || (acc.program ? [acc.program] : []);
+          assignedList.forEach((p) => {
+            if (p && p.trim()) registeredProgramNames.add(p.trim());
+          });
+        }
+      });
+
+      // Filter dept.programs to only those registered/configured, plus any dynamically added
+      const activePrograms: ProgramInfo[] = [];
+      registeredProgramNames.forEach((progName) => {
+        const found = dept.programs.find((p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase());
+        if (found) {
+          activePrograms.push(found);
+        } else {
+          activePrograms.push({
+            name: progName,
+            degreeLevel: progName.startsWith('MS') || progName.startsWith('M.Sc') ? 'MS' : 'BS',
+            department: dept.name,
+            session2023: currentSession === '2023' || currentSession.includes('23'),
+          });
+        }
+      });
+
       const programDims: ProgramDimension[] = [];
       let deptCourses = 0;
       let deptUploaded = 0;
       let deptPending = 0;
 
-      dept.programs.forEach((prog) => {
+      activePrograms.forEach((prog) => {
         totalUniversityPrograms++;
 
         // Coordinator Dimension: decoupled from program existence
@@ -229,8 +269,7 @@ export class VCAnalyticsService {
           });
         }
 
-        // Multiple Sections Dimension
-        // Detect all matching submissions for this program
+        // Multiple Sections Dimension: strictly A, B, or Both (no C or D)
         const matchingRecords = allRecords.filter((r) => {
           if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
@@ -240,16 +279,8 @@ export class VCAnalyticsService {
           return true;
         });
 
-        // Determine sections to show: standard 'A' and 'B' plus any explicit sections found in records
-        const sectionSet = new Set<string>(['A', 'B']);
-        matchingRecords.forEach((r) => {
-          if (r.section) sectionSet.add(r.section.trim().toUpperCase());
-        });
-
-        let targetSections = Array.from(sectionSet).sort();
-        if (sectionFilter !== 'ALL') {
-          targetSections = targetSections.filter((s) => s === sectionFilter);
-        }
+        // Target sections: strictly Section A, Section B, or Both (A & B)
+        const targetSections = sectionFilter === 'A' ? ['A'] : sectionFilter === 'B' ? ['B'] : ['A', 'B'];
 
         const sectionBreakdowns: SectionBreakdown[] = [];
         let progCourses = 0;
@@ -267,14 +298,17 @@ export class VCAnalyticsService {
           }
 
           const rawSubjects: SubjectRow[] = rec?.subjects && rec.subjects.length > 0 ? rec.subjects : [];
-          
+          const validSubjects = rawSubjects.filter(
+            (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+          );
+
           let secUploaded = 0;
           let secPending = 0;
           let secInProgress = 0;
           const courseDetails: CourseDetail[] = [];
 
-          if (rawSubjects.length > 0) {
-            rawSubjects.forEach((s, idx) => {
+          if (validSubjects.length > 0) {
+            validSubjects.forEach((s, idx) => {
               const status = (s.status === 'Uploaded' ? 'Uploaded' : s.status === 'In Progress' ? 'In Progress' : 'Pending');
               if (status === 'Uploaded') secUploaded++;
               else if (status === 'In Progress') secInProgress++;
@@ -282,8 +316,8 @@ export class VCAnalyticsService {
 
               courseDetails.push({
                 id: s.id || `course-${secName}-${idx}`,
-                courseCode: s.courseCode || `CS-${100 + idx}`,
-                subjectTitle: s.subjectTitle || `Core Subject ${idx + 1}`,
+                courseCode: s.courseCode || `COURSE-${100 + idx}`,
+                subjectTitle: s.subjectTitle || `Curricular Subject ${idx + 1}`,
                 creditHours: s.creditHours || '3(3-0)',
                 status,
                 dateUploaded: s.dateUploaded || rec?.submissionDate || '',
@@ -293,32 +327,29 @@ export class VCAnalyticsService {
                 submitted: status === 'Uploaded',
                 coordinatorName: coordinatorDim.name,
                 deadline,
-                lastActivity: s.dateUploaded || rec?.updatedAt || 'No upload recorded',
+                lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
               });
             });
           } else {
-            // Expected courses placeholder when not started
-            secPending = 6;
-            for (let i = 1; i <= 6; i++) {
-              courseDetails.push({
-                id: `expected-${secName}-${i}`,
-                courseCode: `SUBJ-10${i}`,
-                subjectTitle: `Curricular Subject ${i}`,
-                creditHours: '3(3-0)',
-                status: 'Pending',
-                dateUploaded: '',
-                uploadedBy: '—',
-                remarks: 'Pending coordinator entry',
-                expected: true,
-                submitted: false,
-                coordinatorName: coordinatorDim.name,
-                deadline,
-                lastActivity: 'Not started',
-              });
-            }
+            // Awaiting initial submission: zero dummy data
+            courseDetails.push({
+              id: `awaiting-${secName}`,
+              courseCode: 'PENDING',
+              subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
+              creditHours: '—',
+              status: 'Pending',
+              dateUploaded: '',
+              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+              remarks: `Awaiting LMS result upload for Section ${secName}`,
+              expected: true,
+              submitted: false,
+              coordinatorName: coordinatorDim.name,
+              deadline,
+              lastActivity: 'Awaiting submission',
+            });
           }
 
-          const secTotal = secUploaded + secPending + secInProgress;
+          const secTotal = validSubjects.length;
           const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
           const secStatus = secPct === 100 ? 'Completed' : secPct > 0 ? 'Partial' : 'Not Started';
 
@@ -343,7 +374,7 @@ export class VCAnalyticsService {
         const progCompletion = progCourses > 0 ? Math.round((progUploaded / progCourses) * 100) : 0;
         let progStatus: 'Verified' | 'Partial' | 'Not Started' | 'Overdue' | 'Attention Required';
 
-        if (progCompletion === 100) {
+        if (progCompletion === 100 && progCourses > 0) {
           progStatus = 'Verified';
         } else if (isDeadlinePassed && progPending > 0) {
           progStatus = 'Overdue';
@@ -442,7 +473,7 @@ export class VCAnalyticsService {
         name: dept.name,
         code: dept.code,
         hod: hodDim,
-        programsCount: dept.programs.length,
+        programsCount: activePrograms.length,
         totalCourses: deptCourses,
         uploadedCourses: deptUploaded,
         pendingCourses: deptPending,
