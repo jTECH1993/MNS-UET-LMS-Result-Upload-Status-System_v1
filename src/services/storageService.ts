@@ -152,9 +152,19 @@ export class StorageService {
   }
 
 
+  
   public static getSystemDeadline(): string | null {
     return localStorage.getItem('mnsuet_system_deadline_v99');
   }
+
+  public static isSystemDeadlineExpired(): boolean {
+    const stored = this.getSystemDeadline();
+    if (!stored) {
+      return false; 
+    }
+    return new Date(stored).getTime() - new Date().getTime() <= 0;
+  }
+
 
   
   public static setSystemDeadline(isoString: string | null): void {
