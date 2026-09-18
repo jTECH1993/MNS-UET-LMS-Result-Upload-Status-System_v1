@@ -115,6 +115,8 @@ export class VCAnalyticsService {
   }): {
     departments: DepartmentDimension[];
     overallCompletionRate: number;
+    submittedUploadedPct: number;
+    submittedPendingPct: number;
     totalDepartments: number;
     completedDepartments: number;
     totalPrograms: number;
@@ -641,12 +643,17 @@ export class VCAnalyticsService {
 
     const overallRate =
       totalUniversityCourses > 0 ? Math.round((totalUniversityUploaded / totalUniversityCourses) * 100) : 0;
+    const submittedUploadedPct = overallRate;
+    const submittedPendingPct =
+      totalUniversityCourses > 0 ? Math.round((totalUniversityPending / totalUniversityCourses) * 100) : 0;
 
     const completedDepts = departments.filter((d) => d.status === 'Completed').length;
 
     return {
       departments: departments.sort((a, b) => b.completionRate - a.completionRate),
       overallCompletionRate: overallRate,
+      submittedUploadedPct,
+      submittedPendingPct,
       totalDepartments: departments.length,
       completedDepartments: completedDepts,
       totalPrograms: totalUniversityPrograms,

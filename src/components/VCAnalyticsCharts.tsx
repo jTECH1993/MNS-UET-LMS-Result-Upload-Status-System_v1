@@ -343,11 +343,14 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute top-[38%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none flex flex-col items-center">
-                  <span className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {hierarchy.overallCompletionRate}%
+                  <span className="text-3xl font-black text-slate-800 dark:text-white tracking-tight font-mono">
+                    {hierarchy.submittedUploadedPct}%
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Completed
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
+                    Uploaded
+                  </span>
+                  <span className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">
+                    ({hierarchy.submittedPendingPct}% Pending)
                   </span>
                 </div>
               </>

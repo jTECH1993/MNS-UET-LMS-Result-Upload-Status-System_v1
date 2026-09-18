@@ -1165,23 +1165,56 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               document.getElementById('university-completion-radar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 100);
           }}
-          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all flex flex-col justify-between"
           title="Click to navigate directly to the Completion Radar"
         >
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Overall University Completion
-          </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
-              {hierarchy.overallCompletionRate}%
-            </span>
-            <span className="text-xs font-bold text-emerald-600">Verified</span>
+          <div>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Submitted Data Completion
+              </span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
+                From Entered Forms
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-1 mt-2">
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                  {hierarchy.submittedUploadedPct}%
+                </span>
+                <span className="text-xs font-bold text-emerald-600">Uploaded</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">
+                  {hierarchy.submittedPendingPct}%
+                </span>
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Pending</span>
+              </div>
+            </div>
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-3 overflow-hidden">
-            <div
-              className="bg-emerald-600 h-full rounded-full transition-all"
-              style={{ width: `${hierarchy.overallCompletionRate}%` }}
-            />
+          <div>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-2 overflow-hidden flex">
+              <div
+                className="bg-emerald-600 h-full transition-all"
+                style={{ width: `${hierarchy.submittedUploadedPct}%` }}
+                title={`Uploaded: ${hierarchy.submittedUploadedPct}%`}
+              />
+              <div
+                className="bg-amber-500 h-full transition-all"
+                style={{ width: `${hierarchy.submittedPendingPct}%` }}
+                title={`Pending: ${hierarchy.submittedPendingPct}%`}
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-center justify-between">
+              <span>
+                {hierarchy.totalCourses > 0
+                  ? `${hierarchy.uploadedCourses} uploaded, ${hierarchy.pendingCourses} pending`
+                  : 'No submitted data logged yet'}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">
+                {hierarchy.totalCourses} courses
+              </span>
+            </p>
           </div>
         </div>
 
