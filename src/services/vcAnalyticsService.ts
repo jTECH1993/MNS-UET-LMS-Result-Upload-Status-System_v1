@@ -271,7 +271,7 @@ export class VCAnalyticsService {
           });
         }
 
-        // Multiple Sections Dimension: strictly A, B, or Both (no C or D)
+        // Multiple Sections Dimension: Dynamically resolve active sections for this program
         const matchingRecords = allRecords.filter((r) => {
           if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
@@ -281,8 +281,37 @@ export class VCAnalyticsService {
           return true;
         });
 
-        // Target sections: strictly Section A, Section B, or Both (A & B)
-        const targetSections = sectionFilter === 'A' ? ['A'] : sectionFilter === 'B' ? ['B'] : ['A', 'B'];
+        // Determine active sections for this specific program:
+        // Always starts with baseline Section A. Extra sections (like B) only exist if registered or if records exist.
+        const progActiveSections = new Set<string>(['A']);
+        matchingRecords.forEach((r) => {
+          const sec = (r.section || 'A').trim().toUpperCase();
+          if (sec) progActiveSections.add(sec);
+        });
+
+        const cohortMap = StorageService.getCohortSectionsMap();
+        Object.keys(cohortMap).forEach((key) => {
+          if (key.includes(dept.name) && key.includes(prog.name)) {
+            const list = cohortMap[key];
+            if (Array.isArray(list)) {
+              list.forEach((s) => {
+                const clean = (s || '').trim().toUpperCase();
+                if (clean) progActiveSections.add(clean);
+              });
+            }
+          }
+        });
+
+        let targetSections: string[] = [];
+        if (sectionFilter === 'ALL') {
+          targetSections = Array.from(progActiveSections).sort((a, b) => {
+            if (a === 'A') return -1;
+            if (b === 'A') return 1;
+            return a.localeCompare(b);
+          });
+        } else {
+          targetSections = progActiveSections.has(sectionFilter) ? [sectionFilter] : [];
+        }
 
         const sectionBreakdowns: SectionBreakdown[] = [];
         let progCourses = 0;

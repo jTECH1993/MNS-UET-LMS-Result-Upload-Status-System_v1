@@ -351,17 +351,26 @@ export class CompletionRadarService {
 
     // Standard Undergraduate semesters
     return activeSems.map((sem) => {
-      // Look at Section A and Section B for this semester
-      const secA = this.getSectionUnit(deptName, progName, sem.id, 'A', currentSession, allRecords);
-      const secB = this.getSectionUnit(deptName, progName, sem.id, 'B', currentSession, allRecords);
+      const activeSections = StorageService.getAvailableSectionsForCohort(
+        deptName,
+        progName,
+        Array.isArray(currentSession) ? currentSession[0] : (currentSession || '2023'),
+        sem.id,
+        'Morning'
+      );
 
-      const submitted = secA.submitted + secB.submitted;
-      const pending = secA.pending + secB.pending;
-      const inProgress = secA.inProgress + secB.inProgress;
+      const secUnits = activeSections.map((secId) =>
+        this.getSectionUnit(deptName, progName, sem.id, secId, currentSession, allRecords)
+      );
+
+      const submitted = secUnits.reduce((sum, u) => sum + u.submitted, 0);
+      const pending = secUnits.reduce((sum, u) => sum + u.pending, 0);
+      const inProgress = secUnits.reduce((sum, u) => sum + u.inProgress, 0);
       const total = submitted + pending + inProgress;
       const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
 
-      let lastActivity = secA.lastActivity !== 'Awaiting coordinator grade entry' ? secA.lastActivity : secB.lastActivity;
+      const activeUnitWithActivity = secUnits.find((u) => u.lastActivity !== 'Awaiting coordinator grade entry');
+      const lastActivity = activeUnitWithActivity ? activeUnitWithActivity.lastActivity : (secUnits[0]?.lastActivity || 'Not started');
 
       return {
         id: `sem-${sem.id}`,
@@ -470,24 +479,34 @@ export class CompletionRadarService {
         });
       });
     } else {
-      // Standard configured semester curriculum: 6 core subjects expected for this semester/section
-      // (The denominator comes from configured academic structure; unconfigured entities are not treated as zero)
-      pending = 6;
-      for (let i = 1; i <= 6; i++) {
-        courses.push({
-          id: `expected-${sectionId}-${i}`,
-          courseCode: `CURR-${semId}0${i}`,
-          subjectTitle: `Semester ${semId} Core Course ${i}`,
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          dateUploaded: '',
-          uploadedBy: coord.isAssigned ? coord.name : 'Unassigned',
-          remarks: 'Pending result upload into LMS',
-          coordinatorName: coord.name,
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        });
+      // Check if this section is actually active (Section A is always baseline; Section B only if configured)
+      const isSecActive = sectionId === 'A' || StorageService.getAvailableSectionsForCohort(
+        deptName,
+        progName,
+        sessionList[0] || '2023',
+        semId,
+        'Morning'
+      ).includes(sectionId.trim().toUpperCase());
+
+      if (isSecActive) {
+        // Standard configured semester curriculum: 6 core subjects expected for active section
+        pending = 6;
+        for (let i = 1; i <= 6; i++) {
+          courses.push({
+            id: `expected-${sectionId}-${i}`,
+            courseCode: `CURR-${semId}0${i}`,
+            subjectTitle: `Semester ${semId} Core Course ${i}`,
+            creditHours: '3(3-0)',
+            status: 'Pending',
+            submitted: false,
+            dateUploaded: '',
+            uploadedBy: coord.isAssigned ? coord.name : 'Unassigned',
+            remarks: 'Pending result upload into LMS',
+            coordinatorName: coord.name,
+            deadlineText: deadlineInfo.text,
+            lastActivity: 'Not started',
+          });
+        }
       }
     }
 
@@ -544,8 +563,16 @@ export class CompletionRadarService {
       : ACADEMIC_SEMESTERS.slice(0, 4);
 
     targetSems.forEach((sem) => {
-      list.push(this.getSectionUnit(deptName, progName, sem.id, 'A', currentSession, allRecords));
-      list.push(this.getSectionUnit(deptName, progName, sem.id, 'B', currentSession, allRecords));
+      const activeSections = StorageService.getAvailableSectionsForCohort(
+        deptName,
+        progName,
+        Array.isArray(currentSession) ? currentSession[0] : (currentSession || '2023'),
+        sem.id,
+        'Morning'
+      );
+      activeSections.forEach((secId) => {
+        list.push(this.getSectionUnit(deptName, progName, sem.id, secId, currentSession, allRecords));
+      });
     });
     return list;
   }
@@ -588,8 +615,15 @@ export class CompletionRadarService {
           : ACADEMIC_SEMESTERS;
 
         targetSems.forEach((sem) => {
-          // Check Section A and Section B
-          ['A', 'B'].forEach((secId) => {
+          const activeSections = StorageService.getAvailableSectionsForCohort(
+            dept.name,
+            progName,
+            sessionList[0] || '2023',
+            sem.id,
+            'Morning'
+          );
+
+          activeSections.forEach((secId) => {
             const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, sessionList, allRecords);
 
             // Compute Risk Score

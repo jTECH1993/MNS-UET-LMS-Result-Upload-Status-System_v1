@@ -38,10 +38,10 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
     if (!sec) {
       return (
         <span
-          title="This program does not have this section"
-          className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 text-[10px] font-mono line-through cursor-not-allowed select-none border border-slate-200 dark:border-slate-700"
+          title="Single Section Cohort (No Section B registered)"
+          className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 text-[11px] font-medium border border-slate-200 dark:border-slate-700/60 select-none"
         >
-          N/A ✕
+          —
         </span>
       );
     }
@@ -72,7 +72,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
-      <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 flex items-center justify-center">
             <Layers className="w-4 h-4" />
@@ -91,6 +91,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
           <span className="flex items-center gap-1">🟢 100% Verified</span>
           <span className="flex items-center gap-1">🟡 Partial</span>
           <span className="flex items-center gap-1">🔴 0% Pending</span>
+          <span className="flex items-center gap-1 text-slate-400"><span>—</span> Single Section</span>
         </div>
       </div>
 
