@@ -2240,12 +2240,14 @@ export const HODEntryForm: React.FC<Props> = ({
               </div>
             )}
             {!isPrivilegedUser && (
-              <div className="mt-2 py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-teal-900 shrink-0">Current Program:</span>
-                  <span className="font-semibold text-slate-800">{program || 'No Program Assigned'}</span>
+              <div className="mt-2.5 px-3 py-1.5 bg-slate-50/90 border border-slate-200/90 rounded-lg text-xs text-slate-700 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-bold text-teal-950 uppercase tracking-wider text-[10px] shrink-0">Current Program:</span>
+                  <span className="font-bold text-slate-900 truncate bg-white px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs text-[11px]">
+                    {program || 'No Program Assigned'}
+                  </span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {program && currentUser?.id && (
                     <button
                       type="button"
@@ -2264,19 +2266,21 @@ export const HODEntryForm: React.FC<Props> = ({
                           showFeedback('warning', res.message);
                         }
                       }}
-                      className="text-[10px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded cursor-pointer flex items-center gap-1 transition-colors"
+                      className="text-[11px] font-semibold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100/90 border border-rose-200 px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 transition-all whitespace-nowrap active:scale-98 shadow-2xs"
                       title={`Remove ${program} from your active coordination list`}
                     >
-                      <Trash2 className="w-3 h-3 text-rose-600" />
-                      <span>Remove Program</span>
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Remove</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => setIsReqProgModalOpen(true)}
-                    className="text-[10px] font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 px-2 py-0.5 rounded cursor-pointer self-start sm:self-auto flex items-center gap-1 transition-colors"
+                    className="text-[11px] font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200/90 px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 transition-all whitespace-nowrap active:scale-98 shadow-2xs"
+                    title="Request additional degree program access from HOD"
                   >
-                    <Plus className="w-2.5 h-2.5" /> Request Additional Program
+                    <Plus className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                    <span>Request Program</span>
                   </button>
                 </div>
               </div>
