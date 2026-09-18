@@ -1236,6 +1236,87 @@ export class AuthService {
     });
   }
 
+  // Self-service program removal: Coordinator can remove any of their assigned programs if they coordinate > 1 program
+  public static removeCoordinatorProgram(
+    userId: string,
+    programToRemove: string
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'User account not found.' };
+
+    const cleanProg = programToRemove.trim();
+    const currentAssigned = account.assignedPrograms || (account.program ? [account.program] : []);
+
+    if (currentAssigned.length <= 1) {
+      return {
+        success: false,
+        message: 'You must maintain at least one assigned program. To switch or change your program, please submit a request to your Head of Department (HOD).',
+      };
+    }
+
+    if (!currentAssigned.some((p) => p.trim().toLowerCase() === cleanProg.toLowerCase())) {
+      return {
+        success: false,
+        message: `Program "${cleanProg}" is not in your current assigned programs list.`,
+      };
+    }
+
+    const updatedAssigned = currentAssigned.filter(
+      (p) => p.trim().toLowerCase() !== cleanProg.toLowerCase()
+    );
+
+    account.assignedPrograms = updatedAssigned;
+    if (account.program && account.program.trim().toLowerCase() === cleanProg.toLowerCase()) {
+      account.program = updatedAssigned[0];
+    }
+
+    if (account.programShiftAssignments && account.programShiftAssignments[cleanProg]) {
+      delete account.programShiftAssignments[cleanProg];
+    }
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined;
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        assignedPrograms: updatedAssigned,
+        program: account.program,
+        programShiftAssignments: account.programShiftAssignments,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'SECURITY_ALERT',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Coordinator ${account.name} self-removed program "${cleanProg}" from assigned programs list. Remaining programs: ${updatedAssigned.join(', ')}.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Program "${cleanProg}" has been removed from your active coordinated programs list.`,
+      session: updatedSession,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // POST-LOGIN ADDITIONAL PROGRAM ACCESS REQUESTS (COORDINATOR MULTI-PROGRAM)
   // ---------------------------------------------------------------------------

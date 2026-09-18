@@ -34,6 +34,7 @@ interface Props {
   onClose: () => void;
   currentUser: ActiveUserSession;
   onUserUpdated: (updatedUser: ActiveUserSession) => void;
+  onRequestAdditionalProgram?: () => void;
 }
 
 export const UserProfileModal: React.FC<Props> = ({
@@ -41,6 +42,7 @@ export const UserProfileModal: React.FC<Props> = ({
   onClose,
   currentUser,
   onUserUpdated,
+  onRequestAdditionalProgram,
 }) => {
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -665,132 +667,105 @@ export const UserProfileModal: React.FC<Props> = ({
                         ))}
                       </select>
                     ) : (
-                      <div className="space-y-2 pt-1">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                          {availablePrograms.map((prog) => {
-                            const isSelected = assignedPrograms.includes(prog.name);
-                            const isPrimary = program === prog.name;
-                            return (
-                              <div
-                                key={prog.name}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    if (assignedPrograms.length > 1) {
-                                      const updated = assignedPrograms.filter((p) => p !== prog.name);
-                                      setAssignedPrograms(updated);
-                                      if (isPrimary && updated.length > 0) {
-                                        setProgram(updated[0]);
-                                      }
-                                    }
-                                  } else {
-                                    setAssignedPrograms((prev) => [...prev, prog.name]);
-                                  }
-                                }}
-                                className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex items-center justify-between gap-1.5 select-none ${
-                                  isSelected
-                                    ? 'bg-teal-700 text-white border-teal-800'
-                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-teal-400'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border text-[9px] shrink-0 ${
-                                    isSelected ? 'bg-white text-teal-800 border-white font-black' : 'border-slate-400'
-                                  }`}>
-                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                  <span className="text-xs font-bold truncate">{prog.name}</span>
-                                </div>
-                                {isSelected && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleProgramSelect(prog.name);
-                                    }}
-                                    className={`shrink-0 text-[8px] px-1.5 py-0.5 rounded font-bold border transition-all cursor-pointer ${
-                                      isPrimary
-                                        ? 'bg-amber-300 text-slate-950 border-amber-400 font-extrabold'
-                                        : 'bg-teal-800 text-teal-100 border-teal-600'
-                                    }`}
-                                  >
-                                    {isPrimary ? '★ Primary' : 'Set Primary'}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                          <span className="text-[10px] font-bold text-teal-900 dark:text-teal-200">Selected Coordinated Programs ({assignedPrograms.length}):</span>
-                          {assignedPrograms.map((pName) => (
-                            <span
-                              key={pName}
-                              className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900 text-teal-950 dark:text-teal-100 border border-teal-300 dark:border-teal-700 inline-flex items-center gap-1.5"
-                            >
-                              {program === pName && <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />}
-                              <span>{pName}</span>
-                              {assignedPrograms.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const updated = assignedPrograms.filter((p) => p !== pName);
-                                    setAssignedPrograms(updated);
-                                    if (program === pName && updated.length > 0) {
-                                      handleProgramSelect(updated[0]);
-                                    }
-                                  }}
-                                  className="text-teal-700 dark:text-teal-300 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 cursor-pointer rounded"
-                                  title={`Remove ${pName}`}
-                                >
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              )}
+                      <div className="space-y-3 pt-1">
+                        {/* Currently Assigned Coordinated Programs */}
+                        <div className="p-3 bg-teal-50/60 dark:bg-teal-950/30 rounded-xl border border-teal-200 dark:border-teal-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
+                              <span>Coordinated Degree Programs ({assignedPrograms.length}):</span>
                             </span>
-                          ))}
+                            <span className="text-[10px] text-teal-700 dark:text-teal-300 font-medium">
+                              (Click X to remove any program)
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {assignedPrograms.map((pName) => {
+                              const isPrimary = program === pName;
+                              return (
+                                <div
+                                  key={pName}
+                                  className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 flex items-center justify-between gap-2 shadow-2xs"
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {isPrimary && (
+                                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                                    )}
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                      {pName}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {!isPrimary && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleProgramSelect(pName)}
+                                        className="text-[9px] px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 hover:bg-teal-200 font-bold cursor-pointer"
+                                        title="Set as Primary Program"
+                                      >
+                                        Set Primary
+                                      </button>
+                                    )}
+                                    {assignedPrograms.length > 1 ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const res = AuthService.removeCoordinatorProgram(currentUser.id, pName);
+                                          if (res.success) {
+                                            const updated = assignedPrograms.filter((p) => p !== pName);
+                                            setAssignedPrograms(updated);
+                                            if (isPrimary && updated.length > 0) {
+                                              handleProgramSelect(updated[0]);
+                                            }
+                                            setSuccessMessage(res.message);
+                                          } else {
+                                            setErrorMessage(res.message);
+                                          }
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded transition-colors cursor-pointer"
+                                        title={`Remove ${pName} from your coordination list`}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <span className="text-[9px] text-slate-400 font-medium italic px-1">
+                                        Primary
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
 
-                        {/* Cross-Department / Interdisciplinary Program Add Picker */}
-                        <div className="pt-2 border-t border-teal-200 dark:border-teal-800 space-y-1">
-                          <label className="block text-[10px] font-bold text-teal-900 dark:text-teal-200">
-                            + Add Degree Program from Another Department (Interdisciplinary Coordination)
-                          </label>
-                          <div className="flex gap-1.5">
-                            <select
-                              value={interDeptProgToAdd}
-                              onChange={(e) => setInterDeptProgToAdd(e.target.value)}
-                              className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-150 focus:ring-1 focus:ring-teal-500"
-                            >
-                              <option value="">-- Select from all university faculties --</option>
-                              {UNIVERSITY_DEPARTMENTS.map((d) => (
-                                <optgroup key={d.name} label={`${d.name} (${d.code})`}>
-                                  {d.programs.map((p) => (
-                                    <option
-                                      key={p.name}
-                                      value={p.name}
-                                      disabled={assignedPrograms.includes(p.name)}
-                                    >
-                                      {p.name} ({p.degreeLevel}) {assignedPrograms.includes(p.name) ? '• (Already Added)' : ''}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (interDeptProgToAdd && !assignedPrograms.includes(interDeptProgToAdd)) {
-                                  setAssignedPrograms((prev) => [...prev, interDeptProgToAdd]);
-                                  setInterDeptProgToAdd('');
-                                }
-                              }}
-                              disabled={!interDeptProgToAdd || assignedPrograms.includes(interDeptProgToAdd)}
-                              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shrink-0 flex items-center gap-1"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Add</span>
-                            </button>
+                        {/* Request New Program from HOD Section */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <strong className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                                Need to Coordinate an Additional Degree Program?
+                              </strong>
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
+                                Coordinators have the privilege to remove any assigned program. To add a new program or shift assignment, please submit a formal request to your Head of Department (HOD).
+                              </p>
+                            </div>
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onRequestAdditionalProgram) {
+                                onClose();
+                                onRequestAdditionalProgram();
+                              }
+                            }}
+                            className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>+ Request Additional Program from HOD</span>
+                          </button>
                         </div>
                       </div>
                     )}

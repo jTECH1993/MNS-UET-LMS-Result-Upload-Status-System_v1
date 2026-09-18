@@ -2176,11 +2176,10 @@ export const HODEntryForm: React.FC<Props> = ({
                   {(!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms).map((p) => {
                     const isSelected = program === p.name;
                     return (
-                      <button
+                      <div
                         key={p.name}
-                        type="button"
                         onClick={() => handleProgramChange(p.name)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer border flex items-center gap-1 ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer border flex items-center gap-1 select-none ${
                           isSelected
                             ? 'bg-emerald-700 text-white border-emerald-800 shadow-2xs'
                             : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
@@ -2188,7 +2187,27 @@ export const HODEntryForm: React.FC<Props> = ({
                         title={`Switch to ${p.name}`}
                       >
                         <span>{p.name}</span>
-                      </button>
+                        {!isPrivilegedUser && coordinatorAllowedPrograms.length > 1 && currentUser?.id && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const res = AuthService.removeCoordinatorProgram(currentUser.id, p.name);
+                              if (res.success) {
+                                showFeedback('success', res.message);
+                              } else {
+                                showFeedback('warning', res.message);
+                              }
+                            }}
+                            className={`p-0.5 rounded hover:bg-rose-600 hover:text-white transition-colors ${
+                              isSelected ? 'text-emerald-100' : 'text-slate-400 hover:text-rose-600'
+                            }`}
+                            title={`Remove ${p.name} from your active coordination list`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                   {!isPrivilegedUser && (
