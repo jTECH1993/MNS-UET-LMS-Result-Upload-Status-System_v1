@@ -134,10 +134,31 @@ export const HODEntryForm: React.FC<Props> = ({
   const isReadOnly = Boolean(readOnly || isVC || (isDeadlineExpired && !isVC && !isAdmin));
 
 
+  const userDept = (currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR') && currentUser.department
+    ? currentUser.department
+    : null;
+
   // Master Selections
   const [department, setDepartment] = useState<string>(
-    selectedDepartmentProp || UNIVERSITY_DEPARTMENTS[0].name
+    userDept || selectedDepartmentProp || UNIVERSITY_DEPARTMENTS[0].name
   );
+
+  // Storage synchronization listener for live database reactive updates
+  const [storageVersion, setStorageVersion] = useState<number>(0);
+
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      setStorageVersion((v) => v + 1);
+    };
+    window.addEventListener('mnsuet_storage_updated', handleStorageUpdate);
+    window.addEventListener('mnsuet_sessions_updated', handleStorageUpdate);
+    window.addEventListener('mnsuet_roster_updated', handleStorageUpdate);
+    return () => {
+      window.removeEventListener('mnsuet_storage_updated', handleStorageUpdate);
+      window.removeEventListener('mnsuet_sessions_updated', handleStorageUpdate);
+      window.removeEventListener('mnsuet_roster_updated', handleStorageUpdate);
+    };
+  }, []);
 
   // Generic Session State
   const [session, setSession] = useState<string>(
@@ -229,6 +250,13 @@ export const HODEntryForm: React.FC<Props> = ({
 
   const handleConfirmDeleteSection = async () => {
     if (!sectionToDelete) return;
+    if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
+      if (department.trim().toLowerCase() !== currentUser.department.trim().toLowerCase()) {
+        showFeedback('warning', `Access Denied: As HOD, you are only authorized to delete sections for ${currentUser.department}.`);
+        setSectionToDelete(null);
+        return;
+      }
+    }
     setIsDeletingSection(true);
     try {
       const secTarget = sectionToDelete;
@@ -308,7 +336,7 @@ export const HODEntryForm: React.FC<Props> = ({
         summary: summaryInfo,
       };
     });
-  }, [department, program, degreeLevel, shift, session, section, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, shift, session, section, lastSavedTime, isExistingRecord, storageVersion]);
 
   // Available sections for the current cohort (synced with database and user additions)
   const availableSections = useMemo(() => {
@@ -319,7 +347,7 @@ export const HODEntryForm: React.FC<Props> = ({
       semester,
       shift
     );
-  }, [department, program, session, semester, shift, lastSavedTime, isExistingRecord]);
+  }, [department, program, session, semester, shift, lastSavedTime, isExistingRecord, storageVersion]);
 
   // Keep selected section synchronized with available sections
   useEffect(() => {
@@ -370,7 +398,7 @@ export const HODEntryForm: React.FC<Props> = ({
         summary: summaryInfo,
       };
     });
-  }, [department, program, degreeLevel, shift, session, semester, availableSections, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, shift, session, semester, availableSections, lastSavedTime, isExistingRecord, storageVersion]);
 
   const handleSectionChange = (newSec: string) => {
     const cleanSec = (newSec || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
@@ -414,7 +442,7 @@ export const HODEntryForm: React.FC<Props> = ({
       morning: { hasRecord: Boolean(morningRec && morningCount > 0), courseCount: morningCount },
       evening: { hasRecord: Boolean(eveningRec && eveningCount > 0), courseCount: eveningCount },
     };
-  }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord, storageVersion]);
 
   // Metadata manual fields - initialized with current user name & designation
   const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
@@ -440,7 +468,13 @@ export const HODEntryForm: React.FC<Props> = ({
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record" or parent)
   useEffect(() => {
     if (selectedDepartmentProp && selectedDepartmentProp !== department) {
-      setDepartment(selectedDepartmentProp);
+      if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
+        if (department !== currentUser.department) {
+          setDepartment(currentUser.department);
+        }
+      } else {
+        setDepartment(selectedDepartmentProp);
+      }
     }
     if (selectedProgramProp && selectedProgramProp !== program) {
       setProgram(selectedProgramProp);
@@ -452,12 +486,13 @@ export const HODEntryForm: React.FC<Props> = ({
       setSession(selectedSessionProp);
     }
     if (selectedSemesterProp && selectedSemesterProp !== semester) {
-      setSemester(selectedSemesterProp);
+      const cleanSem = selectedSemesterProp === 'ALL' ? '1' : selectedSemesterProp;
+      setSemester(cleanSem);
     }
     if (selectedSectionProp && selectedSectionProp.trim().toUpperCase() !== section) {
       setSection(selectedSectionProp.trim().toUpperCase());
     }
-  }, [selectedDepartmentProp, selectedProgramProp, selectedShiftProp, selectedSessionProp, selectedSemesterProp, selectedSectionProp]);
+  }, [selectedDepartmentProp, selectedProgramProp, selectedShiftProp, selectedSessionProp, selectedSemesterProp, selectedSectionProp, currentUser, isVC, isAdmin]);
 
   // Strict Department Isolation for HOD & Coordinator roles (Only when NOT in VC or Admin or readOnly inspection mode)
   useEffect(() => {
@@ -481,6 +516,10 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
+    if (currentUser?.role === 'HOD' && currentUser.department && newDept !== currentUser.department && !isVC && !isAdmin) {
+      showFeedback('warning', `Security Isolation: As HOD, you are authorized to manage ${currentUser.department} only.`);
+      return;
+    }
     setDepartment(newDept);
     if (onDepartmentChangedProp) onDepartmentChangedProp(newDept);
     const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === newDept.trim().toLowerCase());
@@ -518,7 +557,7 @@ export const HODEntryForm: React.FC<Props> = ({
     if (onShiftChangedProp) onShiftChangedProp(newShift);
   };
 
-  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, Semester, or Section changes
+  // LOAD / CHECK EXISTING RECORD whenever Department, Program, Degree Level, Shift, Session, Semester, Section, or Storage updates
   useEffect(() => {
     if (!department || !program) return;
 
@@ -573,7 +612,7 @@ export const HODEntryForm: React.FC<Props> = ({
         `Ready to enter courses for ${program} (${shift} Shift – Semester ${semester} – Section ${section}). Fill course details and click 'Submit Result Status'.`
       );
     }
-  }, [department, program, degreeLevel, shift, session, semester, section]);
+  }, [department, program, degreeLevel, shift, session, semester, section, storageVersion]);
 
   const showFeedback = (type: 'success' | 'info' | 'warning', text: string) => {
     setFeedbackMessage({ type, text });
@@ -1059,6 +1098,14 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
+    // Strict Department Authorization Check for HOD
+    if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
+      if (department.trim().toLowerCase() !== currentUser.department.trim().toLowerCase()) {
+        showFeedback('warning', `Access Denied: As Head of Department, you can only manage data for ${currentUser.department}.`);
+        return;
+      }
+    }
+
     // Filter out rows that are completely empty before saving
     const activeRows = subjects.filter(
       (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status
@@ -1116,6 +1163,15 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift/section record)
   const handleDeleteConfirm = async () => {
+    // Strict Department Authorization Check for HOD
+    if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
+      if (department.trim().toLowerCase() !== currentUser.department.trim().toLowerCase()) {
+        showFeedback('warning', `Access Denied: As Head of Department, you can only delete records for ${currentUser.department}.`);
+        setIsDeleteModalOpen(false);
+        return;
+      }
+    }
+
     const success = await StorageService.deleteSubmission(
       department,
       program,
@@ -1379,6 +1435,48 @@ export const HODEntryForm: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      {/* Vice Chancellor Inspection Notice Banner */}
+      {isReadOnly && isVC && (
+        <div id="vc-inspection-banner" className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Eye className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <p className="font-bold text-amber-900 text-sm">Vice Chancellor Inspection Mode</p>
+              <p className="text-amber-800 text-xs mt-0.5">
+                Viewing real-time submitted LMS result details for <strong>{department}</strong> &gt; <strong>{program}</strong> [{shift} Shift – Semester {semester} – Section {section}]. Form editing is disabled for audit compliance.
+              </p>
+            </div>
+          </div>
+          {onSwitchToVC && (
+            <button
+              type="button"
+              onClick={onSwitchToVC}
+              className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-3 py-1.5 rounded-lg shrink-0 cursor-pointer shadow-xs self-start sm:self-auto"
+            >
+              Return to VC Dashboard
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* HOD Full Department Oversight Banner */}
+      {currentUser?.role === 'HOD' && currentUser.department && (
+        <div id="hod-authority-banner" className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-emerald-950 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
+            <div>
+              <p className="font-bold text-emerald-900 text-sm">Head of Department Administrative Oversight</p>
+              <p className="text-emerald-800 text-xs mt-0.5">
+                You have full administrative authorization to view, manage, and update LMS result status for all programs under <strong>{currentUser.department}</strong>.
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
+            HOD Verified
+          </span>
+        </div>
+      )}
 
       <div className="mb-4">
         <DeadlineBanner currentSession={session} semesterFilter={semester} isVC={false} />

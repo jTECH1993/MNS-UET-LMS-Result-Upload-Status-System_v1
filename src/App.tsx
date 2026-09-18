@@ -257,10 +257,29 @@ export default function App() {
 
     setTargetDept(dept);
     setTargetProg(prog);
-    if (shift) setTargetShift(shift);
-    if (session) setTargetSession(session);
-    if (semester) setTargetSemester(semester);
-    if (section) setTargetAcademicSection(section);
+
+    // Intelligently find matching record to inspect if shift/semester/section are not specific or are 'ALL'
+    const matchingRecords = StorageService.getAllSubmissions().filter(
+      (r) => StorageService._isDeptMatch(r.department, dept) && StorageService._isProgMatch(r.program, prog)
+    );
+
+    const validShift = shift && shift !== ('ALL' as any) ? shift : (matchingRecords[0]?.shift || 'Morning');
+    setTargetShift(validShift);
+
+    const validSession = session && session !== 'ALL' ? session : (matchingRecords[0]?.session || StorageService.getSelectedSession());
+    setTargetSession(validSession);
+
+    // If semester was passed as 'ALL' or undefined, select the semester that has actual course rows or default to '1'
+    let targetSem = semester && semester !== 'ALL' ? semester : '';
+    if (!targetSem) {
+      const recWithSubjects = matchingRecords.find((r) => r.subjects && r.subjects.length > 0 && (!validShift || r.shift === validShift));
+      targetSem = recWithSubjects?.semester || matchingRecords[0]?.semester || '1';
+    }
+    setTargetSemester(targetSem);
+
+    const validSection = section && section !== 'ALL' ? section.trim().toUpperCase() : (matchingRecords[0]?.section || 'A');
+    setTargetAcademicSection(validSection);
+
     setIsInspectionMode(true);
     setActiveView('HOD');
     setActiveModule('LMS');

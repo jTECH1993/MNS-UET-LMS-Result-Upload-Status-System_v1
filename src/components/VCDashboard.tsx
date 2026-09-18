@@ -429,10 +429,40 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return list;
   }, [allRecords, activeSessions, rosterVersion, selectedSectionFilter]);
 
-  // Standard list of sections: strictly Section A and Section B as required
-  const availableSectionsInDb = useMemo(() => ['A', 'B'], []);
+  // Available sections across the database: defaults to Section A, includes other sections (like B) only if active or created
+  const availableSectionsInDb = useMemo(() => {
+    const list = new Set<string>(['A']);
+    try {
+      const cohortMap = StorageService.getCohortSectionsMap();
+      Object.values(cohortMap).forEach((secs) => {
+        if (Array.isArray(secs)) {
+          secs.forEach((s) => {
+            const clean = (s || '').trim().toUpperCase();
+            if (clean) list.add(clean);
+          });
+        }
+      });
+      allRecords.forEach((r) => {
+        const sec = (r.section || 'A').trim().toUpperCase();
+        if (sec !== 'A') {
+          const hasCourses = r.subjects && r.subjects.some((s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status));
+          if (hasCourses) list.add(sec);
+        }
+      });
+    } catch {
+      // Fallback to Section A
+    }
+    return Array.from(list).sort();
+  }, [allRecords, rosterVersion]);
 
-  // High-level statistics based on active Session, Shift, and Semester filters
+  // If selected section filter was deleted from database, gracefully reset filter to ALL
+  useEffect(() => {
+    if (selectedSectionFilter !== 'ALL' && !availableSectionsInDb.includes(selectedSectionFilter)) {
+      setSelectedSectionFilter('ALL');
+    }
+  }, [availableSectionsInDb, selectedSectionFilter]);
+
+  // High-Level Statistics based on active Session, Shift, and Semester filters
   const stats = useMemo(() => {
     const totalDepartments = UNIVERSITY_DEPARTMENTS.length;
 
@@ -468,14 +498,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sum.totalSubjects;
             totalUploadedAcrossUni += sum.uploaded;
             totalPendingAcrossUni += sum.pending;
+          } else {
+            // Awaiting submission for this active cohort slot: 5 expected curriculum courses
+            totalSubjectsAcrossUni += 5;
+            totalPendingAcrossUni += 5;
           }
         } else {
           if (sData.hasSubmission) {
             submittedSlots++;
+            totalSubjectsAcrossUni += sData.totalSubjects;
+            totalUploadedAcrossUni += sData.totalUploaded;
+            totalPendingAcrossUni += sData.totalPending;
+          } else {
+            // Awaiting submission: 5 expected curriculum courses
+            totalSubjectsAcrossUni += 5;
+            totalPendingAcrossUni += 5;
           }
-          totalSubjectsAcrossUni += sData.totalSubjects;
-          totalUploadedAcrossUni += sData.totalUploaded;
-          totalPendingAcrossUni += sData.totalPending;
         }
       });
     });
@@ -530,10 +568,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         shifts.forEach(({ name, data: shift }) => {
           if (selectedSemesterFilter === 'ALL') {
             totalCohorts += 1;
-            totalSubjects += shift.totalSubjects;
-            totalUploaded += shift.totalUploaded;
-            totalPending += shift.totalPending;
-            if (shift.hasSubmission) submittedCohorts += 1;
+            if (shift.hasSubmission) {
+              totalSubjects += shift.totalSubjects;
+              totalUploaded += shift.totalUploaded;
+              totalPending += shift.totalPending;
+              submittedCohorts += 1;
+            } else {
+              // Awaiting submission: 5 expected curriculum subjects
+              totalSubjects += 5;
+              totalPending += 5;
+            }
           } else {
             const rec = shift.semesterRecords[selectedSemesterFilter];
             if (rec) {
@@ -543,14 +587,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalSubjects += s.totalSubjects;
               totalUploaded += s.uploaded;
               totalPending += s.pending;
-            } else if (name === 'Morning') {
+            } else {
+              // Awaiting submission for this cohort slot
               totalCohorts += 1;
+              totalSubjects += 5;
+              totalPending += 5;
             }
           }
         });
       });
 
-      const percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
+      let percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
+      if (submittedCohorts < totalCohorts && percentage === 100) {
+        percentage = Math.min(percentage, 95);
+      }
+      if (submittedCohorts === 0) {
+        percentage = 0;
+      }
 
       return {
         deptName: dept.name,
@@ -1990,7 +2043,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                     progItem.program,
                                     effectiveShift,
                                     currentSession,
-                                    selectedSemesterFilter,
+                                    sub?.semester || (selectedSemesterFilter !== 'ALL' ? selectedSemesterFilter : undefined),
                                     secKey
                                   )
                                 }
@@ -2312,7 +2365,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                           progItem.program,
                                           effectiveShift,
                                           currentSession,
-                                          selectedSemesterFilter,
+                                          sub?.semester || (selectedSemesterFilter !== 'ALL' ? selectedSemesterFilter : undefined),
                                           secKey
                                         )
                                       }

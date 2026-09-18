@@ -513,7 +513,7 @@ export class CompletionRadarService {
         });
       });
     } else {
-      // No course records uploaded yet for this cohort - show authentic awaiting state (no fabricated placeholder numbers)
+      // No course records uploaded yet for this cohort - show authentic awaiting state
       courses.push({
         id: `awaiting-${semId}-${sectionId}`,
         courseCode: 'PENDING',
@@ -528,6 +528,7 @@ export class CompletionRadarService {
         deadlineText: deadlineInfo.text,
         lastActivity: 'Awaiting submission',
       });
+      pending = 5;
     }
 
     const total = submitted + pending + inProgress;

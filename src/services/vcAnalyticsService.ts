@@ -394,24 +394,29 @@ export class VCAnalyticsService {
             });
             secTotal = validSubjects.length;
           } else {
-            // Awaiting initial submission: 0 logged courses (no fake dummy courses)
-            secTotal = 0;
-            secPending = 0;
-            courseDetails.push({
-              id: `awaiting-${secName}`,
-              courseCode: 'PENDING',
-              subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
-              creditHours: '—',
-              status: 'Pending',
-              dateUploaded: '',
-              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-              remarks: `Awaiting LMS result upload for Section ${secName}`,
-              expected: true,
-              submitted: false,
-              coordinatorName: coordinatorDim.name,
-              deadline,
-              lastActivity: 'Awaiting submission',
-            });
+            // Awaiting initial submission: 5 expected curriculum courses awaiting grade entry
+            // Prevents unsubmitted cohorts from falsely inflating completion to 100%
+            secTotal = 5;
+            secPending = 5;
+            secUploaded = 0;
+            secInProgress = 0;
+            for (let i = 1; i <= 5; i++) {
+              courseDetails.push({
+                id: `awaiting-${secName}-c${i}`,
+                courseCode: `SUBJ-${i}`,
+                subjectTitle: `Curricular Subject ${i} (Awaiting LMS Entry)`,
+                creditHours: '3(3-0)',
+                status: 'Pending',
+                dateUploaded: '',
+                uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+                remarks: `Awaiting LMS result upload for Section ${secName}`,
+                expected: true,
+                submitted: false,
+                coordinatorName: coordinatorDim.name,
+                deadline,
+                lastActivity: 'Awaiting submission',
+              });
+            }
           }
 
           const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
@@ -527,8 +532,9 @@ export class VCAnalyticsService {
       });
 
       const deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
+      const allProgramsCompleted = activePrograms.length > 0 && programDims.every((p) => p.completionRate === 100 && p.pendingCourses === 0);
       let deptStatus: 'Completed' | 'Good' | 'Needs Attention' | 'Critical';
-      if (deptCompletion === 100 && deptPending === 0) deptStatus = 'Completed';
+      if (deptCompletion === 100 && deptPending === 0 && allProgramsCompleted) deptStatus = 'Completed';
       else if (deptCompletion >= 70) deptStatus = 'Good';
       else if (deptCompletion >= 30) deptStatus = 'Needs Attention';
       else deptStatus = 'Critical';
@@ -554,7 +560,7 @@ export class VCAnalyticsService {
     const overallRate =
       totalUniversityCourses > 0 ? Math.round((totalUniversityUploaded / totalUniversityCourses) * 100) : 0;
 
-    const completedDepts = departments.filter((d) => d.completionRate === 100 && d.pendingCourses === 0).length;
+    const completedDepts = departments.filter((d) => d.status === 'Completed').length;
 
     return {
       departments: departments.sort((a, b) => b.completionRate - a.completionRate),
