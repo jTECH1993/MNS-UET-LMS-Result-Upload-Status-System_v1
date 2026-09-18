@@ -189,9 +189,49 @@ export const HODEntryForm: React.FC<Props> = ({
     return dept ? dept.programs : [];
   }, [department]);
 
-  const [program, setProgram] = useState<string>(
-    selectedProgramProp || (currentDeptPrograms[0]?.name || '')
-  );
+  // Institutional Privilege Check:
+  // Head of Department (HOD), ADMIN, and VC have department-wide privilege to view and select all programs.
+  // Program Coordinators are strictly restricted to their assigned degree programs and assigned shifts.
+  const isPrivilegedUser = useMemo(() => {
+    return currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN' || currentUser?.role === 'VC';
+  }, [currentUser?.role]);
+
+  // Determine programs allowed for the active user:
+  const coordinatorAllowedPrograms = useMemo(() => {
+    if (isPrivilegedUser) {
+      return allDeptPrograms;
+    }
+    const userPrograms: string[] = [];
+    if (currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 0) {
+      userPrograms.push(...currentUser.assignedPrograms);
+    } else if (currentUser?.program) {
+      userPrograms.push(currentUser.program);
+    }
+    if (currentUser?.programShiftAssignments) {
+      Object.keys(currentUser.programShiftAssignments).forEach((p) => {
+        if (!userPrograms.includes(p)) userPrograms.push(p);
+      });
+    }
+
+    const filtered = allDeptPrograms.filter((p) =>
+      userPrograms.some((up) => up.trim().toLowerCase() === p.name.trim().toLowerCase())
+    );
+
+    return filtered.length > 0 ? filtered : allDeptPrograms;
+  }, [isPrivilegedUser, allDeptPrograms, currentUser]);
+
+  const initialProgram = useMemo(() => {
+    if (selectedProgramProp) {
+      if (isPrivilegedUser) return selectedProgramProp;
+      const match = coordinatorAllowedPrograms.find(
+        (p) => p.name.trim().toLowerCase() === selectedProgramProp.trim().toLowerCase()
+      );
+      if (match) return match.name;
+    }
+    return coordinatorAllowedPrograms[0]?.name || (currentDeptPrograms[0]?.name || '');
+  }, [selectedProgramProp, isPrivilegedUser, coordinatorAllowedPrograms, currentDeptPrograms]);
+
+  const [program, setProgram] = useState<string>(initialProgram);
 
   // Auto-derived default degree level, with user override capability
   const autoDegreeLevel = useMemo(() => {
@@ -205,8 +245,32 @@ export const HODEntryForm: React.FC<Props> = ({
     setDegreeLevel(autoDegreeLevel);
   }, [autoDegreeLevel]);
 
+  // Allowed shifts for current selected program
+  const allowedShiftsForProgram = useMemo<AcademicShift[]>(() => {
+    if (isPrivilegedUser) {
+      return ['Morning', 'Evening'];
+    }
+    if (currentUser?.programShiftAssignments && program && currentUser.programShiftAssignments[program]) {
+      const shs = currentUser.programShiftAssignments[program];
+      if (shs && shs.length > 0) return shs;
+    }
+    if (currentUser?.assignedShifts && currentUser.assignedShifts.length > 0) {
+      return currentUser.assignedShifts;
+    }
+    return ['Morning', 'Evening'];
+  }, [isPrivilegedUser, currentUser, program]);
+
   // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
-  const [shift, setShift] = useState<AcademicShift>(selectedShiftProp || 'Morning');
+  const initialShift = useMemo<AcademicShift>(() => {
+    if (selectedShiftProp) {
+      if (isPrivilegedUser || allowedShiftsForProgram.includes(selectedShiftProp)) {
+        return selectedShiftProp;
+      }
+    }
+    return allowedShiftsForProgram[0] || 'Morning';
+  }, [selectedShiftProp, isPrivilegedUser, allowedShiftsForProgram]);
+
+  const [shift, setShift] = useState<AcademicShift>(initialShift);
 
   // Section selection (Section A, Section B, Section C, etc.) - strictly isolated data partition
   const [section, setSection] = useState<string>((selectedSectionProp || 'A').trim().toUpperCase());
@@ -534,13 +598,37 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   const handleProgramChange = (newProg: string) => {
+    if (!isPrivilegedUser) {
+      const isAllowed = coordinatorAllowedPrograms.some(
+        (p) => p.name.trim().toLowerCase() === newProg.trim().toLowerCase()
+      );
+      if (!isAllowed) {
+        showFeedback(
+          'warning',
+          `Access Restricted: Only Head of Department (HOD) has privilege to select other program coordinators' data. You are assigned to: ${coordinatorAllowedPrograms.map((p) => p.name).join(', ')}`
+        );
+        return;
+      }
+    }
     setProgram(newProg);
     if (onProgramChangedProp) onProgramChangedProp(newProg);
   };
 
-  // Validate that program belongs to selected department; if not, fallback to first program
+  // Validate that program belongs to selected department & allowed coordinator scope
   useEffect(() => {
     if (!department) return;
+    if (!isPrivilegedUser) {
+      const isAllowed = coordinatorAllowedPrograms.some(
+        (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+      );
+      if (!isAllowed && coordinatorAllowedPrograms.length > 0) {
+        const fallback = coordinatorAllowedPrograms[0].name;
+        setProgram(fallback);
+        if (onProgramChangedProp) onProgramChangedProp(fallback);
+      }
+      return;
+    }
+
     const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === department.trim().toLowerCase());
     if (targetDept && targetDept.programs.length > 0) {
       const isValid = targetDept.programs.some((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
@@ -550,9 +638,30 @@ export const HODEntryForm: React.FC<Props> = ({
         if (onProgramChangedProp) onProgramChangedProp(fallback);
       }
     }
-  }, [department]);
+  }, [department, isPrivilegedUser, coordinatorAllowedPrograms]);
+
+  // Synchronize coordinator shifts whenever program or allowed shifts change
+  useEffect(() => {
+    if (!isPrivilegedUser && allowedShiftsForProgram.length > 0) {
+      if (!allowedShiftsForProgram.includes(shift)) {
+        const fallbackShift = allowedShiftsForProgram[0];
+        setShift(fallbackShift);
+        if (onShiftChangedProp) onShiftChangedProp(fallbackShift);
+      }
+    }
+  }, [isPrivilegedUser, program, allowedShiftsForProgram, shift]);
 
   const handleShiftChange = (newShift: AcademicShift) => {
+    if (!isPrivilegedUser) {
+      if (!allowedShiftsForProgram.includes(newShift)) {
+        const otherShift = newShift === 'Morning' ? 'Evening' : 'Morning';
+        showFeedback(
+          'warning',
+          `Access Restricted: You are assigned as ${otherShift} Coordinator for ${program}. Only the assigned ${newShift} Coordinator or Head of Department (HOD) can access ${newShift} shift data.`
+        );
+        return;
+      }
+    }
     setShift(newShift);
     if (onShiftChangedProp) onShiftChangedProp(newShift);
   };
@@ -1297,16 +1406,16 @@ export const HODEntryForm: React.FC<Props> = ({
                     className="bg-transparent text-emerald-200 hover:text-white font-bold text-xs focus:outline-none cursor-pointer pr-1"
                     title="Switch inspected program to see its specific courses and LMS records"
                   >
-                    <optgroup label={`Session ${session} Enrolled Programs`}>
-                      {allDeptPrograms
-                        .filter((p) => StorageService.getSessionPrograms(department, session).includes(p.name))
+                    <optgroup label={!isPrivilegedUser ? `Your Assigned Coordinated Programs (${coordinatorAllowedPrograms.length})` : `Session ${session} Enrolled Programs`}>
+                      {(!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms)
+                        .filter((p) => !isPrivilegedUser || StorageService.getSessionPrograms(department, session).includes(p.name))
                         .map((p) => (
                           <option key={p.name} value={p.name} className="bg-slate-900 text-emerald-300 font-bold">
-                            {p.name} ({p.degreeLevel}) ✓ [Session {session}]
+                            {p.name} ({p.degreeLevel}) {!isPrivilegedUser ? '★ Assigned' : `✓ [Session ${session}]`}
                           </option>
                         ))}
                     </optgroup>
-                    {allDeptPrograms.some((p) => !StorageService.getSessionPrograms(department, session).includes(p.name)) && (
+                    {isPrivilegedUser && allDeptPrograms.some((p) => !StorageService.getSessionPrograms(department, session).includes(p.name)) && (
                       <optgroup label={`Other Offerings (Not in Session ${session})`}>
                         {allDeptPrograms
                           .filter((p) => !StorageService.getSessionPrograms(department, session).includes(p.name))
@@ -1563,12 +1672,12 @@ export const HODEntryForm: React.FC<Props> = ({
                   ) : null
                 )}
               </label>
-              {!isReadOnly && (
+              {!isReadOnly && isPrivilegedUser && (
                 <button
                   type="button"
                   onClick={() => setIsRosterModalOpen(true)}
                   className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer shrink-0 ml-1"
-                  title="Configure active roster for this session"
+                  title="Configure active roster for this session (HOD privilege)"
                 >
                   Configure
                 </button>
@@ -1581,6 +1690,18 @@ export const HODEntryForm: React.FC<Props> = ({
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer"
             >
               {(() => {
+                if (!isPrivilegedUser) {
+                  return (
+                    <optgroup label={`Your Coordinated Programs (${coordinatorAllowedPrograms.length})`}>
+                      {coordinatorAllowedPrograms.map((p) => (
+                        <option key={p.name} value={p.name} className="font-bold text-slate-900">
+                          {p.name} ★ (Assigned to You)
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                }
+
                 const activeNames = StorageService.getSessionPrograms(department, session);
                 const enrolled = allDeptPrograms.filter((p) => activeNames.includes(p.name));
                 const other = allDeptPrograms.filter((p) => !activeNames.includes(p.name));
@@ -1623,17 +1744,22 @@ export const HODEntryForm: React.FC<Props> = ({
                 );
               })()}
             </select>
-            {/* Quick program switcher buttons for HOD & Department Leadership */}
-            {allDeptPrograms.length > 1 && (
+            {/* Quick program switcher buttons for HOD & Assigned Coordinators */}
+            {(!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms).length > 1 && (
               <div className="mt-2 pt-1.5 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
                     <GraduationCap className="w-3 h-3 text-emerald-600" />
-                    Department Programs ({allDeptPrograms.length}):
+                    {!isPrivilegedUser ? `Your Coordinated Programs (${coordinatorAllowedPrograms.length}):` : `Department Programs (${allDeptPrograms.length}):`}
                   </span>
+                  {!isPrivilegedUser && (
+                    <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
+                      🔒 HOD Privilege for Other Programs
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {allDeptPrograms.map((p) => {
+                  {(!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms).map((p) => {
                     const isSelected = program === p.name;
                     return (
                       <button
@@ -1652,6 +1778,12 @@ export const HODEntryForm: React.FC<Props> = ({
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {!isPrivilegedUser && coordinatorAllowedPrograms.length === 1 && (
+              <div className="mt-2 py-1 px-2 bg-amber-50/90 border border-amber-200 rounded text-[10px] text-amber-800 flex items-center gap-1.5">
+                <span className="font-bold shrink-0">🔒 Coordinator Scope:</span>
+                <span>Assigned to <strong>{coordinatorAllowedPrograms[0]?.name}</strong>. Head of Department (HOD) privilege is required to access other degree programs.</span>
               </div>
             )}
             {/* Sections filter indicator badge */}
@@ -1762,44 +1894,80 @@ export const HODEntryForm: React.FC<Props> = ({
               Shift <span className="text-rose-600">*</span>
             </label>
             <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
-              <button
-                id="btn-shift-morning"
-                type="button"
-                onClick={() => handleShiftChange('Morning')}
-                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  shift === 'Morning'
-                    ? 'bg-amber-500 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200'
-                }`}
-                title={shiftStatuses.morning.hasRecord ? `Morning: ${shiftStatuses.morning.courseCount} course(s) saved` : 'Morning: No saved courses'}
-              >
-                <Sun className="w-3.5 h-3.5" />
-                <span>Morning</span>
-                {shiftStatuses.morning.hasRecord && (
-                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Morning' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
-                    ● {shiftStatuses.morning.courseCount}
-                  </span>
-                )}
-              </button>
-              <button
-                id="btn-shift-evening"
-                type="button"
-                onClick={() => handleShiftChange('Evening')}
-                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  shift === 'Evening'
-                    ? 'bg-indigo-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200'
-                }`}
-                title={shiftStatuses.evening.hasRecord ? `Evening: ${shiftStatuses.evening.courseCount} course(s) saved` : 'Evening: No saved courses'}
-              >
-                <Moon className="w-3.5 h-3.5" />
-                <span>Evening</span>
-                {shiftStatuses.evening.hasRecord && (
-                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Evening' ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900'}`}>
-                    ● {shiftStatuses.evening.courseCount}
-                  </span>
-                )}
-              </button>
+              {(() => {
+                const canMorning = isPrivilegedUser || allowedShiftsForProgram.includes('Morning');
+                const canEvening = isPrivilegedUser || allowedShiftsForProgram.includes('Evening');
+
+                return (
+                  <>
+                    <button
+                      id="btn-shift-morning"
+                      type="button"
+                      disabled={!canMorning}
+                      onClick={() => canMorning && handleShiftChange('Morning')}
+                      className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                        !canMorning
+                          ? 'opacity-40 cursor-not-allowed bg-slate-200/70 text-slate-400 border border-dashed border-slate-300'
+                          : shift === 'Morning'
+                          ? 'bg-amber-500 text-white shadow-xs cursor-pointer'
+                          : 'text-slate-600 hover:bg-slate-200 cursor-pointer'
+                      }`}
+                      title={
+                        !canMorning
+                          ? `Access Restricted: You are assigned to Evening shift only. Morning Coordinator or HOD privilege required.`
+                          : shiftStatuses.morning.hasRecord
+                          ? `Morning: ${shiftStatuses.morning.courseCount} course(s) saved`
+                          : 'Morning: No saved courses'
+                      }
+                    >
+                      <Sun className="w-3.5 h-3.5" />
+                      <span>Morning</span>
+                      {!canMorning ? (
+                        <span className="text-[8px] bg-slate-300 text-slate-700 px-1 py-0.2 rounded font-bold">
+                          Locked
+                        </span>
+                      ) : shiftStatuses.morning.hasRecord ? (
+                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Morning' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                          ● {shiftStatuses.morning.courseCount}
+                        </span>
+                      ) : null}
+                    </button>
+
+                    <button
+                      id="btn-shift-evening"
+                      type="button"
+                      disabled={!canEvening}
+                      onClick={() => canEvening && handleShiftChange('Evening')}
+                      className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                        !canEvening
+                          ? 'opacity-40 cursor-not-allowed bg-slate-200/70 text-slate-400 border border-dashed border-slate-300'
+                          : shift === 'Evening'
+                          ? 'bg-indigo-700 text-white shadow-xs cursor-pointer'
+                          : 'text-slate-600 hover:bg-slate-200 cursor-pointer'
+                      }`}
+                      title={
+                        !canEvening
+                          ? `Access Restricted: You are assigned to Morning shift only. Evening Coordinator or HOD privilege required.`
+                          : shiftStatuses.evening.hasRecord
+                          ? `Evening: ${shiftStatuses.evening.courseCount} course(s) saved`
+                          : 'Evening: No saved courses'
+                      }
+                    >
+                      <Moon className="w-3.5 h-3.5" />
+                      <span>Evening</span>
+                      {!canEvening ? (
+                        <span className="text-[8px] bg-slate-300 text-slate-700 px-1 py-0.2 rounded font-bold">
+                          Locked
+                        </span>
+                      ) : shiftStatuses.evening.hasRecord ? (
+                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Evening' ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900'}`}>
+                          ● {shiftStatuses.evening.courseCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
 

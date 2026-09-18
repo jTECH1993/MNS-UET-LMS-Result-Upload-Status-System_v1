@@ -217,8 +217,21 @@ export default function App() {
       if (session.department) {
         setTargetDept(session.department);
       }
-      if (session.program) {
-        setTargetProg(session.program);
+      const userAssignedProgs = session.assignedPrograms && session.assignedPrograms.length > 0
+        ? session.assignedPrograms
+        : session.program
+        ? [session.program]
+        : [];
+      if (userAssignedProgs.length > 0) {
+        setTargetProg(userAssignedProgs[0]);
+        if (session.programShiftAssignments && session.programShiftAssignments[userAssignedProgs[0]]) {
+          const shs = session.programShiftAssignments[userAssignedProgs[0]];
+          if (shs && shs.length > 0) {
+            setTargetShift(shs[0]);
+          }
+        } else if (session.assignedShifts && session.assignedShifts.length > 0) {
+          setTargetShift(session.assignedShifts[0]);
+        }
       } else if (session.department) {
         const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === session.department);
         if (deptObj && deptObj.programs.length > 0) {
@@ -248,11 +261,21 @@ export default function App() {
     semester?: string,
     section?: string
   ) => {
-    // Only Admin can jump to HOD entry for other departments from VC dashboard
+    // Only Admin / VC can jump to HOD entry for other departments from VC dashboard
     if (currentUser?.role === 'HOD' && currentUser.department !== dept) {
       setToastMessage('Department Isolation: You can only edit results for your assigned department.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
+    }
+
+    // Program Coordinator restriction: Only HOD has privilege to select other program coordinator data
+    if (currentUser?.role === 'COORDINATOR') {
+      const allowed = currentUser.assignedPrograms || (currentUser.program ? [currentUser.program] : []);
+      if (allowed.length > 0 && !allowed.some(p => p.trim().toLowerCase() === prog.trim().toLowerCase())) {
+        setToastMessage(`Access Restricted: Only Head of Department (HOD) has privilege to select other program coordinators' data. You are assigned to: ${allowed.join(', ')}`);
+        setTimeout(() => setToastMessage(null), 4000);
+        return;
+      }
     }
 
     setTargetDept(dept);

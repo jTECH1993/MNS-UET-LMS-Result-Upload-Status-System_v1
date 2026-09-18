@@ -244,7 +244,9 @@ export class VCAnalyticsService {
           if (acc.role !== 'COORDINATOR' && acc.role !== 'LECTURER') return false;
           if (acc.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           const assigned = acc.assignedPrograms || (acc.program ? [acc.program] : []);
-          return assigned.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
+          const keysFromShifts = acc.programShiftAssignments ? Object.keys(acc.programShiftAssignments) : [];
+          const allProgs = Array.from(new Set([...assigned, ...keysFromShifts]));
+          return allProgs.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
         });
 
         let coordinatorAccount = matchingCoordAccounts[0];
@@ -258,7 +260,20 @@ export class VCAnalyticsService {
 
         let coordShifts: AcademicShift[] | undefined = undefined;
         let coordShiftLabel: string | undefined = undefined;
-        if (coordinatorAccount) {
+        let coordDisplayName: string | undefined = undefined;
+
+        if (matchingCoordAccounts.length > 1 && shiftFilter === 'ALL') {
+          // If multiple coordinators oversee different shifts of this program
+          const namesWithShifts = matchingCoordAccounts.map((acc) => {
+            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning', 'Evening'];
+            const label = shs.includes('Morning') && shs.includes('Evening') ? 'M&E' : shs.includes('Morning') ? 'Morning' : 'Evening';
+            return `${acc.name} (${label})`;
+          });
+          coordDisplayName = namesWithShifts.join(' • ');
+          coordShiftLabel = 'Morning & Evening (Coordinated)';
+          coordShifts = ['Morning', 'Evening'];
+        } else if (coordinatorAccount) {
+          coordDisplayName = coordinatorAccount.name;
           coordShifts = (coordinatorAccount.programShiftAssignments && coordinatorAccount.programShiftAssignments[prog.name]) ||
             coordinatorAccount.assignedShifts || ['Morning', 'Evening'];
           if (coordShifts.includes('Morning') && coordShifts.includes('Evening')) {
@@ -272,7 +287,7 @@ export class VCAnalyticsService {
 
         // Check if any database submission for this program records a coordinator
         let dbCoordName = '';
-        if (!coordinatorAccount) {
+        if (!coordinatorAccount && matchingCoordAccounts.length === 0) {
           const recWithCoord = allRecords.find((r) => {
             if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
             if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
@@ -283,14 +298,14 @@ export class VCAnalyticsService {
           }
         }
 
-        const coordinatorDim: CoordinatorDimension = coordinatorAccount
+        const coordinatorDim: CoordinatorDimension = (coordinatorAccount || matchingCoordAccounts.length > 0)
           ? {
-              name: coordinatorAccount.name,
-              username: coordinatorAccount.username,
-              email: coordinatorAccount.email,
+              name: coordDisplayName || coordinatorAccount.name,
+              username: coordinatorAccount?.username || matchingCoordAccounts[0]?.username,
+              email: coordinatorAccount?.email || matchingCoordAccounts[0]?.email,
               isAssigned: true,
               accountStatus: 'Active',
-              lastLoginAt: coordinatorAccount.lastLoginAt,
+              lastLoginAt: coordinatorAccount?.lastLoginAt || matchingCoordAccounts[0]?.lastLoginAt,
               shifts: coordShifts,
               shiftLabel: coordShiftLabel,
             }
@@ -371,7 +386,11 @@ export class VCAnalyticsService {
             return a.localeCompare(b);
           });
         } else {
-          targetSections = progActiveSections.has(sectionFilter) ? [sectionFilter] : [];
+          targetSections = progActiveSections.has(sectionFilter) ? [sectionFilter] : ['A'];
+        }
+
+        if (targetSections.length === 0) {
+          targetSections = ['A'];
         }
 
         const sectionBreakdowns: SectionBreakdown[] = [];
@@ -471,6 +490,44 @@ export class VCAnalyticsService {
           progInProgress += secInProgress;
         });
 
+        // Ensure every active academic program has at least 5 expected courses awaiting entry
+        if (progCourses === 0) {
+          const defaultSec = 'A';
+          const defaultCourses: CourseDetail[] = [];
+          for (let i = 1; i <= 5; i++) {
+            defaultCourses.push({
+              id: `awaiting-${dept.code}-${prog.name.replace(/\s+/g, '-')}-${defaultSec}-c${i}`,
+              courseCode: `SUBJ-${i}`,
+              subjectTitle: `Curricular Subject ${i} (Awaiting LMS Entry)`,
+              creditHours: '3(3-0)',
+              status: 'Pending',
+              dateUploaded: '',
+              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+              remarks: `Awaiting LMS result upload for ${prog.name}`,
+              expected: true,
+              submitted: false,
+              coordinatorName: coordinatorDim.name,
+              deadline,
+              lastActivity: 'Awaiting submission',
+            });
+          }
+          sectionBreakdowns.push({
+            section: defaultSec,
+            totalCourses: 5,
+            uploadedCourses: 0,
+            pendingCourses: 5,
+            inProgressCourses: 0,
+            completionRate: 0,
+            status: 'Not Started',
+            submissionRecord: null,
+            courses: defaultCourses,
+          });
+          progCourses = 5;
+          progPending = 5;
+          progUploaded = 0;
+          progInProgress = 0;
+        }
+
         const progCompletion = progCourses > 0 ? Math.round((progUploaded / progCourses) * 100) : 0;
         let progStatus: 'Verified' | 'Partial' | 'Not Started' | 'Overdue' | 'Attention Required';
 
@@ -563,15 +620,22 @@ export class VCAnalyticsService {
       });
 
       let deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
-      const hasUnfinishedPrograms = programDims.some((p) => p.completionRate < 100 || p.pendingCourses > 0 || p.uploadedCourses < p.totalCourses);
-      const allProgramsCompleted = activePrograms.length > 0 && !hasUnfinishedPrograms;
+      const completedProgramsCount = programDims.filter((p) => p.completionRate >= 100 && p.pendingCourses === 0 && p.totalCourses > 0).length;
+      const totalProgramsCount = programDims.length;
+      const hasUnfinishedPrograms = completedProgramsCount < totalProgramsCount;
+      const allProgramsCompleted = totalProgramsCount > 0 && completedProgramsCount === totalProgramsCount;
 
       // CRITICAL FIX: If ANY program in the department is still pending or has courses left,
       // the department completion rate CANNOT read 100%!
-      if (hasUnfinishedPrograms && deptCompletion >= 100) {
-        deptCompletion = Math.min(deptCompletion, Math.floor((deptUploaded / Math.max(deptCourses, 1)) * 100));
+      // If a department has 3 programs and 2 are left unsubmitted, completion is proportional (e.g. 33%-41%), NOT 100%!
+      if (hasUnfinishedPrograms) {
+        const courseBasedPct = deptCourses > 0 ? Math.floor((deptUploaded / deptCourses) * 100) : 0;
+        const programBasedCap = totalProgramsCount > 0 ? Math.floor((completedProgramsCount / totalProgramsCount) * 100) : 0;
+        
+        // Capped strictly below 100%
+        deptCompletion = Math.min(courseBasedPct, programBasedCap > 0 ? programBasedCap : courseBasedPct);
         if (deptCompletion >= 100) {
-          deptCompletion = 95; // Guard against 100% when programs are still left
+          deptCompletion = programBasedCap > 0 ? programBasedCap : Math.min(courseBasedPct, 95);
         }
       }
       if (deptUploaded === 0) {
