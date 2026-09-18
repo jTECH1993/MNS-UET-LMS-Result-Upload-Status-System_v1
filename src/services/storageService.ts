@@ -750,9 +750,96 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     sectionsMap[progKey] = Array.from(progCurrent);
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
+    try {
+      FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(console.error);
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
     }
+    return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
+  }
+
+  public static async removeCohortSection(
+    department: string,
+    program: string,
+    session: string,
+    semester: string,
+    shift: string,
+    sectionToRemove: string,
+    degreeLevel?: string
+  ): Promise<string[]> {
+    const cleanSec = (sectionToRemove || '').trim().toUpperCase();
+    if (!cleanSec || cleanSec === 'A') {
+      // Cannot delete baseline Section A
+      return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
+    }
+
+    // 1. Remove from cohort sections map
+    const sectionsMap = this.getCohortSectionsMap();
+    const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
+    const progKey = `${department}__${program}`;
+
+    if (sectionsMap[cohortKey]) {
+      sectionsMap[cohortKey] = sectionsMap[cohortKey].filter((s) => s.trim().toUpperCase() !== cleanSec);
+      if (sectionsMap[cohortKey].length === 0) delete sectionsMap[cohortKey];
+    }
+    if (sectionsMap[progKey]) {
+      sectionsMap[progKey] = sectionsMap[progKey].filter((s) => s.trim().toUpperCase() !== cleanSec);
+      if (sectionsMap[progKey].length === 0) delete sectionsMap[progKey];
+    }
+
+    localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
+    try {
+      await FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(console.error);
+    } catch (e) {}
+
+    // 2. Delete any submission record for this section if present
+    const store = this.getStore();
+    const recordKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, cleanSec);
+    if (store[recordKey]) {
+      delete store[recordKey];
+      this.setStore(store);
+      try {
+        await FirebaseStore.deleteSubmission(recordKey).catch(console.error);
+      } catch (e) {}
+    }
+
+    // 3. Delete any other matching records in store that match this exact section
+    let storeChanged = false;
+    Object.keys(store).forEach((k) => {
+      const rec = store[k];
+      if (
+        rec &&
+        rec.department === department &&
+        rec.program === program &&
+        rec.session === session &&
+        rec.semester === semester &&
+        rec.shift === shift &&
+        (rec.section || '').trim().toUpperCase() === cleanSec
+      ) {
+        delete store[k];
+        storeChanged = true;
+        try {
+          FirebaseStore.deleteSubmission(rec.id || k).catch(console.error);
+        } catch (e) {}
+      }
+    });
+
+    if (storeChanged) {
+      this.setStore(store);
+    }
+
+    this.logAccess(
+      `Removed Section ${cleanSec} for ${program} (${shift} - Sem ${semester}, Session ${session})`,
+      department,
+      program
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
+
     return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
   }
 

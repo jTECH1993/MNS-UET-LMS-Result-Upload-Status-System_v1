@@ -224,6 +224,43 @@ export const HODEntryForm: React.FC<Props> = ({
     text: string;
   } | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
+  const [isDeletingSection, setIsDeletingSection] = useState<boolean>(false);
+
+  const handleConfirmDeleteSection = async () => {
+    if (!sectionToDelete) return;
+    setIsDeletingSection(true);
+    try {
+      const secTarget = sectionToDelete;
+      await StorageService.removeCohortSection(
+        department,
+        program,
+        session,
+        semester,
+        shift,
+        secTarget,
+        degreeLevel
+      );
+      if (section === secTarget) {
+        setSection('A');
+        if (onSectionChangedProp) onSectionChangedProp('A');
+      }
+      setSectionToDelete(null);
+      setFeedbackMessage({
+        type: 'success',
+        text: `Section ${secTarget} deleted successfully and returned cohort to Single Section. All records synced with database.`,
+      });
+      if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+    } catch (err) {
+      console.error('Failed to remove section', err);
+      setFeedbackMessage({
+        type: 'warning',
+        text: 'Failed to delete section from database. Please retry.',
+      });
+    } finally {
+      setIsDeletingSection(false);
+    }
+  };
 
   // Status of each semester (1 to 8) for the current department + program + shift + session + section
   const semesterStatuses = useMemo(() => {
@@ -1598,6 +1635,9 @@ export const HODEntryForm: React.FC<Props> = ({
                 } else if (val === '__ADD_OTHER__') {
                   setIsCustomSectionOpen(true);
                   setCustomSectionInput('');
+                } else if (val.startsWith('__DELETE_')) {
+                  const secToDelete = val.replace('__DELETE_', '').replace('__', '');
+                  setSectionToDelete(secToDelete);
                 } else {
                   handleSectionChange(val);
                 }
@@ -1617,6 +1657,11 @@ export const HODEntryForm: React.FC<Props> = ({
               <option value="__ADD_OTHER__" className="text-slate-600 font-semibold">
                 + Add Other Section (C, D...)...
               </option>
+              {section !== 'A' && (
+                <option value={`__DELETE_${section}__`} className="text-rose-600 font-bold">
+                  ✕ Delete Section {section} from this cohort...
+                </option>
+              )}
             </select>
           </div>
         </div>
@@ -1639,39 +1684,61 @@ export const HODEntryForm: React.FC<Props> = ({
           <div className="flex flex-wrap items-center gap-2">
             {sectionStatuses.map((sec) => {
               const isSelected = sec.id === section;
+              const isDeletable = sec.id !== 'A';
               return (
-                <button
-                  key={sec.id}
-                  id={`btn-section-tab-${sec.id}`}
-                  type="button"
-                  onClick={() => handleSectionChange(sec.id)}
-                  className={`py-2 px-3.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border ${
-                    isSelected
-                      ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30 cursor-pointer'
-                      : sec.hasRecord
-                      ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100 cursor-pointer'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
-                  }`}
-                >
-                  <span className="text-sm font-black">{sec.label}</span>
-                  {sec.hasRecord ? (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                        isSelected ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-200 text-indigo-900'
+                <div key={sec.id} className="inline-flex items-center rounded-lg shadow-2xs">
+                  <button
+                    id={`btn-section-tab-${sec.id}`}
+                    type="button"
+                    onClick={() => handleSectionChange(sec.id)}
+                    className={`py-2 px-3.5 text-xs font-bold flex items-center gap-2 transition-all border ${
+                      isDeletable ? 'rounded-l-lg border-r-0' : 'rounded-lg'
+                    } ${
+                      isSelected
+                        ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30 cursor-pointer'
+                        : sec.hasRecord
+                        ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100 cursor-pointer'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
+                    }`}
+                  >
+                    <span className="text-sm font-black">{sec.label}</span>
+                    {sec.hasRecord ? (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                          isSelected ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-200 text-indigo-900'
+                        }`}
+                      >
+                        ● {sec.courseCount} Saved
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded font-normal ${
+                          isSelected ? 'bg-indigo-800 text-indigo-200' : 'text-slate-400'
+                        }`}
+                      >
+                        Empty
+                      </span>
+                    )}
+                  </button>
+                  {isDeletable && (
+                    <button
+                      id={`btn-delete-section-${sec.id}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSectionToDelete(sec.id);
+                      }}
+                      title={`Delete ${sec.label} from this cohort & sync with database`}
+                      className={`py-2.5 px-2 border rounded-r-lg text-xs transition-colors flex items-center justify-center cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-950 text-indigo-200 hover:bg-rose-600 hover:text-white border-indigo-950'
+                          : 'bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-700 border-slate-200'
                       }`}
                     >
-                      ● {sec.courseCount} Saved
-                    </span>
-                  ) : (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded font-normal ${
-                        isSelected ? 'bg-indigo-800 text-indigo-200' : 'text-slate-400'
-                      }`}
-                    >
-                      Empty
-                    </span>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
 
@@ -3237,6 +3304,61 @@ export const HODEntryForm: React.FC<Props> = ({
                 className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-700 hover:bg-indigo-800 text-white disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
               >
                 Set Section
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Section Confirmation Modal */}
+      {sectionToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-black text-slate-900 mb-1">
+              Delete Section {sectionToDelete}?
+            </h4>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              Are you sure you want to remove <strong className="text-slate-900">Section {sectionToDelete}</strong> for{' '}
+              <strong className="text-slate-900">{program}</strong> ({shift} Shift, Semester {semester}, Session {session})?
+            </p>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-800 mb-5">
+              <div className="flex items-center gap-1.5 font-bold mb-1">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Action Notice</span>
+              </div>
+              <p className="text-[11px] leading-normal text-rose-700">
+                This will delete Section {sectionToDelete} from this cohort, reset the class section back to single Section A, and remove any unintended data from the database and executive reports.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setSectionToDelete(null)}
+                disabled={isDeletingSection}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteSection}
+                disabled={isDeletingSection}
+                className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                {isDeletingSection ? (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting &amp; Syncing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Delete Section {sectionToDelete}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
