@@ -15,7 +15,12 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
   const matrixRows: {
     deptCode: string;
     deptName: string;
+    hodName: string;
+    isHodRegistered: boolean;
     program: ProgramDimension;
+    coordName: string;
+    isCoordAssigned: boolean;
+    shiftLabel: string;
     sections: { [secName: string]: SectionBreakdown | undefined };
   }[] = [];
 
@@ -28,7 +33,12 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
       matrixRows.push({
         deptCode: dept.code,
         deptName: dept.name,
+        hodName: dept.hod.isRegistered ? dept.hod.name : 'Account Not Created',
+        isHodRegistered: dept.hod.isRegistered,
         program: prog,
+        coordName: prog.coordinator.isAssigned ? prog.coordinator.name : 'Account Not Created',
+        isCoordAssigned: prog.coordinator.isAssigned,
+        shiftLabel: prog.coordinator.shiftLabel || 'Morning & Evening',
         sections: secMap,
       });
     });
@@ -99,8 +109,9 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-              <th className="p-2.5">Department Name</th>
-              <th className="p-2.5">Degree Program</th>
+              <th className="p-2.5">Department & HOD</th>
+              <th className="p-2.5">Degree Program & Shift</th>
+              <th className="p-2.5">Program Coordinator</th>
               <th className="p-2.5 text-center w-28">Section A</th>
               <th className="p-2.5 text-center w-28">Section B</th>
               <th className="p-2.5 text-center w-24">Overall</th>
@@ -119,9 +130,49 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
                   <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                     Code: {row.deptCode}
                   </div>
+                  <div className="mt-1 flex items-center gap-1 text-[11px]">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">HOD:</span>
+                    {row.isHodRegistered ? (
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        {row.hodName}
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-amber-600 dark:text-amber-400 italic">
+                        Account Not Created
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="p-2.5 font-semibold text-slate-900 dark:text-white">
-                  {row.program.program}
+                <td className="p-2.5">
+                  <div className="font-semibold text-slate-900 dark:text-white">
+                    {row.program.program}
+                  </div>
+                  <div className="mt-1">
+                    <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {row.shiftLabel} Shift
+                    </span>
+                  </div>
+                </td>
+                <td className="p-2.5">
+                  {row.isCoordAssigned ? (
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white text-xs">
+                        {row.coordName}
+                      </div>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        ✓ Active Account
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-rose-600 dark:text-rose-400 font-bold text-xs italic">
+                        Account Not Created
+                      </div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                        No Coordinator Assigned
+                      </div>
+                    </div>
+                  )}
                 </td>
                 <td
                   className="p-2 text-center cursor-pointer hover:opacity-80"

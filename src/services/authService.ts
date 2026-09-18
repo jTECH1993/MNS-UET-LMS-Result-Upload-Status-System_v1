@@ -553,8 +553,24 @@ export class AuthService {
     if (existingEmailAccount) {
       return {
         success: false,
-        message: `Institutional policy: Only ONE account is permitted per institutional email address (${cleanEmail}). Each faculty member holds a single account. A single login enables you to coordinate multiple degree programs and oversee both Morning & Evening shifts directly from your portal without needing multiple accounts. Please log in with your existing account.`,
+        message: `Security Policy Error: Same account with email (${cleanEmail}) is already built for ${existingEmailAccount.name}. Duplicate account creation for the same user or role is strictly prohibited to prevent unauthorized access. Please log in with your credentials or communicate with Admin.`,
       };
+    }
+
+    // RULE 2.1: Strictly ONE HOD Account per Department (Prevent Fake HOD Access)
+    const isHodRole = assignedRole === 'HOD' || cleanDesig.toLowerCase().includes('hod') || cleanDesig.toLowerCase().includes('head of department');
+    if (isHodRole) {
+      const existingHOD = accounts.find(
+        (a) =>
+          a.department.trim().toLowerCase() === cleanDept.toLowerCase() &&
+          (a.role === 'HOD' || (a.designation && (a.designation.toLowerCase().includes('hod') || a.designation.toLowerCase().includes('head of department'))))
+      );
+      if (existingHOD) {
+        return {
+          success: false,
+          message: `Security Error: Same account of Head of Department (HOD) role is already built for ${cleanDept} (${existingHOD.name}). Duplicate account creation for HOD is blocked to prevent fake users from taking unauthorized system access. Please communicate with Admin / Vice Chancellor Office.`,
+        };
+      }
     }
 
     const rawAssigned = data.assignedPrograms && data.assignedPrograms.length > 0
@@ -564,6 +580,25 @@ export class AuthService {
       : [];
 
     const primaryProgram = rawAssigned[0] || (data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined);
+
+    // RULE 2.2: Strictly ONE Coordinator Account per Program/Shift
+    if (assignedRole === 'COORDINATOR' && rawAssigned.length > 0) {
+      for (const prog of rawAssigned) {
+        const existingCoord = accounts.find(
+          (a) =>
+            a.role === 'COORDINATOR' &&
+            a.department.trim().toLowerCase() === cleanDept.toLowerCase() &&
+            (a.assignedPrograms?.some((p) => p.trim().toLowerCase() === prog.toLowerCase()) ||
+              (a.program && a.program.trim().toLowerCase() === prog.toLowerCase()))
+        );
+        if (existingCoord) {
+          return {
+            success: false,
+            message: `Security Error: Same account of Program Coordinator role is already built for program "${prog}" (${existingCoord.name}). Additional coordinator accounts for this program cannot be created. Please communicate with Admin or your HOD.`,
+          };
+        }
+      }
+    }
 
     // RULE 3: Strictly ONE account for the same faculty member name in the same department
     const samePersonAccounts = accounts.filter(

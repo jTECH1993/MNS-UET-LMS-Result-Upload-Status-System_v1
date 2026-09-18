@@ -354,9 +354,22 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                     {(sectionCourseUnit.shift || 'Morning')} Shift
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {sectionCourseUnit.deptName} • Coordinator:{' '}
-                  <span className="text-emerald-400 font-semibold">{sectionCourseUnit.coordinatorName}</span>
+                <p className="text-xs text-slate-300 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-slate-400">{sectionCourseUnit.deptName}</span>
+                  <span className="text-slate-600">•</span>
+                  <span>
+                    HOD:{' '}
+                    <strong className={sectionCourseUnit.hodStatus === 'Registered' ? 'text-emerald-400 font-semibold' : 'text-amber-400 italic'}>
+                      {sectionCourseUnit.hodStatus === 'Registered' ? sectionCourseUnit.hodName : 'Account Not Created'}
+                    </strong>
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span>
+                    Coordinator:{' '}
+                    <strong className={sectionCourseUnit.coordinatorStatus === 'Assigned' ? 'text-emerald-400 font-semibold' : 'text-rose-400 italic'}>
+                      {sectionCourseUnit.coordinatorStatus === 'Assigned' ? sectionCourseUnit.coordinatorName : 'Account Not Created'}
+                    </strong>
+                  </span>
                 </p>
               </div>
 
@@ -502,10 +515,25 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                       {/* Academic Unit Label (Left Y-Axis) */}
-                      <div className="w-full sm:w-56 shrink-0 flex items-center justify-between sm:justify-start gap-2">
-                        <span className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-blue-300 transition-colors truncate">
-                          {unit.name}
-                        </span>
+                      <div className="w-full sm:w-64 shrink-0 flex items-center justify-between sm:justify-start gap-2">
+                        <div className="flex flex-col min-w-0 pr-1">
+                          <span className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-blue-300 transition-colors truncate">
+                            {unit.name}
+                          </span>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1.5 truncate mt-0.5">
+                            <span>
+                              HOD: <strong className={unit.hodStatus === 'Registered' ? 'text-emerald-400 font-semibold' : 'text-amber-400 italic'}>
+                                {unit.hodStatus === 'Registered' ? unit.hodName : 'Not Created'}
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Coord: <strong className={unit.coordinatorStatus === 'Assigned' ? 'text-emerald-400 font-semibold' : 'text-rose-400 italic'}>
+                                {unit.coordinatorStatus === 'Assigned' ? unit.coordinatorName : 'Not Assigned'}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
                         <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0" />
                       </div>
 
