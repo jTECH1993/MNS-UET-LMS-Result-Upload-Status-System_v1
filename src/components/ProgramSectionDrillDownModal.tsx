@@ -63,14 +63,17 @@ export const ProgramSectionDrillDownModal: React.FC<Props> = ({
               <GraduationCap className="w-5 h-5 text-emerald-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-white/10 text-emerald-200 border border-white/20">
                   {program.deptCode}
                 </span>
                 <h2 className="text-base sm:text-lg font-black tracking-tight">{program.program}</h2>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-100 border border-emerald-400/30">
+                  {program.coordinator.shiftLabel || 'Morning & Evening Shifts'}
+                </span>
               </div>
               <p className="text-xs text-emerald-200/80 mt-0.5">
-                {program.department} • Multi-Section Cohort & Course Level Audit
+                {program.department} • Shift: {program.coordinator.shiftLabel || 'Morning & Evening'} • Multi-Section Cohort & Course Level Audit
               </p>
             </div>
           </div>

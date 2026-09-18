@@ -379,6 +379,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               sumSubjects += semSubCount;
               sumUploaded += semUploaded;
               sumPending += semPending;
+            } else {
+              // Unsubmitted semester cohort: 5 expected curriculum courses awaiting LMS entry
+              sumSubjects += 5;
+              sumPending += 5;
             }
           });
 
@@ -1237,7 +1241,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {institutionalBottleneck.primary.program}
             </span>
             <span className="text-xs font-bold text-amber-400">
-              {institutionalBottleneck.primary.semesterLabel} • {institutionalBottleneck.primary.section}
+              {institutionalBottleneck.primary.shift || 'Morning'} Shift • {institutionalBottleneck.primary.semesterLabel} • {institutionalBottleneck.primary.section}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-2 flex items-center justify-between">

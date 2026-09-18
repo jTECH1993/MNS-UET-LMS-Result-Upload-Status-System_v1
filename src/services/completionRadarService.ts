@@ -50,6 +50,7 @@ export interface BottleneckInfo {
   department: string;
   deptCode: string;
   program: string;
+  shift?: 'Morning' | 'Evening';
   semesterId: string;
   semesterLabel: string;
   section: string;
@@ -719,6 +720,7 @@ export class CompletionRadarService {
                 department: dept.name,
                 deptCode: dept.code,
                 program: progName,
+                shift: 'Morning',
                 semesterId: sem.id,
                 semesterLabel: sem.label,
                 section: `Section ${secId}`,

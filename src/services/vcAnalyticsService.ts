@@ -1,4 +1,4 @@
-import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
+import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { AuthService } from './authService';
 import { StorageService } from './storageService';
 import { SubmissionRecord, AcademicShift, SubjectRow, ProgramInfo } from '../types';
@@ -390,6 +390,12 @@ export class VCAnalyticsService {
           targetSections = ['A'];
         }
 
+        // If semesterFilter is 'ALL' or empty, account for all active semesters (1 to 8) to calculate realistic program expected courses
+        const semestersToEvaluate: string[] =
+          semesterList.length > 0
+            ? semesterList
+            : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+
         const sectionBreakdowns: SectionBreakdown[] = [];
         let progCourses = 0;
         let progUploaded = 0;
@@ -398,73 +404,81 @@ export class VCAnalyticsService {
         let latestSubmission: string | undefined = undefined;
 
         targetSections.forEach((secName) => {
-          const rec = matchingRecords.find((r) => (r.section || 'A').trim().toUpperCase() === secName);
-          if (rec && rec.updatedAt) {
-            if (!latestSubmission || new Date(rec.updatedAt) > new Date(latestSubmission)) {
-              latestSubmission = rec.updatedAt;
-            }
-          }
-
-          const rawSubjects: SubjectRow[] = rec?.subjects && rec.subjects.length > 0 ? rec.subjects : [];
-          const validSubjects = rawSubjects.filter(
-            (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
-          );
-
           let secUploaded = 0;
           let secPending = 0;
           let secInProgress = 0;
           let secTotal = 0;
           const courseDetails: CourseDetail[] = [];
+          let secRec: SubmissionRecord | null = null;
 
-          if (validSubjects.length > 0) {
-            validSubjects.forEach((s, idx) => {
-              const status = (s.status === 'Uploaded' ? 'Uploaded' : s.status === 'In Progress' ? 'In Progress' : 'Pending');
-              if (status === 'Uploaded') secUploaded++;
-              else if (status === 'In Progress') secInProgress++;
-              else secPending++;
+          semestersToEvaluate.forEach((semId: string) => {
+            const rec = matchingRecords.find(
+              (r) =>
+                (r.section || 'A').trim().toUpperCase() === secName &&
+                (r.semester || '1').trim() === semId
+            );
 
-              courseDetails.push({
-                id: s.id || `course-${secName}-${idx}`,
-                courseCode: s.courseCode || `COURSE-${100 + idx}`,
-                subjectTitle: s.subjectTitle || `Curricular Subject ${idx + 1}`,
-                creditHours: s.creditHours || '3(3-0)',
-                status,
-                dateUploaded: s.dateUploaded || rec?.submissionDate || '',
-                uploadedBy: s.uploadedBy || rec?.accessedBy || coordinatorDim.name,
-                remarks: s.remarks || '',
-                expected: true,
-                submitted: status === 'Uploaded',
-                coordinatorName: coordinatorDim.name,
-                deadline,
-                lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
-              });
-            });
-            secTotal = validSubjects.length;
-          } else {
-            // Awaiting initial submission: 5 expected curriculum courses awaiting grade entry
-            // Prevents unsubmitted cohorts from falsely inflating completion to 100%
-            secTotal = 5;
-            secPending = 5;
-            secUploaded = 0;
-            secInProgress = 0;
-            for (let i = 1; i <= 5; i++) {
-              courseDetails.push({
-                id: `awaiting-${secName}-c${i}`,
-                courseCode: `SUBJ-${i}`,
-                subjectTitle: `Curricular Subject ${i} (Awaiting LMS Entry)`,
-                creditHours: '3(3-0)',
-                status: 'Pending',
-                dateUploaded: '',
-                uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-                remarks: `Awaiting LMS result upload for Section ${secName}`,
-                expected: true,
-                submitted: false,
-                coordinatorName: coordinatorDim.name,
-                deadline,
-                lastActivity: 'Awaiting submission',
-              });
+            if (rec && rec.updatedAt) {
+              if (!latestSubmission || new Date(rec.updatedAt) > new Date(latestSubmission)) {
+                latestSubmission = rec.updatedAt;
+              }
             }
-          }
+            if (rec && !secRec) {
+              secRec = rec;
+            }
+
+            const rawSubjects: SubjectRow[] = rec?.subjects && rec.subjects.length > 0 ? rec.subjects : [];
+            const validSubjects = rawSubjects.filter(
+              (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+            );
+
+            if (validSubjects.length > 0) {
+              validSubjects.forEach((s, idx) => {
+                const status = (s.status === 'Uploaded' ? 'Uploaded' : s.status === 'In Progress' ? 'In Progress' : 'Pending');
+                if (status === 'Uploaded') secUploaded++;
+                else if (status === 'In Progress') secInProgress++;
+                else secPending++;
+
+                courseDetails.push({
+                  id: s.id || `course-${semId}-${secName}-${idx}`,
+                  courseCode: s.courseCode || `COURSE-${100 + idx}`,
+                  subjectTitle: s.subjectTitle || `Curricular Subject ${idx + 1}`,
+                  creditHours: s.creditHours || '3(3-0)',
+                  status,
+                  dateUploaded: s.dateUploaded || rec?.submissionDate || '',
+                  uploadedBy: s.uploadedBy || rec?.accessedBy || coordinatorDim.name,
+                  remarks: s.remarks || '',
+                  expected: true,
+                  submitted: status === 'Uploaded',
+                  coordinatorName: coordinatorDim.name,
+                  deadline,
+                  lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
+                });
+              });
+              secTotal += validSubjects.length;
+            } else {
+              // Awaiting initial submission for this semester: 5 expected curriculum courses awaiting grade entry
+              secTotal += 5;
+              secPending += 5;
+              for (let i = 1; i <= 5; i++) {
+                courseDetails.push({
+                  id: `awaiting-${semId}-${secName}-c${i}`,
+                  courseCode: `SUBJ-SEM${semId}-${i}`,
+                  subjectTitle: `Semester ${semId} Subject ${i} (Awaiting LMS Entry)`,
+                  creditHours: '3(3-0)',
+                  status: 'Pending',
+                  dateUploaded: '',
+                  uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+                  remarks: `Awaiting LMS result upload for Semester ${semId} Section ${secName}`,
+                  expected: true,
+                  submitted: false,
+                  coordinatorName: coordinatorDim.name,
+                  deadline,
+                  lastActivity: 'Awaiting submission',
+                });
+              }
+            }
+          });
 
           const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
           const secStatus = secPct === 100 ? 'Completed' : secPct > 0 ? 'Partial' : 'Not Started';
@@ -477,7 +491,7 @@ export class VCAnalyticsService {
             inProgressCourses: secInProgress,
             completionRate: secPct,
             status: secStatus,
-            submissionRecord: rec || null,
+            submissionRecord: secRec,
             courses: courseDetails,
           });
 
