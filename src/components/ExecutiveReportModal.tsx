@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MnsUetLogo } from './MnsUetLogo';
 import { SubmissionRecord, AcademicShift } from '../types';
 import { UnifiedProgramRow } from './VCDashboard';
+import { StorageService } from '../services/storageService';
 import {
   Printer,
   X,
@@ -15,6 +16,7 @@ import {
   Calendar,
   Layers,
   ShieldCheck,
+  Clock,
 } from 'lucide-react';
 
 interface Props {
@@ -45,6 +47,59 @@ export const ExecutiveReportModal: React.FC<Props> = ({
 }) => {
   const [docType, setDocType] = useState<'REPORT' | 'NOTICE'>('REPORT');
   const [copied, setCopied] = useState<boolean>(false);
+  const [systemDeadlineToUse, setSystemDeadlineToUse] = useState<Date>(() => {
+    const stored = StorageService.getSystemDeadline();
+    if (stored) return new Date(stored);
+    const d = new Date();
+    d.setHours(d.getHours() + 48);
+    return d;
+  });
+
+  useEffect(() => {
+    const handleDeadlineUpdated = (e: any) => {
+      if (e.detail) {
+        setSystemDeadlineToUse(new Date(e.detail));
+      } else {
+        const stored = StorageService.getSystemDeadline();
+        if (stored) {
+          setSystemDeadlineToUse(new Date(stored));
+        }
+      }
+    };
+    window.addEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
+    return () => window.removeEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
+  }, []);
+
+  // Compute dynamic deadline information (day, date, time, window)
+  const deadlineDetails = useMemo(() => {
+    const target = systemDeadlineToUse;
+    const now = new Date();
+    const diffMs = target.getTime() - now.getTime();
+    const totalHours = Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
+    const isPast = diffMs <= 0;
+
+    const dayName = target.toLocaleDateString('en-GB', { weekday: 'long' });
+    const formattedDate = target.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+    const formattedTime = target.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    return {
+      target,
+      dayName,
+      formattedDate,
+      formattedTime,
+      totalHours,
+      isPast,
+      fullClause: `${dayName}, ${formattedDate} by ${formattedTime}`,
+    };
+  }, [systemDeadlineToUse]);
 
   // Generate official reference number based on current date
   const todayDate = useMemo(() => {
@@ -100,7 +155,11 @@ It has been observed through real-time LMS monitoring that several degree progra
 Pending / Partially Uploaded Programs identified:
 ${pendingPrograms.map((p, idx) => `${idx + 1}. ${p.program} (${p.deptCode}) - ${p.department}`).join('\n')}
 
-All concerned Heads of Departments are hereby directed to ensure 100% completion of result tabulation and LMS verification within forty-eight (48) hours. Failure to comply will be reported to the Academic Council.
+MANDATORY DEADLINE FOR COMPLIANCE:
+Day & Date: ${deadlineDetails.dayName}, ${deadlineDetails.formattedDate}
+Time: ${deadlineDetails.formattedTime} (${deadlineDetails.totalHours > 0 ? `${deadlineDetails.totalHours} hours remaining` : 'LMS Lockdown in effect'})
+
+All concerned Heads of Departments are hereby directed to ensure 100% completion of result tabulation and LMS verification strictly by ${deadlineDetails.dayName}, ${deadlineDetails.formattedDate} by ${deadlineDetails.formattedTime}. Failure to comply will be reported to the Academic Council.
 
 By Order of the Vice Chancellor,
 Director, Academic Affairs & Examination Directorate`;
@@ -418,10 +477,36 @@ Director, Academic Affairs & Examination Directorate`;
                   </ol>
                 </div>
 
+                {/* Mandatory Dynamic Deadline Box */}
+                <div className="bg-amber-50/90 border border-amber-300 rounded-lg p-3 my-2 text-slate-900 shadow-2xs flex items-start gap-3">
+                  <div className="p-2 rounded-md bg-amber-200/70 text-amber-900 shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white px-2 py-0.5 rounded">
+                        Mandatory Compliance Deadline
+                      </span>
+                      <span className="text-[11px] font-bold text-amber-900">
+                        {deadlineDetails.totalHours > 0 ? `⏳ ${deadlineDetails.totalHours} Hours Remaining` : '⚠️ Lockdown Active'}
+                      </span>
+                    </div>
+                    <p className="text-xs font-black text-slate-900">
+                      Day &amp; Date: <span className="underline decoration-amber-600 decoration-2">{deadlineDetails.dayName}, {deadlineDetails.formattedDate}</span>
+                    </p>
+                    <p className="text-xs font-black text-slate-900">
+                      Cutoff Time: <span className="text-amber-900 font-mono bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">{deadlineDetails.formattedTime}</span>
+                    </p>
+                  </div>
+                </div>
+
                 <p>
                   All concerned Heads of Departments and course teachers are strictly instructed to finalize grading,
-                  complete LMS result entry, and submit verified documentation within <strong>forty-eight (48) hours</strong>{' '}
-                  of receipt of this communication.
+                  complete LMS result entry, and submit verified documentation strictly by{' '}
+                  <strong className="text-slate-950 font-black underline decoration-amber-500 decoration-2">
+                    {deadlineDetails.dayName}, {deadlineDetails.formattedDate} by {deadlineDetails.formattedTime}
+                  </strong>{' '}
+                  ({deadlineDetails.totalHours > 0 ? `within ${deadlineDetails.totalHours} hours` : 'Immediate LMS portal lockdown in effect'}) of receipt of this official communication.
                 </p>
               </div>
 
