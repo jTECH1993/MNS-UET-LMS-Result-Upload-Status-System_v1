@@ -194,11 +194,6 @@ export class CompletionRadarService {
       sessionRoster.forEach((p) => set.add(p));
     });
 
-    // Ensure all official department programs are included
-    if (deptObj) {
-      deptObj.programs.forEach((p) => set.add(p.name));
-    }
-
     // Add any programs with authentic submissions in these sessions
     allRecords.forEach((r) => {
       if (

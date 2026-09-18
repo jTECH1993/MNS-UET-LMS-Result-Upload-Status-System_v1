@@ -200,9 +200,6 @@ export class VCAnalyticsService {
         sessionRoster.forEach((p) => registeredProgramNames.add(p));
       });
 
-      // Also ensure all official department programs are included so no program is omitted
-      dept.programs.forEach((p) => registeredProgramNames.add(p.name));
-
       // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
       allRecords.forEach((r) => {
         if (

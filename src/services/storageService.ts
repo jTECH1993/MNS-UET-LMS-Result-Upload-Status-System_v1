@@ -263,14 +263,34 @@ export class StorageService {
     if (!dept) return [];
 
     let activePrograms: string[] = [];
+    const is2023 = sessionName === '2023' || sessionName.includes('23');
 
     // 1. If coordinator/HOD configured a roster for this department and session in database:
     const configuredKey = Object.keys(roster).find(k => k.trim().toLowerCase() === departmentName.trim().toLowerCase());
     if (configuredKey && Array.isArray(roster[configuredKey])) {
-      activePrograms = [...roster[configuredKey]];
+      activePrograms = roster[configuredKey].filter((progName) => {
+        const pObj = dept.programs.find((p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase());
+        if (!pObj) return true;
+        // In Session 2023, exclude programs marked session2023: false unless they have genuine submissions
+        if (is2023 && pObj.session2023 === false) {
+          const records = customRecords || StorageService.getAllSubmissions();
+          const hasSub = records.some(
+            (r) =>
+              r.department &&
+              r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() &&
+              (r.session || '2023').trim() === sessionName.trim() &&
+              r.program &&
+              r.program.trim().toLowerCase() === progName.trim().toLowerCase()
+          );
+          return hasSub;
+        }
+        return true;
+      });
     } else {
-      // 2. Default coordinator template: All official department programs are active by default
-      activePrograms = dept.programs.map((p) => p.name);
+      // 2. Default coordinator template: For Session 2023, only programs where session2023 === true!
+      activePrograms = dept.programs
+        .filter((p) => (is2023 ? p.session2023 !== false : true))
+        .map((p) => p.name);
     }
 
     // 3. Dynamic Database inclusion: If any submission record exists in the database for this program in this session,

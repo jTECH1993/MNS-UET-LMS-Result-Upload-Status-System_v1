@@ -303,10 +303,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
       const activeProgNames = Array.from(
-        new Set(activeSessions.flatMap((s) => StorageService.getSessionPrograms(dept.name, s)))
+        new Set(activeSessions.flatMap((s) => StorageService.getSessionPrograms(dept.name, s, allRecords)))
       );
 
-      dept.programs.forEach((prog) => {
+      // Only iterate over programs active in the selected sessions or with genuine submissions in these sessions
+      const targetDeptPrograms = dept.programs.filter((prog) => {
+        const hasSub = allRecords.some(
+          (r) =>
+            r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+            r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
+            activeSessions.includes(r.session || '2023')
+        );
+        return activeProgNames.includes(prog.name) || hasSub;
+      });
+
+      targetDeptPrograms.forEach((prog) => {
         const buildShiftData = (shiftName: AcademicShift): ShiftCohortData => {
           const semRecords: Record<string, SubmissionRecord | null> = {};
           const semSectionMap: Record<string, Record<string, SubmissionRecord>> = {};
