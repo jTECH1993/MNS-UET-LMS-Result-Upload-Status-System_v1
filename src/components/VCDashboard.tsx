@@ -2501,7 +2501,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                 </span>
                                 {(() => {
                                   const hodRes = CompletionRadarService.resolveHOD(progItem.department);
-                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program);
+                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program, effectiveShift);
                                   const coordName = activeSub?.hodCoordinator || (coordRes.isAssigned ? coordRes.name : null);
                                   const uploaderName = activeSub?.accessedBy;
 
@@ -2537,7 +2537,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                 </span>
                                 {(() => {
                                   const hodRes = CompletionRadarService.resolveHOD(progItem.department);
-                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program);
+                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program, effectiveShift);
                                   return (
                                     <div className="text-[10px] text-slate-600 flex flex-col items-center mt-1 space-y-0.5 max-w-[180px]">
                                       <span className="truncate w-full text-center" title={`HOD: ${hodRes.name}`}>

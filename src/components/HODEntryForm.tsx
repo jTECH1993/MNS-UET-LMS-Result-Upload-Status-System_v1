@@ -623,7 +623,7 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord, storageVersion]);
 
   // Helper to resolve Program Coordinator name for current program
-  const resolveProgramCoordinatorName = useCallback((dept: string, prog: string, savedCoord?: string): string => {
+  const resolveProgramCoordinatorName = useCallback((dept: string, prog: string, targetShift?: AcademicShift, savedCoord?: string): string => {
     // 1. If logged-in user is a Coordinator, use their own name
     if (currentUser?.role === 'COORDINATOR' && currentUser?.name) {
       return `${currentUser.name} (${currentUser.designation || 'Program Coordinator'})`;
@@ -640,7 +640,7 @@ export const HODEntryForm: React.FC<Props> = ({
     }
 
     // 3. Resolve assigned coordinator for this program
-    const coordRes = CompletionRadarService.resolveCoordinator(dept, prog);
+    const coordRes = CompletionRadarService.resolveCoordinator(dept, prog, targetShift || shift);
     if (coordRes.isAssigned && coordRes.name) {
       return `${coordRes.name} (${coordRes.designation || 'Program Coordinator'})`;
     }
@@ -648,24 +648,24 @@ export const HODEntryForm: React.FC<Props> = ({
     if (savedCoord) return savedCoord;
 
     return 'Program Coordinator';
-  }, [currentUser]);
+  }, [currentUser, shift]);
 
   // Metadata manual fields
   const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
     const initDept = selectedDepartmentProp || UNIVERSITY_DEPARTMENTS[0].name;
     const initProg = selectedProgramProp || UNIVERSITY_DEPARTMENTS[0].programs[0].name;
-    return resolveProgramCoordinatorName(initDept, initProg);
+    return resolveProgramCoordinatorName(initDept, initProg, initialShift);
   });
   const [submissionDate, setSubmissionDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
 
-  // Update hodCoordinator if currentUser or selection changes and not editing a custom locked value
+  // Update hodCoordinator if currentUser, selection, or shift changes and not editing a custom locked value
   useEffect(() => {
     if (!isExistingRecord) {
-      setHodCoordinator(resolveProgramCoordinatorName(department, program));
+      setHodCoordinator(resolveProgramCoordinatorName(department, program, shift));
     }
-  }, [currentUser, department, program, resolveProgramCoordinatorName, isExistingRecord]);
+  }, [currentUser, department, program, shift, resolveProgramCoordinatorName, isExistingRecord]);
 
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
   const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning', '1', 'A'));
@@ -832,7 +832,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // Existing record exists -> LOAD EXACT SAVED ROWS ONLY
       setIsExistingRecord(true);
       setLastSavedTime(existing.updatedAt);
-      setHodCoordinator(resolveProgramCoordinatorName(department, program, existing.hodCoordinator));
+      setHodCoordinator(resolveProgramCoordinatorName(department, program, shift, existing.hodCoordinator));
       if (existing.submissionDate) setSubmissionDate(existing.submissionDate);
 
       // Filter to existing non-empty rows, pad up to 8 for fast entry
@@ -855,7 +855,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      setHodCoordinator(resolveProgramCoordinatorName(department, program));
+      setHodCoordinator(resolveProgramCoordinatorName(department, program, shift));
 
       setSubjects(createInitialBlankRows(1, shift, semester, section));
 

@@ -1,7 +1,7 @@
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS, STANDARD_ACADEMIC_SECTIONS } from '../data/departmentsData';
 import { AuthService } from './authService';
 import { StorageService } from './storageService';
-import { SubmissionRecord, SubjectRow, ProgramInfo } from '../types';
+import { SubmissionRecord, SubjectRow, ProgramInfo, AcademicShift } from '../types';
 
 export interface CourseItem {
   id: string;
@@ -109,7 +109,8 @@ export class CompletionRadarService {
    */
   public static resolveCoordinator(
     deptName: string,
-    progName?: string
+    progName?: string,
+    shift?: AcademicShift
   ): { isAssigned: boolean; name: string; designation?: string } {
     try {
       const accounts = AuthService.getAccounts();
@@ -118,20 +119,49 @@ export class CompletionRadarService {
       // 1. Look in registered accounts strictly for this program if progName is given
       if (progName) {
         const cleanProg = progName.trim().toLowerCase();
-        const coord = accounts.find((a) => {
+        
+        // Find all coordinators/lecturers for this specific program
+        const programCoords = accounts.filter((a) => {
           if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
           const assigned = a.assignedPrograms || (a.program ? [a.program] : []);
           return assigned.some((p) => p.trim().toLowerCase() === cleanProg);
         });
 
-        if (coord) {
-          return { isAssigned: true, name: coord.name, designation: coord.designation || 'Program Coordinator' };
+        if (programCoords.length > 0) {
+          // If shift is provided, prioritize a coordinator assigned to that shift
+          if (shift) {
+            const shiftMatch = programCoords.find((a) => {
+              // Check programShiftAssignments first
+              if (a.programShiftAssignments) {
+                const matchedProgKey = Object.keys(a.programShiftAssignments).find(
+                  (k) => k.trim().toLowerCase() === cleanProg
+                );
+                if (matchedProgKey) {
+                  return a.programShiftAssignments[matchedProgKey].includes(shift);
+                }
+              }
+              // Fallback to assignedShifts
+              if (a.assignedShifts) {
+                return a.assignedShifts.includes(shift);
+              }
+              return false;
+            });
+
+            if (shiftMatch) {
+              return { isAssigned: true, name: shiftMatch.name, designation: shiftMatch.designation || 'Program Coordinator' };
+            }
+          }
+
+          // Fallback to the first found coordinator for this program
+          const fallbackCoord = programCoords[0];
+          return { isAssigned: true, name: fallbackCoord.name, designation: fallbackCoord.designation || 'Program Coordinator' };
         }
 
         // 2. Check if a coordinator uploaded results or is recorded in database submissions for this program
         const matchingRecord = Object.values(allRecords).find((r) => {
           if (r.department.trim().toLowerCase() !== deptName.trim().toLowerCase()) return false;
           if (r.program.trim().toLowerCase() !== cleanProg) return false;
+          if (shift && r.shift && r.shift.trim().toLowerCase() !== shift.trim().toLowerCase()) return false;
           return !!(r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator'));
         });
 
