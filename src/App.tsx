@@ -15,6 +15,7 @@ import { SidebarNavigation } from './components/SidebarNavigation';
 import { WorkOnDemandView } from './components/WorkOnDemandView';
 import { Session2023SelectorModal } from './components/Session2023SelectorModal';
 import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
+import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
 import {
@@ -1156,6 +1157,9 @@ export default function App() {
           reloadRecords();
         }}
       />
+
+      {/* Global Real-Time Sync & Save Evidence Toast */}
+      <SyncEvidenceToast />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   LogIn,
   UserPlus,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   KeyRound,
   GraduationCap,
@@ -985,6 +986,15 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
               {regRole && regRole !== 'HOD' && (
                 <div className="p-3.5 bg-teal-50/80 border border-teal-200 rounded-xl space-y-3">
+                  {/* Account Creation HOD Authorization Warning Box */}
+                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 text-xs flex items-start gap-2 shadow-2xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold block text-amber-900">⚠️ Important Access Warning:</strong>
+                      Please select your program(s) carefully. After account creation, your Head of Department (HOD) must approve your authorization request before you can access LMS result submission tools. If you require additional programs later, you can request them after login from your dashboard.
+                    </div>
+                  </div>
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <label className="block text-xs font-black text-teal-950 uppercase tracking-wider flex items-center gap-1.5">

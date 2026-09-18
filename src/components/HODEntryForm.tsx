@@ -13,6 +13,8 @@ import {
 import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift, UserAccount, ProgramAccessRequest } from '../types';
 import { StorageService } from '../services/storageService';
 import { AuthService } from '../services/authService';
+import { AuditTrailService } from '../services/auditTrailService';
+import { dispatchSyncEvidence } from './SyncEvidenceToast';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeadlineBanner } from './DeadlineBanner';
 import { DeleteModal } from './DeleteModal';
@@ -1286,6 +1288,9 @@ export const HODEntryForm: React.FC<Props> = ({
     );
   };
 
+  // State for mandatory field missing highlights
+  const [missingFields, setMissingFields] = useState<Record<string, boolean>>({});
+
   // Save / Update handler
   const handleSave = async () => {
     if (!department || !program) {
@@ -1311,13 +1316,50 @@ export const HODEntryForm: React.FC<Props> = ({
       }
     }
 
-    // Filter out rows that are completely empty before saving
+    // Filter active course rows that are partially filled
     const activeRows = subjects.filter(
-      (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status
+      (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.uploadedBy.trim() || s.status
     );
 
     if (activeRows.length === 0) {
       showFeedback('warning', 'Please add and fill at least one course before saving.');
+      return;
+    }
+
+    // Mandatory Field Validation Engine
+    const newMissingFields: Record<string, boolean> = {};
+    let missingCount = 0;
+
+    activeRows.forEach((row, idx) => {
+      if (!row.courseCode || !row.courseCode.trim()) {
+        newMissingFields[`${row.id}_courseCode`] = true;
+        missingCount++;
+      }
+      if (!row.subjectTitle || !row.subjectTitle.trim()) {
+        newMissingFields[`${row.id}_subjectTitle`] = true;
+        missingCount++;
+      }
+      if (!row.creditHours || String(row.creditHours).trim() === '') {
+        newMissingFields[`${row.id}_creditHours`] = true;
+        missingCount++;
+      }
+      if (!row.uploadedBy || !row.uploadedBy.trim()) {
+        newMissingFields[`${row.id}_uploadedBy`] = true;
+        missingCount++;
+      }
+      if (!row.status) {
+        newMissingFields[`${row.id}_status`] = true;
+        missingCount++;
+      }
+    });
+
+    setMissingFields(newMissingFields);
+
+    if (missingCount > 0) {
+      showFeedback(
+        'warning',
+        `⚠️ Validation Blocked: ${missingCount} mandatory field(s) are missing across ${activeRows.length} course record(s). Highlighted in red below. Please complete Course Code, Title, Credit Hours, Instructor Name, and LMS Status.`
+      );
       return;
     }
 
@@ -1353,12 +1395,40 @@ export const HODEntryForm: React.FC<Props> = ({
       setIsExistingRecord(true);
       setLastSavedTime(new Date().toISOString());
       setSubjects(activeRows);
+      setMissingFields({});
       showFeedback(
         'success',
         result.isUpdate ? "Record updated successfully." : "Record created successfully."
-           
-          
       );
+
+      // Audit Trail Logging
+      AuditTrailService.logChange({
+        action: result.isUpdate ? 'UPDATED' : 'CREATED',
+        actorId: currentUser?.id,
+        actorName: currentUser?.name || hodCoordinator || 'HOD / Coordinator',
+        actorRole: currentUser?.role || 'COORDINATOR',
+        department,
+        program,
+        shift,
+        semester,
+        section,
+        summary: `${result.isUpdate ? 'Updated' : 'Created'} ${activeRows.length} course result record(s) for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`,
+        details: activeRows.map((r) => ({
+          field: `${r.courseCode} - ${r.subjectTitle}`,
+          oldValue: 'N/A',
+          newValue: `Status: ${r.status} | Instructor: ${r.uploadedBy} | Cr.Hrs: ${r.creditHours}`,
+        })),
+      });
+
+      // Global Evidence Toast Notification
+      dispatchSyncEvidence(
+        result.isUpdate ? 'UPDATE' : 'SAVE',
+        result.isUpdate ? 'Database Record Updated & Synced' : 'Database Record Saved & Synced',
+        `Successfully ${result.isUpdate ? 'updated' : 'saved'} ${activeRows.length} course entry(s) to university database. Data is persistent and mathematically aggregated across all executive monitors.`,
+        `${program} • ${shift} Shift • Sem ${semester} (Sec ${section})`,
+        currentUser?.name || hodCoordinator
+      );
+
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     }
   };
@@ -1400,6 +1470,30 @@ export const HODEntryForm: React.FC<Props> = ({
       setLastSavedTime(null);
       setSubjects(createInitialBlankRows(1, shift, semester, section));
       showFeedback('success', 'Record deleted successfully.');
+
+      // Audit Trail Logging
+      AuditTrailService.logChange({
+        action: 'DELETED',
+        actorId: currentUser?.id,
+        actorName: currentUser?.name || hodCoordinator || 'HOD / Coordinator',
+        actorRole: currentUser?.role || 'COORDINATOR',
+        department,
+        program,
+        shift,
+        semester,
+        section,
+        summary: `Deleted submission record for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`,
+      });
+
+      // Global Evidence Toast Notification
+      dispatchSyncEvidence(
+        'DELETE',
+        'Database Record Deleted & Synced',
+        `Successfully deleted submission record for ${program} (${shift} Shift - Sem ${semester} Sec ${section}) from university cloud database.`,
+        `${program} • ${shift} Shift • Sem ${semester} (Sec ${section})`,
+        currentUser?.name || hodCoordinator
+      );
+
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
     } else {
       showFeedback('warning', 'No saved database record was found to delete.');

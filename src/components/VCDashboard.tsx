@@ -17,6 +17,8 @@ import { SectionPerformanceMatrix } from './SectionPerformanceMatrix';
 import { DeadlineAgingChart } from './DeadlineAgingChart';
 import { SubmissionCoverageRadar } from './SubmissionCoverageRadar';
 import { BottleneckActionPanel } from './BottleneckActionPanel';
+import { SubmissionTrendCard } from './SubmissionTrendCard';
+import { ChangeHistoryModal } from './ChangeHistoryModal';
 import {
   CompletionRadarService,
   BottleneckInfo,
@@ -130,6 +132,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
   const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY'>('COMMAND_CENTER');
+
+  // Change History / Audit Trail Modal State
+  const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
+  const [changeHistoryProgram, setChangeHistoryProgram] = useState<string | undefined>(undefined);
 
   // Executive Hierarchy & Drill-Down State
   const [selectedDrillDownDept, setSelectedDrillDownDept] = useState<DepartmentDimension | null>(null);
@@ -783,6 +789,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-open-audit-trail"
+            type="button"
+            onClick={() => {
+              setChangeHistoryProgram(undefined);
+              setIsChangeHistoryOpen(true);
+            }}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-lg border border-slate-700 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+            title="View complete audit trail of HOD and Coordinator changes linked to user IDs and timestamps"
+          >
+            <Activity className="w-4 h-4 text-amber-400" />
+            <span>Audit Trail / Change History</span>
+          </button>
+
           <button
             id="btn-open-executive-report"
             type="button"
@@ -1455,6 +1475,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               />
             </div>
           </div>
+
+          {/* Submission Progress Trend Chart (Recharts 7-Day Trend Visualizer) */}
+          <SubmissionTrendCard
+            selectedDepartment={selectedDeptFilter === 'ALL' ? '' : selectedDeptFilter}
+          />
 
           {/* Section Performance Matrix (Cohort Heatmap) */}
           <SectionPerformanceMatrix
@@ -2689,6 +2714,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             sec
           );
         }}
+      />
+      {/* Read-Only Change History / Audit Trail Modal for VC Review */}
+      <ChangeHistoryModal
+        isOpen={isChangeHistoryOpen}
+        onClose={() => setIsChangeHistoryOpen(false)}
+        initialProgram={changeHistoryProgram}
+        initialDepartment={selectedDeptFilter === 'ALL' ? '' : selectedDeptFilter}
       />
     </div>
   );

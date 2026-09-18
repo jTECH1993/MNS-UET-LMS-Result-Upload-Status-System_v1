@@ -443,6 +443,59 @@ export class AuthService {
     };
   }
 
+  // Check whether another coordinator in same department & program already holds the requested shift(s)
+  public static checkShiftConflict(
+    department: string,
+    program: string,
+    requestedShifts: AcademicShift[],
+    targetUserId?: string
+  ): { hasConflict: boolean; conflictingUser?: string; conflictingShift?: AcademicShift; message?: string } {
+    const accounts = this.getAccounts();
+    const normDept = (department || '').trim().toLowerCase();
+    const normProg = (program || '').trim().toLowerCase();
+
+    for (const acc of accounts) {
+      if (targetUserId && acc.id === targetUserId) continue;
+      if (acc.role !== 'COORDINATOR' && acc.role !== 'LECTURER') continue;
+      if (acc.approvalStatus === 'REJECTED') continue;
+
+      const accDept = (acc.department || '').trim().toLowerCase();
+      if (accDept !== normDept && !accDept.includes(normDept) && !normDept.includes(accDept)) continue;
+
+      const assignedProgs = acc.assignedPrograms && acc.assignedPrograms.length > 0
+        ? acc.assignedPrograms
+        : acc.program ? [acc.program] : [];
+
+      const matchesProg = assignedProgs.some(
+        (p) => p.trim().toLowerCase() === normProg || p.trim().toLowerCase().includes(normProg) || normProg.includes(p.trim().toLowerCase())
+      );
+
+      if (!matchesProg) continue;
+
+      let existingShifts: AcademicShift[] = [];
+      if (acc.programShiftAssignments && acc.programShiftAssignments[program]) {
+        existingShifts = acc.programShiftAssignments[program];
+      } else if (acc.assignedShifts && acc.assignedShifts.length > 0) {
+        existingShifts = acc.assignedShifts;
+      } else {
+        existingShifts = ['Morning', 'Evening'];
+      }
+
+      for (const reqShift of requestedShifts) {
+        if (existingShifts.includes(reqShift)) {
+          return {
+            hasConflict: true,
+            conflictingUser: acc.name,
+            conflictingShift: reqShift,
+            message: `Shift Conflict Detected: ${acc.name} (${acc.designation}) is already assigned as ${reqShift} Shift Coordinator for ${program}. Two coordinators cannot hold the same shift for a program. One must be Morning and the other Evening. Please select a non-conflicting shift or contact your HOD.`,
+          };
+        }
+      }
+    }
+
+    return { hasConflict: false };
+  }
+
   // Register a new HOD / Coordinator / Faculty account with strict institutional validation
   public static registerAccount(data: {
     username: string;
@@ -528,6 +581,22 @@ export class AuthService {
     const resolvedShifts: AcademicShift[] | undefined = data.assignedShifts && data.assignedShifts.length > 0
       ? data.assignedShifts
       : (assignedRole === 'COORDINATOR' ? ['Morning', 'Evening'] : undefined);
+
+    // RULE 4: Shift Conflict Check for Program Coordinators
+    if (assignedRole === 'COORDINATOR' && rawAssigned.length > 0) {
+      for (const prog of rawAssigned) {
+        const shiftsForProg = data.programShiftAssignments && data.programShiftAssignments[prog]
+          ? data.programShiftAssignments[prog]
+          : resolvedShifts || ['Morning', 'Evening'];
+        const conflict = this.checkShiftConflict(cleanDept, prog, shiftsForProg);
+        if (conflict.hasConflict) {
+          return {
+            success: false,
+            message: conflict.message!,
+          };
+        }
+      }
+    }
 
     const isCoordinator = assignedRole === 'COORDINATOR';
     const initialApproval: 'APPROVED' | 'PENDING' | 'REJECTED' = data.approvalStatus || (isCoordinator ? 'PENDING' : 'APPROVED');
