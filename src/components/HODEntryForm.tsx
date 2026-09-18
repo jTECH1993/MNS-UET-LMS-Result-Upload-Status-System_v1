@@ -1242,6 +1242,14 @@ export const HODEntryForm: React.FC<Props> = ({
       `Synchronized & Saved ${savedTotal} course(s) across Section ${secKeys.join(' & Section ')} directly to database!`
     );
 
+    dispatchSyncEvidence(
+      'SAVE',
+      'Database Dual Section Saved & Synced',
+      `Successfully synchronized and saved ${savedTotal} course(s) across Section ${secKeys.join(' & Section ')} directly to database.`,
+      `${program} • ${shift} Shift • Sem ${semester} (Sec ${secKeys.join(' & ')})`,
+      currentUser?.name || hodCoordinator
+    );
+
     if (onRecordSavedOrDeleted) {
       onRecordSavedOrDeleted();
     }

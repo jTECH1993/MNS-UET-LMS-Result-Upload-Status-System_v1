@@ -16,6 +16,7 @@ import {
   DEFAULT_ACADEMIC_SESSIONS,
   getRecordKey,
   getLegacyRecordKey,
+  sortSessions,
 } from '../data/departmentsData';
 import { FirebaseStore } from '../lib/firebaseStore';
 
@@ -193,17 +194,29 @@ export class StorageService {
   public static getAvailableSessions(): string[] {
     try {
       const stored = localStorage.getItem('mnsuet_available_sessions_v99');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return sortSessions(parsed);
+        }
+      }
     } catch(e) {}
-    return ['2023', '2024'];
+    return sortSessions(DEFAULT_ACADEMIC_SESSIONS);
   }
 
   public static addAcademicSession(newSession: string): string[] {
     const trimmed = newSession.trim();
+    if (!trimmed) return this.getAvailableSessions();
     const current = this.getAvailableSessions();
     if (!current.includes(trimmed)) {
-      const updated = [trimmed, ...current];
+      const updated = sortSessions([...current, trimmed]);
       localStorage.setItem('mnsuet_available_sessions_v99', JSON.stringify(updated));
+      try {
+        FirebaseStore.syncGlobalState('mnsuet_available_sessions_v99', updated).catch(console.error);
+      } catch (e) {}
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated'));
+      }
       return updated;
     }
     return current;
@@ -224,20 +237,25 @@ export class StorageService {
   public static getActiveSessions(): string[] {
     try {
       const stored = localStorage.getItem('mnsuet_active_sessions_list_v99');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return sortSessions(parsed);
+        }
+      }
     } catch(e) {}
     return ['2023'];
   }
 
   public static setActiveSessions(sessions: string[]): void {
     const clean = Array.from(new Set(sessions.map(s => s.trim()).filter(Boolean)));
-    const toSave = clean.length > 0 ? clean : ['2023'];
-    localStorage.setItem('mnsuet_active_sessions_list_v99', JSON.stringify(toSave));
-    if (toSave.length > 0) {
-      localStorage.setItem('mnsuet_current_active_session_v99', toSave[0]);
+    const sorted = sortSessions(clean.length > 0 ? clean : ['2023']);
+    localStorage.setItem('mnsuet_active_sessions_list_v99', JSON.stringify(sorted));
+    if (sorted.length > 0) {
+      localStorage.setItem('mnsuet_current_active_session_v99', sorted[0]);
     }
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: toSave }));
+      window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: sorted }));
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
     }
   }
@@ -247,6 +265,38 @@ export class StorageService {
     const updated = current.includes(session) ? current.filter(s => s !== session) : [...current, session];
     this.setActiveSessions(updated);
     return this.getActiveSessions();
+  }
+
+  public static isCoordinatorSelfServiceAllowed(departmentName?: string): boolean {
+    try {
+      const stored = localStorage.getItem('mnsuet_coord_self_service_perms_v99');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (departmentName && typeof parsed === 'object') {
+          if (parsed[departmentName] !== undefined) {
+            return Boolean(parsed[departmentName]);
+          }
+        }
+        return Boolean(parsed.global);
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  public static setCoordinatorSelfServiceAllowed(departmentName: string, allowed: boolean): void {
+    try {
+      const stored = localStorage.getItem('mnsuet_coord_self_service_perms_v99');
+      const parsed = stored ? JSON.parse(stored) : {};
+      parsed[departmentName] = allowed;
+      localStorage.setItem('mnsuet_coord_self_service_perms_v99', JSON.stringify(parsed));
+      try {
+        FirebaseStore.syncGlobalState('mnsuet_coord_self_service_perms_v99', parsed).catch(() => {});
+      } catch (e) {}
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+    } catch (e) {}
   }
 
   public static isSessionActive(session: string): boolean {
@@ -479,9 +529,70 @@ export class StorageService {
   public static getAccessLogs(): AccessLogEntry[] {
     try {
       const stored = localStorage.getItem('mnsuet_lms_access_logs_v99');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
     } catch(e) {}
-    return [];
+
+    const seedLogs: AccessLogEntry[] = [
+      {
+        id: 'log_seed_1',
+        userName: 'Dr. Muhammad Tariq',
+        designation: 'Head of Department',
+        department: 'Department of Electrical Engineering & Technology',
+        action: 'Verified and submitted Semester 1 result sheet into LMS portal',
+        program: 'B.Sc. Electrical Engineering',
+        shift: 'Morning',
+        coordinatorName: 'Engr. Ahmad Hassan',
+        coordinatorDesignation: 'Program Coordinator',
+        timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+      },
+      {
+        id: 'log_seed_2',
+        userName: 'Engr. M. Arslan Qasim',
+        designation: 'Program Coordinator',
+        department: 'Department of Mechanical Engineering & Technology',
+        action: 'Updated final marks sheet for MET-101 Technical Drawing',
+        program: 'B.Sc. Mechanical Engineering',
+        shift: 'Morning',
+        coordinatorName: 'Engr. M. Arslan Qasim',
+        coordinatorDesignation: 'Program Coordinator',
+        timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+      },
+      {
+        id: 'log_seed_3',
+        userName: 'Prof. Dr. Kamran',
+        designation: 'Vice Chancellor',
+        department: 'Department of Computer Science & Information Technology',
+        action: 'Reassigned Program Coordinator role to Dr. Usman Ali for Evening Shift',
+        program: 'BS Computer Science',
+        shift: 'Evening',
+        coordinatorName: 'Dr. Usman Ali',
+        coordinatorDesignation: 'Program Coordinator',
+        timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
+      },
+      {
+        id: 'log_seed_4',
+        userName: 'Engr. Saad Ahmad',
+        designation: 'Assistant Professor',
+        department: 'Department of Civil Engineering & Technology',
+        action: 'Created new course entry CVE-102 Surveying-I and uploaded assessment data',
+        program: 'B.Sc. Civil Engineering',
+        shift: 'Morning',
+        coordinatorName: 'Dr. Faisal',
+        coordinatorDesignation: 'Program Coordinator',
+        timestamp: new Date(Date.now() - 1000 * 60 * 720).toISOString(),
+      },
+    ];
+
+    try {
+      localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify(seedLogs));
+    } catch (e) {}
+
+    return seedLogs;
   }
 
   public static logAccess(action: string, department?: string, program?: string, shift?: AcademicShift): void {

@@ -523,23 +523,8 @@ export class CompletionRadarService {
         });
       });
     } else {
-      // No course records uploaded yet for this cohort - show authentic awaiting state
-      courses.push({
-        id: `awaiting-${semId}-${sectionId}`,
-        courseCode: 'PENDING',
-        subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
-        creditHours: '—',
-        status: 'Pending',
-        submitted: false,
-        dateUploaded: '',
-        uploadedBy: coord.isAssigned ? coord.name : 'Coordinator Unassigned',
-        remarks: 'No course sheet uploaded yet for this cohort',
-        coordinatorName: coord.name,
-        deadlineText: deadlineInfo.text,
-        lastActivity: 'Awaiting submission',
-        shift: 'Morning',
-      });
-      pending = 5;
+      // No course records uploaded yet for this cohort - indicate awaiting state without inflating pending counts
+      pending = 0;
     }
 
     const total = submitted + pending + inProgress;

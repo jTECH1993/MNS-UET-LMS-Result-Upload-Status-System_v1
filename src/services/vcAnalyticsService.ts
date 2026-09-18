@@ -480,40 +480,23 @@ export class VCAnalyticsService {
           progInProgress += secInProgress;
         });
 
-        // Ensure every active academic program has at least 5 expected courses awaiting entry
+        // If no records have been submitted for this program yet, show clean unsubmitted status without inflating pending counts
         if (progCourses === 0) {
-          const defaultSec = 'A';
-          const defaultCourses: CourseDetail[] = [];
-          for (let i = 1; i <= 5; i++) {
-            defaultCourses.push({
-              id: `awaiting-${dept.code}-${prog.name.replace(/\s+/g, '-')}-${defaultSec}-c${i}`,
-              courseCode: `SUBJ-${i}`,
-              subjectTitle: `Curricular Subject ${i} (Awaiting LMS Entry)`,
-              creditHours: '3(3-0)',
-              status: 'Pending',
-              dateUploaded: '',
-              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-              remarks: `Awaiting LMS result upload for ${prog.name}`,
-              expected: true,
-              submitted: false,
-              coordinatorName: coordinatorDim.name,
-              deadline,
-              lastActivity: 'Awaiting submission',
+          if (sectionBreakdowns.length === 0) {
+            sectionBreakdowns.push({
+              section: 'A',
+              totalCourses: 0,
+              uploadedCourses: 0,
+              pendingCourses: 0,
+              inProgressCourses: 0,
+              completionRate: 0,
+              status: 'Not Started',
+              submissionRecord: null,
+              courses: [],
             });
           }
-          sectionBreakdowns.push({
-            section: defaultSec,
-            totalCourses: 5,
-            uploadedCourses: 0,
-            pendingCourses: 5,
-            inProgressCourses: 0,
-            completionRate: 0,
-            status: 'Not Started',
-            submissionRecord: null,
-            courses: defaultCourses,
-          });
-          progCourses = 5;
-          progPending = 5;
+          progCourses = 0;
+          progPending = 0;
           progUploaded = 0;
           progInProgress = 0;
         }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { StorageService } from '../services/storageService';
 import {
   X,
   User,
@@ -740,33 +741,83 @@ export const UserProfileModal: React.FC<Props> = ({
                           </div>
                         </div>
 
-                        {/* Request New Program from HOD Section */}
-                        <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <strong className="block text-xs font-bold text-slate-800 dark:text-slate-100">
-                                Need to Coordinate an Additional Degree Program?
-                              </strong>
-                              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
-                                Coordinators have the privilege to remove any assigned program. To add a new program or shift assignment, please submit a formal request to your Head of Department (HOD).
-                              </p>
+                        {/* Request / Add New Program Section */}
+                        {StorageService.isCoordinatorSelfServiceAllowed(department) || currentUser.role === 'HOD' || currentUser.role === 'ADMIN' ? (
+                          <div className="p-3 bg-teal-50/80 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <strong className="block text-xs font-bold text-teal-950 dark:text-teal-200">
+                                  HOD Permission Granted: Add Degree Program
+                                </strong>
+                                <p className="text-[11px] text-teal-800 dark:text-teal-300 mt-0.5 leading-snug">
+                                  Your Head of Department has allowed coordinator self-service. Select any degree program in {department} to add it directly to your account.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <select
+                                value={interDeptProgToAdd}
+                                onChange={(e) => setInterDeptProgToAdd(e.target.value)}
+                                className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-teal-300 dark:border-teal-700 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-100"
+                              >
+                                <option value="">-- Select Program to Add --</option>
+                                {availablePrograms
+                                  .filter((p) => !assignedPrograms.includes(p.name))
+                                  .map((p) => (
+                                    <option key={p.name} value={p.name}>
+                                      {p.name} ({p.degreeLevel})
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!interDeptProgToAdd) return;
+                                  const res = AuthService.addCoordinatorProgram(currentUser.id, interDeptProgToAdd);
+                                  if (res.success) {
+                                    const updated = [...assignedPrograms, interDeptProgToAdd];
+                                    setAssignedPrograms(updated);
+                                    setInterDeptProgToAdd('');
+                                    setSuccessMessage(res.message);
+                                  } else {
+                                    setErrorMessage(res.message);
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shrink-0"
+                              >
+                                + Add Program
+                              </button>
                             </div>
                           </div>
+                        ) : (
+                          <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <strong className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                                  Need to Coordinate an Additional Degree Program?
+                                </strong>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
+                                  Coordinators have the privilege to remove any assigned program. To add a new program or shift assignment, please submit a formal request to your Head of Department (HOD).
+                                </p>
+                              </div>
+                            </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onRequestAdditionalProgram) {
-                                onClose();
-                                onRequestAdditionalProgram();
-                              }
-                            }}
-                            className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>+ Request Additional Program from HOD</span>
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onRequestAdditionalProgram) {
+                                  onClose();
+                                  onRequestAdditionalProgram();
+                                }
+                              }}
+                              className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>+ Request Additional Program from HOD</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 

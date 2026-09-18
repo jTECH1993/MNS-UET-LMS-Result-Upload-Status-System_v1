@@ -1156,8 +1156,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         <DeadlineBanner currentSession={currentSession} semesterFilter={selectedSemesterFilter} isVC={true} />
       </div>
 
-      {/* 4. High-Level Executive KPIs: Overall (82.4%), Departments (18/24), Programs (47/63), Pending (29), Critical Bottleneck */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      {/* 4. High-Level Executive KPIs: Overall, Active Departments, Degree Programs, Critical Bottleneck */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div
           onClick={() => {
             setDashboardViewMode('COMMAND_CENTER');
@@ -1237,32 +1237,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </p>
         </div>
 
-        <div
-          onClick={() => {
-            setStatusFilter('PENDING');
-            setDashboardViewMode('ROSTER');
-            setTimeout(() => {
-              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-          }}
-          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50/20 dark:bg-rose-950/10 shadow-xs cursor-pointer hover:border-rose-400 transition-all"
-          title="Click to view all pending courses requiring action"
-        >
-          <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-            Pending Courses
-          </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
-              {hierarchy.pendingCourses}
-            </span>
-            <span className="text-xs font-bold text-rose-600">Require Action</span>
-          </div>
-          <p className="text-[11px] text-rose-600/80 mt-2">
-            Awaiting instructor grades upload into LMS
-          </p>
-        </div>
-
-        {/* 5th KPI: Bottleneck Indicator */}
+        {/* Bottleneck Indicator */}
         <div
           onClick={handleFindBottleneck}
           className="bg-gradient-to-br from-rose-950/30 to-slate-900 p-4 rounded-xl border border-rose-500/50 shadow-xs cursor-pointer hover:border-rose-400 transition-all group relative overflow-hidden"
@@ -1292,7 +1267,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       </div>
 
       {/* 5. Summary Metric Highlights */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Genuine Upload Progress */}
         <button
           type="button"
@@ -1334,33 +1309,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
             {stats.pendingSlots} course sheet(s) awaiting HOD entry
-          </p>
-        </button>
-
-        {/* Total Subjects Logged */}
-        <button
-          type="button"
-          onClick={() => {
-            setStatusFilter('ALL');
-            setSelectedDeptFilter('ALL');
-            setDashboardViewMode('ROSTER');
-            setTimeout(() => {
-              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-          }}
-          className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs text-left hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 group-hover:text-indigo-700 transition-colors">
-            Active Subjects Logged
-          </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-black text-slate-900 group-hover:text-indigo-900 transition-colors">
-              {stats.totalSubjectsAcrossUni}
-            </span>
-            <span className="text-xs text-slate-500">courses</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-3">
-            Across {stats.submittedSlots} submitted course sheet(s)
           </p>
         </button>
 

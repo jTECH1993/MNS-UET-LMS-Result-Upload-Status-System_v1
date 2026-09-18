@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserAccount, UserRole, AcademicShift, ProgramAccessRequest } from '../types';
 import { AuthService } from '../services/authService';
+import { StorageService } from '../services/storageService';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import {
   Users,
@@ -521,6 +522,39 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
                 )}
               </button>
             </div>
+          </div>
+
+          {/* HOD Coordinator Independent Program Self-Service Permission Switch */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-teal-50/80 dark:bg-teal-950/40 p-3.5 rounded-xl border border-teal-200 dark:border-teal-800">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <ShieldCheck className="w-5 h-5 text-teal-700 dark:text-teal-400 shrink-0 mt-0.5 sm:mt-0" />
+              <div>
+                <span className="text-xs font-bold text-teal-950 dark:text-teal-200 block">
+                  Coordinator Independent Program Self-Service Permission
+                </span>
+                <p className="text-[11px] text-teal-800 dark:text-teal-300">
+                  When enabled by HOD, coordinators in {selectedDept} can independently add and change degree programs in their profile without submitting request forms.
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-auto">
+              <input
+                type="checkbox"
+                checked={StorageService.isCoordinatorSelfServiceAllowed(selectedDept)}
+                onChange={(e) => {
+                  const allowed = e.target.checked;
+                  StorageService.setCoordinatorSelfServiceAllowed(selectedDept, allowed);
+                  setSuccessMessage(
+                    allowed
+                      ? `Coordinators in ${selectedDept} are now PERMITTED to add/change degree programs independently.`
+                      : `Coordinators in ${selectedDept} must request HOD approval to add new degree programs.`
+                  );
+                  setTimeout(() => setSuccessMessage(''), 4000);
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-700"></div>
+            </label>
           </div>
 
           {/* MODE 1: CREATE NEW FACULTY MEMBER / COORDINATOR */}

@@ -1317,6 +1317,77 @@ export class AuthService {
     };
   }
 
+  // Self-service add program when HOD permission is granted or user is Admin/HOD
+  public static addCoordinatorProgram(
+    userId: string,
+    requestedProgram: string,
+    requestedShifts: AcademicShift[] = ['Morning', 'Evening']
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'User account not found.' };
+
+    const cleanProg = SecurityService.sanitizeInput(requestedProgram).trim();
+    if (!cleanProg) return { success: false, message: 'Please specify a valid program name.' };
+
+    const currentAssigned = account.assignedPrograms || (account.program ? [account.program] : []);
+    if (currentAssigned.includes(cleanProg)) {
+      return { success: true, message: `Program "${cleanProg}" is already assigned to your account.` };
+    }
+
+    const updatedAssigned = [...currentAssigned, cleanProg];
+    account.assignedPrograms = updatedAssigned;
+    if (!account.program) {
+      account.program = cleanProg;
+    }
+
+    if (!account.programShiftAssignments) {
+      account.programShiftAssignments = {};
+    }
+    account.programShiftAssignments[cleanProg] = requestedShifts;
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined;
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        assignedPrograms: updatedAssigned,
+        program: account.program,
+        programShiftAssignments: account.programShiftAssignments,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'SECURITY_ALERT',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Coordinator ${account.name} added program "${cleanProg}" via self-service permission. Portfolio now includes: ${updatedAssigned.join(', ')}.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Program "${cleanProg}" has been successfully added to your active coordinated programs list!`,
+      session: updatedSession,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // POST-LOGIN ADDITIONAL PROGRAM ACCESS REQUESTS (COORDINATOR MULTI-PROGRAM)
   // ---------------------------------------------------------------------------
