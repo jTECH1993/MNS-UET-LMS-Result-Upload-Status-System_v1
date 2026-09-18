@@ -107,7 +107,7 @@ export class CompletionRadarService {
   /**
    * Helper to resolve coordinator for a program/department
    */
-  private static resolveCoordinator(
+  public static resolveCoordinator(
     deptName: string,
     progName?: string
   ): { isAssigned: boolean; name: string; designation?: string } {
@@ -164,16 +164,36 @@ export class CompletionRadarService {
   /**
    * Helper to resolve HOD for a department
    */
-  private static resolveHOD(deptName: string): { isRegistered: boolean; name: string } {
+  public static resolveHOD(deptName: string): { isRegistered: boolean; name: string } {
     try {
       const accounts = AuthService.getAccounts();
       const hod = accounts.find(
-        (a) => a.role === 'HOD' && a.department.trim().toLowerCase() === deptName.trim().toLowerCase()
+        (a) =>
+          (a.role === 'HOD' || (a.designation && a.designation.toLowerCase().includes('hod'))) &&
+          a.department.trim().toLowerCase() === deptName.trim().toLowerCase()
       );
       if (hod) {
         return { isRegistered: true, name: hod.name };
       }
     } catch (e) {}
+
+    const defaultHODs: Record<string, string> = {
+      'Department of Computer Science': 'Dr. Najam-ul-Islam',
+      'Department of Electrical Engineering & Technology': 'Dr. Muhammad Tariq',
+      'Department of Mechanical Engineering & Technology': 'Dr. Hafiz Muhammad Umar',
+      'Department of Civil Engineering & Technology': 'Dr. Tariq Mahmood',
+      'Department of Chemical Engineering & Technology': 'Dr. M. Mubeen',
+      'Department of Management Sciences': 'Dr. M. Fahad',
+      'Department of Basic Sciences & Humanities': 'Dr. M. Fahad',
+    };
+
+    const matchedKey = Object.keys(defaultHODs).find(
+      (k) => k.toLowerCase() === deptName.trim().toLowerCase()
+    );
+
+    if (matchedKey) {
+      return { isRegistered: true, name: defaultHODs[matchedKey] };
+    }
 
     return { isRegistered: false, name: 'Not Registered' };
   }

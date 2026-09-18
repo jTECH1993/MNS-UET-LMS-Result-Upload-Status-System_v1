@@ -2490,18 +2490,35 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                   Semester {selectedSemesterFilter} Submitted
                                 </span>
-                                {activeSub && (
-                                  <div className="text-[10px] text-slate-600 max-w-[160px] flex flex-col items-center leading-tight mt-1">
-                                    <span className="truncate w-full text-center" title={`By: ${activeSub.accessedBy || 'N/A'} (${activeSub.userDesignation || 'User'})`}>
-                                      By: <strong>{activeSub.accessedBy || 'N/A'}</strong>
-                                    </span>
-                                    {activeSub.hodCoordinator && activeSub.hodCoordinator !== activeSub.accessedBy && (
-                                      <span className="truncate w-full text-center" title={`Coord: ${activeSub.hodCoordinator}`}>
-                                        Coord: <strong>{activeSub.hodCoordinator}</strong>
+                                {(() => {
+                                  const hodRes = CompletionRadarService.resolveHOD(progItem.department);
+                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program);
+                                  const coordName = activeSub?.hodCoordinator || (coordRes.isAssigned ? coordRes.name : null);
+                                  const uploaderName = activeSub?.accessedBy;
+
+                                  return (
+                                    <div className="text-[10px] text-slate-700 max-w-[180px] flex flex-col items-center leading-tight mt-1 space-y-0.5">
+                                      {/* HOD Name FIRST (Above Coordinator) */}
+                                      <span className="truncate w-full text-center" title={`HOD: ${hodRes.name}`}>
+                                        HOD: <strong className="text-slate-900 font-semibold">{hodRes.name}</strong>
                                       </span>
-                                    )}
-                                  </div>
-                                )}
+
+                                      {/* Coordinator Name SECOND (Below HOD) */}
+                                      {coordName && (
+                                        <span className="truncate w-full text-center" title={`Coord: ${coordName}`}>
+                                          Coord: <strong className="text-slate-900 font-semibold">{coordName}</strong>
+                                        </span>
+                                      )}
+
+                                      {/* Uploader / AccessedBy (if different from HOD & Coord) */}
+                                      {uploaderName && uploaderName !== 'N/A' && uploaderName !== coordName && uploaderName !== hodRes.name && (
+                                        <span className="truncate w-full text-center text-slate-500 text-[9px]" title={`Uploaded By: ${uploaderName}`}>
+                                          By: {uploaderName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             ) : (
                               <div className="space-y-0.5">
@@ -2509,9 +2526,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                                   <Clock className="w-3 h-3 text-amber-500" />
                                   Awaiting Entry
                                 </span>
-                                <div className="text-[10px] text-slate-400">
-                                  Semester {selectedSemesterFilter} not yet uploaded
-                                </div>
+                                {(() => {
+                                  const hodRes = CompletionRadarService.resolveHOD(progItem.department);
+                                  const coordRes = CompletionRadarService.resolveCoordinator(progItem.department, progItem.program);
+                                  return (
+                                    <div className="text-[10px] text-slate-600 flex flex-col items-center mt-1 space-y-0.5 max-w-[180px]">
+                                      <span className="truncate w-full text-center" title={`HOD: ${hodRes.name}`}>
+                                        HOD: <strong className="text-slate-800 font-semibold">{hodRes.name}</strong>
+                                      </span>
+                                      {coordRes.isAssigned && (
+                                        <span className="truncate w-full text-center" title={`Coord: ${coordRes.name}`}>
+                                          Coord: <strong className="text-slate-800 font-semibold">{coordRes.name}</strong>
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>
