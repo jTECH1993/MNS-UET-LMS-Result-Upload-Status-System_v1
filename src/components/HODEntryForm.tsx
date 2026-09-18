@@ -598,9 +598,6 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
     const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester, section);
-    if (currentUser?.name) {
-      newRow.uploadedBy = currentUser.name;
-    }
     setSubjects((prev) => [...prev, newRow]);
     showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester} (Section ${section}).`);
   };
@@ -739,7 +736,7 @@ export const HODEntryForm: React.FC<Props> = ({
           ...s,
           status: newStatus,
           dateUploaded: newStatus === 'Uploaded' ? (s.dateUploaded || today) : s.dateUploaded,
-          uploadedBy: s.uploadedBy || (currentUser?.name || ''),
+          uploadedBy: s.uploadedBy || '',
         };
       })
     );
@@ -861,7 +858,7 @@ export const HODEntryForm: React.FC<Props> = ({
       sectionShift: c.sectionShift || `${shift} - Sem ${semester} (Sec ${effectiveSection})`,
       status: c.status || 'Uploaded',
       dateUploaded: c.dateUploaded || (c.status === 'Uploaded' ? new Date().toISOString().split('T')[0] : ''),
-      uploadedBy: c.uploadedBy || (currentUser?.name || ''),
+      uploadedBy: c.uploadedBy || '',
       remarks: c.remarks || '',
     }));
 
@@ -915,7 +912,7 @@ export const HODEntryForm: React.FC<Props> = ({
         sectionShift: `${shift} - Sem ${semester} (Sec ${secKey})`,
         status: c.status || 'Uploaded',
         dateUploaded: c.dateUploaded || (c.status === 'Uploaded' ? new Date().toISOString().split('T')[0] : ''),
-        uploadedBy: c.uploadedBy || (currentUser?.name || 'Department Faculty'),
+        uploadedBy: c.uploadedBy || '',
         remarks: c.remarks || 'LMS Portal Bulk Synchronization',
       }));
 
@@ -1006,7 +1003,7 @@ export const HODEntryForm: React.FC<Props> = ({
       sectionShift: `${shift} - Sem ${semester} (Sec ${section})`,
       status: '' as LMSStatus,
       dateUploaded: '',
-      uploadedBy: currentUser?.name || '',
+      uploadedBy: s.uploadedBy || '',
       remarks: '',
     }));
     while (copiedRows.length < 1) {
