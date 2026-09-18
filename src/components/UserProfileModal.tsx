@@ -708,7 +708,7 @@ export const UserProfileModal: React.FC<Props> = ({
                                         Set Primary
                                       </button>
                                     )}
-                                    {assignedPrograms.length > 1 ? (
+                                    {assignedPrograms.length > 0 ? (
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -716,8 +716,8 @@ export const UserProfileModal: React.FC<Props> = ({
                                           if (res.success) {
                                             const updated = assignedPrograms.filter((p) => p !== pName);
                                             setAssignedPrograms(updated);
-                                            if (isPrimary && updated.length > 0) {
-                                              handleProgramSelect(updated[0]);
+                                            if (isPrimary) {
+                                              handleProgramSelect(updated.length > 0 ? updated[0] : '');
                                             }
                                             setSuccessMessage(res.message);
                                           } else {

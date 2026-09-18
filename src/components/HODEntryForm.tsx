@@ -2195,7 +2195,7 @@ export const HODEntryForm: React.FC<Props> = ({
                         title={`Switch to ${p.name}`}
                       >
                         <span>{p.name}</span>
-                        {!isPrivilegedUser && coordinatorAllowedPrograms.length > 1 && currentUser?.id && (
+                        {!isPrivilegedUser && currentUser?.id && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -2203,6 +2203,13 @@ export const HODEntryForm: React.FC<Props> = ({
                               const res = AuthService.removeCoordinatorProgram(currentUser.id, p.name);
                               if (res.success) {
                                 showFeedback('success', res.message);
+                                dispatchSyncEvidence(
+                                  'DELETE',
+                                  'Coordinated Program Removed',
+                                  `Program "${p.name}" removed from active portfolio.`,
+                                  p.name,
+                                  currentUser.name
+                                );
                               } else {
                                 showFeedback('warning', res.message);
                               }
@@ -2232,19 +2239,46 @@ export const HODEntryForm: React.FC<Props> = ({
                 </div>
               </div>
             )}
-            {!isPrivilegedUser && coordinatorAllowedPrograms.length === 1 && (
+            {!isPrivilegedUser && (
               <div className="mt-2 py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-teal-900 shrink-0">Current Program:</span>
-                  <span className="font-semibold text-slate-800">{coordinatorAllowedPrograms[0]?.name}</span>
+                  <span className="font-semibold text-slate-800">{program || 'No Program Assigned'}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsReqProgModalOpen(true)}
-                  className="text-[10px] font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 px-2 py-0.5 rounded cursor-pointer self-start sm:self-auto flex items-center gap-1 transition-colors"
-                >
-                  <Plus className="w-2.5 h-2.5" /> Request Additional Program
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {program && currentUser?.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = AuthService.removeCoordinatorProgram(currentUser.id, program);
+                        if (res.success) {
+                          showFeedback('success', res.message);
+                          dispatchSyncEvidence(
+                            'DELETE',
+                            'Coordinated Program Removed',
+                            `Program "${program}" removed from active portfolio.`,
+                            program,
+                            currentUser.name
+                          );
+                        } else {
+                          showFeedback('warning', res.message);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded cursor-pointer flex items-center gap-1 transition-colors"
+                      title={`Remove ${program} from your active coordination list`}
+                    >
+                      <Trash2 className="w-3 h-3 text-rose-600" />
+                      <span>Remove Program</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsReqProgModalOpen(true)}
+                    className="text-[10px] font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 px-2 py-0.5 rounded cursor-pointer self-start sm:self-auto flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-2.5 h-2.5" /> Request Additional Program
+                  </button>
+                </div>
               </div>
             )}
 
