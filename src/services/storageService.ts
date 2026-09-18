@@ -692,30 +692,30 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     shift: string
   ): string[] {
     const store = this.getStore();
-    const foundSections = new Set<string>(['A']); // Section A is baseline
+    const foundSections = new Set<string>(['A']); // Section A is always default baseline
 
-    // 1. From registered custom/added sections
+    // 1. From registered custom/added sections for this exact cohort
     const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
-    const progKey = `${department}__${program}`;
     const sectionsMap = this.getCohortSectionsMap();
-    if (sectionsMap[cohortKey]) {
-      sectionsMap[cohortKey].forEach((s) => foundSections.add(s.trim().toUpperCase()));
-    }
-    if (sectionsMap[progKey]) {
-      sectionsMap[progKey].forEach((s) => foundSections.add(s.trim().toUpperCase()));
+    if (sectionsMap[cohortKey] && Array.isArray(sectionsMap[cohortKey])) {
+      sectionsMap[cohortKey].forEach((s) => {
+        const cleaned = s.trim().toUpperCase();
+        if (cleaned) foundSections.add(cleaned);
+      });
     }
 
-    // 2. Discover from stored submissions
+    // 2. Discover from stored submissions strictly for this cohort
     Object.values(store).forEach((rec) => {
       if (
         rec.department === department &&
         rec.program === program &&
-        (!session || rec.session === session) &&
-        (!semester || rec.semester === semester) &&
-        (!shift || rec.shift === shift) &&
+        rec.session === session &&
+        rec.semester === semester &&
+        rec.shift === shift &&
         rec.section
       ) {
-        foundSections.add(rec.section.trim().toUpperCase());
+        const sec = rec.section.trim().toUpperCase();
+        if (sec) foundSections.add(sec);
       }
     });
 
@@ -739,15 +739,10 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     const cleanSec = (sectionToAdd || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
     const sectionsMap = this.getCohortSectionsMap();
     const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
-    const progKey = `${department}__${program}`;
 
     const current = new Set<string>(sectionsMap[cohortKey] || ['A']);
     current.add(cleanSec);
     sectionsMap[cohortKey] = Array.from(current);
-
-    const progCurrent = new Set<string>(sectionsMap[progKey] || ['A']);
-    progCurrent.add(cleanSec);
-    sectionsMap[progKey] = Array.from(progCurrent);
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
     try {
@@ -778,15 +773,12 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     // 1. Remove from cohort sections map
     const sectionsMap = this.getCohortSectionsMap();
     const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
-    const progKey = `${department}__${program}`;
 
     if (sectionsMap[cohortKey]) {
       sectionsMap[cohortKey] = sectionsMap[cohortKey].filter((s) => s.trim().toUpperCase() !== cleanSec);
-      if (sectionsMap[cohortKey].length === 0) delete sectionsMap[cohortKey];
-    }
-    if (sectionsMap[progKey]) {
-      sectionsMap[progKey] = sectionsMap[progKey].filter((s) => s.trim().toUpperCase() !== cleanSec);
-      if (sectionsMap[progKey].length === 0) delete sectionsMap[progKey];
+      if (sectionsMap[cohortKey].length === 0 || (sectionsMap[cohortKey].length === 1 && sectionsMap[cohortKey][0] === 'A')) {
+        delete sectionsMap[cohortKey];
+      }
     }
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));

@@ -298,11 +298,18 @@ export const HODEntryForm: React.FC<Props> = ({
     );
   }, [department, program, session, semester, shift, lastSavedTime, isExistingRecord]);
 
+  // Keep selected section synchronized with available sections
+  useEffect(() => {
+    if (availableSections.length > 0 && !availableSections.includes(section)) {
+      setSection('A');
+      if (onSectionChangedProp) onSectionChangedProp('A');
+    }
+  }, [availableSections, section, onSectionChangedProp]);
+
   // Status of all active sections for the currently selected semester & shift
   const sectionStatuses = useMemo(() => {
     const sectionSet = new Set<string>(availableSections);
     sectionSet.add('A');
-    if (section) sectionSet.add(section);
 
     const sorted = Array.from(sectionSet).sort((a, b) => {
       if (a === 'A') return -1;
@@ -340,11 +347,13 @@ export const HODEntryForm: React.FC<Props> = ({
         summary: summaryInfo,
       };
     });
-  }, [department, program, degreeLevel, shift, session, semester, section, availableSections, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, shift, session, semester, availableSections, lastSavedTime, isExistingRecord]);
 
   const handleSectionChange = (newSec: string) => {
     const cleanSec = (newSec || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
-    StorageService.registerCohortSection(department, program, session, semester, shift, cleanSec);
+    if (cleanSec !== 'A') {
+      StorageService.registerCohortSection(department, program, session, semester, shift, cleanSec);
+    }
     setSection(cleanSec);
     setIsCustomSectionOpen(false);
     if (onSectionChangedProp) onSectionChangedProp(cleanSec);
