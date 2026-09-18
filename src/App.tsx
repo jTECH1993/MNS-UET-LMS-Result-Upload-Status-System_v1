@@ -435,14 +435,29 @@ export default function App() {
                           type="button"
                           id={`btn-dept-${dept.code}`}
                           onClick={() => {
+                            setTargetDept(dept.name);
+                            // Auto select first applicable program of clicked department
+                            const firstProg =
+                              dept.programs.find((p) => {
+                                const detail = StorageService.getProgramSessionDetail(
+                                  dept.name,
+                                  p.name,
+                                  activeSessions,
+                                  allRecords
+                                );
+                                return detail.isApplicableInSelected;
+                              }) || dept.programs[0];
+                            if (firstProg) {
+                              setTargetProg(firstProg.name);
+                            }
                             setOpenDeptDropdown((prev) => (prev === dept.name ? null : dept.name));
                           }}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                            isActive && activeView === 'HOD'
-                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                              : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-2 ring-emerald-500/50'
+                              : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-emerald-400'
                           }`}
-                          title={`Click to view all ${dept.programs.length} programs in ${dept.name}`}
+                          title={`Click to select ${dept.name} (${dept.code}) and view its ${dept.programs.length} programs`}
                         >
                           <span>{dept.code}</span>
                           <ChevronDown
@@ -729,7 +744,7 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Inline Active Department Program Quick Selector */}
+                {/* Inline Active Department & Program Quick Selector */}
                 {selectedDeptObj && (() => {
                   const deptProgDetails = selectedDeptObj.programs.map((prog) => ({
                     prog,
@@ -745,7 +760,54 @@ export default function App() {
                   const isMulti = activeSessions.length > 1;
 
                   return (
-                    <div className="flex items-center gap-1.5 bg-emerald-50/80 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-600/50 rounded-lg px-2.5 py-1 shadow-2xs">
+                    <div className="flex items-center gap-1.5 bg-emerald-50/90 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-600/50 rounded-lg px-2.5 py-1 shadow-2xs">
+                      {/* Department Switcher Dropdown */}
+                      <div className="flex items-center gap-1 border-r border-emerald-200 dark:border-slate-700 pr-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
+                          Dept:
+                        </span>
+                        <select
+                          id="top-bar-active-department-select"
+                          value={targetDept}
+                          onChange={(e) => {
+                            const newDeptName = e.target.value;
+                            setTargetDept(newDeptName);
+                            const targetDeptData = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDeptName);
+                            if (targetDeptData) {
+                              const firstApplicable =
+                                targetDeptData.programs.find((p) => {
+                                  const detail = StorageService.getProgramSessionDetail(
+                                    targetDeptData.name,
+                                    p.name,
+                                    activeSessions,
+                                    allRecords
+                                  );
+                                  return detail.isApplicableInSelected;
+                                }) || targetDeptData.programs[0];
+                              if (firstApplicable) {
+                                setTargetProg(firstApplicable.name);
+                              }
+                            }
+                            if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                              setIsInspectionMode(true);
+                            }
+                          }}
+                          className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300 bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[90px] sm:max-w-[130px] truncate"
+                          title="Switch department focus"
+                        >
+                          {UNIVERSITY_DEPARTMENTS.map((d) => (
+                            <option
+                              key={d.name}
+                              value={d.name}
+                              className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                            >
+                              {d.code} ({d.name.replace('Department of ', '')})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Program Selector */}
                       <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
                         {selectedDeptObj.code} Program:
                       </span>
@@ -761,8 +823,8 @@ export default function App() {
                           setActiveView('HOD');
                           setActiveModule('LMS');
                         }}
-                        className="text-xs font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[220px] sm:max-w-[320px] truncate"
-                        title="Select program within this department to inspect"
+                        className="text-xs font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[200px] sm:max-w-[320px] truncate"
+                        title={`Select program in ${selectedDeptObj.name}`}
                       >
                         {isMulti ? (
                           deptProgDetails.map(({ prog, detail }) => {
@@ -775,7 +837,7 @@ export default function App() {
                                 title={!isApplicable ? `Not applicable in selected sessions (${activeSessions.join(', ')})` : undefined}
                                 className={
                                   isApplicable
-                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white'
+                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold'
                                     : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic'
                                 }
                               >
@@ -786,7 +848,7 @@ export default function App() {
                         ) : (
                           <>
                             {enrolled.length > 0 && (
-                              <optgroup label={`Session ${targetSession} Enrolled Programs (${enrolled.length})`}>
+                              <optgroup label={`Session ${targetSession} Active Offerings (${enrolled.length})`}>
                                 {enrolled.map(({ prog, detail }) => (
                                   <option
                                     key={prog.name}
@@ -799,16 +861,15 @@ export default function App() {
                               </optgroup>
                             )}
                             {other.length > 0 && (
-                              <optgroup label={`Other Offerings (Not in Session ${targetSession})`}>
+                              <optgroup label={`Other Programs (Off-cycle in Session ${targetSession})`}>
                                 {other.map(({ prog }) => (
                                   <option
                                     key={prog.name}
                                     value={prog.name}
                                     disabled
-                                    title={`Not applicable in selected session: Session ${targetSession}`}
                                     className="bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic"
                                   >
-                                    {prog.name} ({prog.degreeLevel}) — [Not applicable in Session {targetSession}]
+                                    {prog.name} ({prog.degreeLevel}) — [Off-cycle in Session {targetSession}]
                                   </option>
                                 ))}
                               </optgroup>
@@ -822,7 +883,7 @@ export default function App() {
                           setRosterModalDept(selectedDeptObj.name);
                           setIsRosterModalOpen(true);
                         }}
-                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200 p-0.5 rounded transition-colors cursor-pointer"
+                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200 p-0.5 rounded transition-colors cursor-pointer shrink-0"
                         title={`Configure ${selectedDeptObj.code} session roster`}
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
