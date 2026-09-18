@@ -23,8 +23,9 @@ import {
   Plus,
   Star,
   Palette,
+  SunMoon,
 } from 'lucide-react';
-import { ActiveUserSession, UserRole, AppTheme } from '../types';
+import { ActiveUserSession, UserRole, AppTheme, AcademicShift } from '../types';
 import { AuthService, INSTITUTIONAL_THEMES, ThemeDefinition } from '../services/authService';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 
@@ -50,6 +51,49 @@ export const UserProfileModal: React.FC<Props> = ({
   const [assignedPrograms, setAssignedPrograms] = useState<string[]>([]);
   const [isMultiProgramCoord, setIsMultiProgramCoord] = useState<boolean>(false);
   const [interDeptProgToAdd, setInterDeptProgToAdd] = useState<string>('');
+
+  // Coordinator Shift Assignment (Morning / Evening / Both per program)
+  const [primaryShift, setPrimaryShift] = useState<'Both' | 'Morning' | 'Evening'>('Both');
+  const [programShiftAssignments, setProgramShiftAssignments] = useState<Record<string, AcademicShift[]>>({});
+
+  const getShiftsForProgram = (progName: string): AcademicShift[] => {
+    if (programShiftAssignments[progName] && programShiftAssignments[progName].length > 0) {
+      return programShiftAssignments[progName];
+    }
+    if (primaryShift === 'Both') return ['Morning', 'Evening'];
+    return [primaryShift];
+  };
+
+  const toggleProgramShift = (progName: string, shiftToToggle: AcademicShift) => {
+    const current = getShiftsForProgram(progName);
+    let next: AcademicShift[];
+    if (current.includes(shiftToToggle)) {
+      if (current.length === 1) {
+        // Must keep at least one shift active
+        const alternate: AcademicShift = shiftToToggle === 'Morning' ? 'Evening' : 'Morning';
+        next = [alternate];
+      } else {
+        next = current.filter((s) => s !== shiftToToggle);
+      }
+    } else {
+      next = [...current, shiftToToggle];
+    }
+    setProgramShiftAssignments((prev) => ({
+      ...prev,
+      [progName]: next,
+    }));
+  };
+
+  const handleGlobalShiftPreset = (preset: 'Both' | 'Morning' | 'Evening') => {
+    setPrimaryShift(preset);
+    const newShifts: AcademicShift[] = preset === 'Both' ? ['Morning', 'Evening'] : [preset];
+    const updated: Record<string, AcademicShift[]> = {};
+    const progs = isMultiProgramCoord && assignedPrograms.length > 0 ? assignedPrograms : [program];
+    progs.forEach((p) => {
+      updated[p] = newShifts;
+    });
+    setProgramShiftAssignments(updated);
+  };
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [currentPassword, setCurrentPassword] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');

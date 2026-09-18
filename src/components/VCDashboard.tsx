@@ -598,10 +598,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       });
 
       let percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
-      if (submittedCohorts < totalCohorts && percentage === 100) {
-        percentage = Math.min(percentage, 95);
+      if ((submittedCohorts < totalCohorts || totalPending > 0) && percentage >= 100) {
+        percentage = Math.min(percentage, Math.floor((totalUploaded / Math.max(totalSubjects, 1)) * 100));
+        if (percentage >= 100) {
+          percentage = 95;
+        }
       }
-      if (submittedCohorts === 0) {
+      if (totalUploaded === 0) {
         percentage = 0;
       }
 

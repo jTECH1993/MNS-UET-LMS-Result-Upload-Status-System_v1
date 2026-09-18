@@ -269,14 +269,8 @@ export class StorageService {
     if (configuredKey && Array.isArray(roster[configuredKey])) {
       activePrograms = [...roster[configuredKey]];
     } else {
-      // 2. Default coordinator template:
-      // In Session 2023: only programs configured as session2023
-      if (sessionName === '2023' || sessionName.includes('23')) {
-        activePrograms = dept.programs.filter((p) => p.session2023).map((p) => p.name);
-      } else {
-        // For other sessions (e.g. 2024), default to all department programs unless coordinator customizes
-        activePrograms = dept.programs.map((p) => p.name);
-      }
+      // 2. Default coordinator template: All official department programs are active by default
+      activePrograms = dept.programs.map((p) => p.name);
     }
 
     // 3. Dynamic Database inclusion: If any submission record exists in the database for this program in this session,

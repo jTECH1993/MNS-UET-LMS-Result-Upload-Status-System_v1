@@ -10,6 +10,8 @@ export interface CoordinatorDimension {
   isAssigned: boolean;
   accountStatus: 'Active' | 'Not Created';
   lastLoginAt?: string;
+  shifts?: AcademicShift[];
+  shiftLabel?: string;
 }
 
 export interface HODDimension {
@@ -198,6 +200,9 @@ export class VCAnalyticsService {
         sessionRoster.forEach((p) => registeredProgramNames.add(p));
       });
 
+      // Also ensure all official department programs are included so no program is omitted
+      dept.programs.forEach((p) => registeredProgramNames.add(p.name));
+
       // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
       allRecords.forEach((r) => {
         if (
@@ -235,12 +240,35 @@ export class VCAnalyticsService {
         totalUniversityPrograms++;
 
         // Coordinator Dimension: dynamic lookup from accounts and stored database records
-        const coordinatorAccount = accounts.find((acc) => {
+        const matchingCoordAccounts = accounts.filter((acc) => {
           if (acc.role !== 'COORDINATOR' && acc.role !== 'LECTURER') return false;
           if (acc.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           const assigned = acc.assignedPrograms || (acc.program ? [acc.program] : []);
           return assigned.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
         });
+
+        let coordinatorAccount = matchingCoordAccounts[0];
+        if (shiftFilter !== 'ALL' && matchingCoordAccounts.length > 1) {
+          const shiftSpecific = matchingCoordAccounts.find((acc) => {
+            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning', 'Evening'];
+            return shs.includes(shiftFilter as AcademicShift);
+          });
+          if (shiftSpecific) coordinatorAccount = shiftSpecific;
+        }
+
+        let coordShifts: AcademicShift[] | undefined = undefined;
+        let coordShiftLabel: string | undefined = undefined;
+        if (coordinatorAccount) {
+          coordShifts = (coordinatorAccount.programShiftAssignments && coordinatorAccount.programShiftAssignments[prog.name]) ||
+            coordinatorAccount.assignedShifts || ['Morning', 'Evening'];
+          if (coordShifts.includes('Morning') && coordShifts.includes('Evening')) {
+            coordShiftLabel = 'Morning & Evening';
+          } else if (coordShifts.includes('Morning')) {
+            coordShiftLabel = 'Morning Only';
+          } else if (coordShifts.includes('Evening')) {
+            coordShiftLabel = 'Evening Only';
+          }
+        }
 
         // Check if any database submission for this program records a coordinator
         let dbCoordName = '';
@@ -263,12 +291,15 @@ export class VCAnalyticsService {
               isAssigned: true,
               accountStatus: 'Active',
               lastLoginAt: coordinatorAccount.lastLoginAt,
+              shifts: coordShifts,
+              shiftLabel: coordShiftLabel,
             }
           : dbCoordName
           ? {
               name: dbCoordName,
               isAssigned: true,
               accountStatus: 'Active',
+              shiftLabel: 'Morning & Evening',
             }
           : {
               name: 'Not Assigned',
@@ -531,8 +562,22 @@ export class VCAnalyticsService {
         deptPending += progPending;
       });
 
-      const deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
-      const allProgramsCompleted = activePrograms.length > 0 && programDims.every((p) => p.completionRate === 100 && p.pendingCourses === 0);
+      let deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
+      const hasUnfinishedPrograms = programDims.some((p) => p.completionRate < 100 || p.pendingCourses > 0 || p.uploadedCourses < p.totalCourses);
+      const allProgramsCompleted = activePrograms.length > 0 && !hasUnfinishedPrograms;
+
+      // CRITICAL FIX: If ANY program in the department is still pending or has courses left,
+      // the department completion rate CANNOT read 100%!
+      if (hasUnfinishedPrograms && deptCompletion >= 100) {
+        deptCompletion = Math.min(deptCompletion, Math.floor((deptUploaded / Math.max(deptCourses, 1)) * 100));
+        if (deptCompletion >= 100) {
+          deptCompletion = 95; // Guard against 100% when programs are still left
+        }
+      }
+      if (deptUploaded === 0) {
+        deptCompletion = 0;
+      }
+
       let deptStatus: 'Completed' | 'Good' | 'Needs Attention' | 'Critical';
       if (deptCompletion === 100 && deptPending === 0 && allProgramsCompleted) deptStatus = 'Completed';
       else if (deptCompletion >= 70) deptStatus = 'Good';

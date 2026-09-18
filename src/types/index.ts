@@ -66,6 +66,7 @@ export interface UserAccount {
   program?: string; // Primary program e.g. "BS Artificial Intelligence"
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
+  programShiftAssignments?: Record<string, AcademicShift[]>; // Program-specific shifts (e.g. { "BS Computer Science": ["Morning", "Evening"], "BS Artificial Intelligence": ["Morning"] })
   createdAt: string;
   lastLoginAt?: string;
   failedLoginAttempts?: number;
@@ -86,6 +87,7 @@ export interface ActiveUserSession {
   program?: string; // Primary program e.g. "BS Artificial Intelligence"
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
+  programShiftAssignments?: Record<string, AcademicShift[]>; // Program-specific shifts
   token?: string;
   avatarUrl?: string;
   themePreference?: AppTheme;

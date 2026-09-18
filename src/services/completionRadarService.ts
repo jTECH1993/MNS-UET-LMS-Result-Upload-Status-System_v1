@@ -194,6 +194,11 @@ export class CompletionRadarService {
       sessionRoster.forEach((p) => set.add(p));
     });
 
+    // Ensure all official department programs are included
+    if (deptObj) {
+      deptObj.programs.forEach((p) => set.add(p.name));
+    }
+
     // Add any programs with authentic submissions in these sessions
     allRecords.forEach((r) => {
       if (
@@ -255,7 +260,13 @@ export class CompletionRadarService {
       });
 
       const total = submitted + pending + inProgress;
-      const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
+      let completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
+      if (pending > 0 && completionRate >= 100) {
+        completionRate = Math.min(95, Math.floor((submitted / total) * 100));
+      }
+      if (submitted === 0) {
+        completionRate = 0;
+      }
 
       return {
         id: `dept-${dept.code}`,

@@ -659,7 +659,11 @@ export const HODEntryForm: React.FC<Props> = ({
     setSubjects((prev) => {
       return prev.map((item) => {
         if (item.id === rowId) {
-          return { ...item, [field]: value };
+          const updated = { ...item, [field]: value };
+          if (field === 'status' && value === 'Uploaded' && !item.dateUploaded) {
+            updated.dateUploaded = submissionDate || new Date().toISOString().split('T')[0];
+          }
+          return updated;
         }
         return item;
       });
@@ -1117,6 +1121,12 @@ export const HODEntryForm: React.FC<Props> = ({
     }
 
     setIsSaving(true);
+    const today = new Date().toISOString().split('T')[0];
+    const resolvedRows = activeRows.map((s) => ({
+      ...s,
+      dateUploaded: s.status === 'Uploaded' ? (s.dateUploaded || submissionDate || today) : (s.dateUploaded || ''),
+    }));
+
     const recordToSave: SubmissionRecord = {
       id: '', // Generated in service
       department,
@@ -1128,7 +1138,7 @@ export const HODEntryForm: React.FC<Props> = ({
       semester,
       hodCoordinator,
       submissionDate,
-      subjects: activeRows,
+      subjects: resolvedRows,
       accessedBy: currentUser?.name || 'University HOD',
       userDesignation: currentUser?.designation || 'HOD / Coordinator',
       createdAt: new Date().toISOString(),

@@ -31,6 +31,8 @@ import {
   Star,
   X,
   SunMoon,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface Props {
@@ -71,6 +73,49 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   });
   const [isMultiProgram, setIsMultiProgram] = useState<boolean>(false);
   const [interDeptProgToAdd, setInterDeptProgToAdd] = useState<string>('');
+
+  // Coordinator Shift Assignment (Morning / Evening / Both) per program
+  const [regPrimaryShift, setRegPrimaryShift] = useState<'Both' | 'Morning' | 'Evening'>('Both');
+  const [regProgramShiftAssignments, setRegProgramShiftAssignments] = useState<Record<string, AcademicShift[]>>({});
+
+  const getShiftsForRegProgram = (progName: string): AcademicShift[] => {
+    if (regProgramShiftAssignments[progName] && regProgramShiftAssignments[progName].length > 0) {
+      return regProgramShiftAssignments[progName];
+    }
+    if (regPrimaryShift === 'Both') return ['Morning', 'Evening'];
+    return [regPrimaryShift];
+  };
+
+  const toggleProgramShift = (progName: string, shiftToToggle: AcademicShift) => {
+    const current = getShiftsForRegProgram(progName);
+    let next: AcademicShift[];
+    if (current.includes(shiftToToggle)) {
+      if (current.length === 1) {
+        // Toggle to other shift so at least one shift remains selected
+        const alternate: AcademicShift = shiftToToggle === 'Morning' ? 'Evening' : 'Morning';
+        next = [alternate];
+      } else {
+        next = current.filter((s) => s !== shiftToToggle);
+      }
+    } else {
+      next = [...current, shiftToToggle];
+    }
+    setRegProgramShiftAssignments((prev) => ({
+      ...prev,
+      [progName]: next,
+    }));
+  };
+
+  const handleGlobalShiftPreset = (preset: 'Both' | 'Morning' | 'Evening') => {
+    setRegPrimaryShift(preset);
+    const newShifts: AcademicShift[] = preset === 'Both' ? ['Morning', 'Evening'] : [preset];
+    const updated: Record<string, AcademicShift[]> = {};
+    const progs = isMultiProgram && regAssignedPrograms.length > 0 ? regAssignedPrograms : [regProgram];
+    progs.forEach((p) => {
+      updated[p] = newShifts;
+    });
+    setRegProgramShiftAssignments(updated);
+  };
   const [regDesignation, setRegDesignation] = useState('');
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignation, setCustomDesignation] = useState('');
@@ -263,6 +308,13 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       : [regProgram];
     const primaryProgram = finalAssigned.includes(regProgram) ? regProgram : finalAssigned[0];
 
+    // Compute effective shift assignments for all registered programs
+    const finalShiftAssignments: Record<string, AcademicShift[]> = {};
+    finalAssigned.forEach((pName) => {
+      finalShiftAssignments[pName] = getShiftsForRegProgram(pName);
+    });
+    const allAssignedShifts = Array.from(new Set(Object.values(finalShiftAssignments).flat())) as AcademicShift[];
+
     setIsSubmitting(true);
     const result = AuthService.registerAccount({
       name: regName,
@@ -274,6 +326,8 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
       role: finalRole,
       program: finalRole !== 'HOD' ? primaryProgram : undefined,
       assignedPrograms: finalRole !== 'HOD' ? finalAssigned : undefined,
+      programShiftAssignments: finalRole === 'COORDINATOR' ? finalShiftAssignments : undefined,
+      assignedShifts: finalRole === 'COORDINATOR' ? (allAssignedShifts.length > 0 ? allAssignedShifts : ['Morning', 'Evening']) : undefined,
     });
     setIsSubmitting(false);
 
@@ -1163,6 +1217,129 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                       </p>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Coordinator Shift Configuration (Morning / Evening / Both per program) */}
+              {regRole === 'COORDINATOR' && (
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div>
+                      <label className="block text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                        <SunMoon className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>Coordinator Shift Assignment *</span>
+                      </label>
+                      <span className="text-[11px] text-amber-900 font-medium block">
+                        Specify whether you coordinate Morning, Evening, or Both shifts
+                      </span>
+                    </div>
+
+                    {/* Quick Shift Presets */}
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-amber-300 shadow-2xs self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleGlobalShiftPreset('Morning')}
+                        className={`text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                          regPrimaryShift === 'Morning'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                        title="Set all programs to Morning shift"
+                      >
+                        <Sun className="w-3 h-3" />
+                        <span>Morning Only</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGlobalShiftPreset('Evening')}
+                        className={`text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                          regPrimaryShift === 'Evening'
+                            ? 'bg-indigo-700 text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                        title="Set all programs to Evening shift"
+                      >
+                        <Moon className="w-3 h-3" />
+                        <span>Evening Only</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGlobalShiftPreset('Both')}
+                        className={`text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                          regPrimaryShift === 'Both'
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                        title="Set all programs to Both Morning & Evening shifts"
+                      >
+                        <SunMoon className="w-3 h-3" />
+                        <span>Both (Morning &amp; Evening)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Per-Program Shift Granular Configuration */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-amber-950 block">
+                      Program Shift Distribution:
+                    </span>
+                    <div className="space-y-1.5">
+                      {(isMultiProgram && regAssignedPrograms.length > 0 ? regAssignedPrograms : [regProgram]).map((pName) => {
+                        const currentShifts = getShiftsForRegProgram(pName);
+                        const isMorning = currentShifts.includes('Morning');
+                        const isEvening = currentShifts.includes('Evening');
+
+                        return (
+                          <div
+                            key={pName}
+                            className="bg-white p-2.5 rounded-lg border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-bold text-xs text-slate-900 block truncate">{pName}</span>
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                Active: {isMorning && isEvening ? '☀️ Morning & 🌙 Evening' : isMorning ? '☀️ Morning Only' : '🌙 Evening Only'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleProgramShift(pName, 'Morning')}
+                                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                                  isMorning
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                <Sun className="w-3 h-3" />
+                                <span>Morning</span>
+                                {isMorning && <Check className="w-3 h-3 stroke-[3]" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => toggleProgramShift(pName, 'Evening')}
+                                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                                  isEvening
+                                    ? 'bg-indigo-700 text-white border-indigo-800 shadow-xs'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                <Moon className="w-3 h-3" />
+                                <span>Evening</span>
+                                {isEvening && <Check className="w-3 h-3 stroke-[3]" />}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-amber-900/90 font-medium pt-0.5">
+                      💡 Note: Each program can have its own shift configuration (e.g. BS CS Morning &amp; Evening, BS AI Morning only). Only HOD has privilege to select other program coordinators' data.
+                    </p>
+                  </div>
                 </div>
               )}
 

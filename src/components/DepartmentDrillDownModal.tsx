@@ -242,16 +242,22 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
                         <div>
                           <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                            {prog.coordinator.name}
+                            <span>{prog.coordinator.name}</span>
                           </div>
-                          <div className="text-[10px] text-slate-500">
-                            Account: Active
-                            {prog.coordinator.lastLoginAt && (
-                              <span className="ml-1.5">
-                                • Last login:{' '}
-                                {new Date(prog.coordinator.lastLoginAt).toLocaleDateString()}
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {prog.coordinator.shiftLabel && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80">
+                                {prog.coordinator.shiftLabel}
                               </span>
                             )}
+                            <span className="text-[10px] text-slate-500">
+                              Account: Active
+                              {prog.coordinator.lastLoginAt && (
+                                <span className="ml-1.5">
+                                  • {new Date(prog.coordinator.lastLoginAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </span>
                           </div>
                         </div>
                       ) : (

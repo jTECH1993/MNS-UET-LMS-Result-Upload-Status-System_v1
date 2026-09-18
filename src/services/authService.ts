@@ -414,6 +414,7 @@ export class AuthService {
       program: account.program,
       assignedPrograms: account.assignedPrograms,
       assignedShifts: account.assignedShifts,
+      programShiftAssignments: account.programShiftAssignments,
       avatarUrl: account.avatarUrl,
       themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -443,6 +444,7 @@ export class AuthService {
     program?: string;
     assignedPrograms?: string[];
     assignedShifts?: AcademicShift[];
+    programShiftAssignments?: Record<string, AcademicShift[]>;
   }): { success: boolean; message: string; session?: ActiveUserSession } {
     const cleanUser = SecurityService.sanitizeInput(data.username).trim();
     const cleanEmail = SecurityService.sanitizeInput(data.email || '').trim().toLowerCase();
@@ -527,6 +529,7 @@ export class AuthService {
       program: assignedRole !== 'HOD' ? primaryProgram : undefined,
       assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
       assignedShifts: assignedRole !== 'HOD' ? resolvedShifts : undefined,
+      programShiftAssignments: assignedRole !== 'HOD' ? data.programShiftAssignments : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       themePreference: 'emerald',
@@ -570,6 +573,7 @@ export class AuthService {
       program: newAccount.program,
       assignedPrograms: newAccount.assignedPrograms,
       assignedShifts: newAccount.assignedShifts,
+      programShiftAssignments: newAccount.programShiftAssignments,
       token: `auth_tok_${Date.now()}`,
     };
 
@@ -775,6 +779,7 @@ export class AuthService {
       program?: string;
       assignedPrograms?: string[];
       assignedShifts?: AcademicShift[];
+      programShiftAssignments?: Record<string, AcademicShift[]>;
     }
   ): { success: boolean; message: string; session?: ActiveUserSession } {
     const accounts = this.getAccounts();
@@ -857,6 +862,11 @@ export class AuthService {
       account.assignedShifts = data.assignedShifts.length > 0 ? data.assignedShifts : undefined;
     }
 
+    // Update program-specific shift assignments
+    if (data.programShiftAssignments !== undefined) {
+      account.programShiftAssignments = Object.keys(data.programShiftAssignments).length > 0 ? data.programShiftAssignments : undefined;
+    }
+
     // Update avatarUrl (can be empty string to remove avatar)
     if (data.avatarUrl !== undefined) {
       account.avatarUrl = data.avatarUrl.trim();
@@ -897,6 +907,7 @@ export class AuthService {
         program: account.program,
         assignedPrograms: account.assignedPrograms,
         assignedShifts: account.assignedShifts,
+        programShiftAssignments: account.programShiftAssignments,
         avatarUrl: account.avatarUrl,
         themePreference: account.themePreference,
       };
