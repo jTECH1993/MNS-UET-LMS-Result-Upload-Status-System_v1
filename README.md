@@ -3,20 +3,21 @@
 > **Muhammad Nawaz Sharif University of Engineering & Technology, Multan**  
 > Official University Portal: [https://mnsuet.edu.pk/](https://mnsuet.edu.pk/)
 
-An institutional-grade, enterprise web application built for the **Vice Chancellor, Deans, Heads of Departments (HODs), and Academic Program Coordinators** of Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan. The system provides real-time result submission logging, departmental auditing, section-wise performance telemetry, and executive compliance monitoring for LMS semester result uploads across all university faculties.
+An institutional-grade, enterprise web application built for the **Vice Chancellor (VC), Deans, Heads of Departments (HODs), and Academic Program Coordinators** of Muhammad Nawaz Sharif University of Engineering & Technology (MNS-UET), Multan. The system provides real-time result submission logging, departmental auditing, section-wise performance telemetry, and executive compliance monitoring for LMS semester result uploads across all university faculties.
 
 ---
 
 ## 📑 Table of Contents
 
-- [Overview & Key Features](#-overview--key-features)
-- [System Architecture & Multi-Database Synchronization](#-system-architecture--multi-database-synchronization)
-- [User Roles & Permissions Diagram](#-user-roles--permissions-diagram)
-- [Program Coordinator Self-Service Workflow](#-program-coordinator-self-service-workflow)
-- [Calculation Rules for Result Statistics](#-calculation-rules-for-result-statistics)
-- [Database Schema & Entity Relationships](#-database-schema--entity-relationships)
-- [Technology Stack](#-technology-stack)
-- [Installation & Local Setup](#-installation--local-setup)
+1. [Overview & Key Features](#-overview--key-features)
+2. [Dual-Database Architecture: Why Cloud Firestore AND SQLite?](#-dual-database-architecture-why-cloud-firestore-and-sqlite)
+3. [System Architecture & Synchronization Diagram](#-system-architecture--synchronization-diagram)
+4. [User Roles & Permissions Matrix](#-user-roles--permissions-matrix)
+5. [Program Coordinator Self-Service Workflow](#-program-coordinator-self-service-workflow)
+6. [Calculation Rules for Result Statistics](#-calculation-rules-for-result-statistics)
+7. [Database Schema & Entity Relationships](#-database-schema--entity-relationships)
+8. [Technology Stack](#-technology-stack)
+9. [Installation & Local Setup](#-installation--local-setup)
 
 ---
 
@@ -26,16 +27,49 @@ The **MNS-UET Central Academic Monitoring Portal** streamlines semester result u
 
 ### Key Capabilities:
 1. **Vice Chancellor Executive Dashboard**: Real-time university-wide result completion percentages, departmental radar graphs, shift parity metrics, and formal compliance notice generators.
-2. **Program Coordinator Self-Service Deletion & Request**: Program Coordinators can easily remove any program from their active coordination portfolio at any time without needing HOD approval. Adding a new program can be requested from the HOD with one click.
-3. **Comprehensive Cohort Tracking**: Accurately aggregates result progress across active sessions (e.g. 2021, 2022, 2023, 2024), shifts (Morning/Evening), and sections (A, B, C).
-4. **Result Completion & Pending Aggregation**: Calculates exact uploaded, pending, and incomplete course counts across all submitted semesters without phantom data or hardcoded numbers.
+2. **Submitted Data Completion Display**: Clearly separates **Uploaded %** and **Pending %** from data entered into submitted forms rather than displaying ambiguous global figures.
+3. **Program Coordinator Self-Service Deletion & Request**: Program Coordinators can easily remove any program from their active coordination portfolio at any time without needing HOD approval. Adding a new program can be requested from the HOD with one click.
+4. **Comprehensive Cohort Tracking**: Accurately aggregates result progress across active sessions (e.g. 2021, 2022, 2023, 2024), shifts (Morning/Evening), and sections (A, B, C).
 5. **Multi-Database Real-Time Sync**: Instantaneous bidirectional synchronization across Browser Storage (`localStorage`), Cloud Firestore, and the SQLite Backend API.
 
 ---
 
-## 🏢 System Architecture & Multi-Database Synchronization
+## ⚡ Dual-Database Architecture: Why Cloud Firestore AND SQLite?
 
-The application employs a 3-layer resilient synchronization strategy to ensure zero data loss across browser reloads, multi-user concurrent sessions, and cloud deployments.
+A common architectural question for this institutional system is: **"Why do we use BOTH Cloud Firestore AND SQLite in this application?"**
+
+The system leverages a **Hybrid Dual-Database Strategy** where each datastore serves a distinct, specialized operational role:
+
+```
++-----------------------------------------------------------------------------------+
+|                            MNS-UET DUAL-DATABASE STRATEGY                         |
++-----------------------------------------------------------------------------------+
+|                                                                                   |
+|  1. CLOUD FIRESTORE (Client Real-Time Engine)                                      |
+|     • Purpose: Instant multi-client synchronization & offline resilience.           |
+|     • Strengths: Push-based websocket updates (onSnapshot) to all active browser   |
+|       sessions (VC, Deans, HODs, Coordinators) without reloading or polling.     |
+|     • Edge Resilience: Client-side caching (IndexedDB) allows faculty to fill      |
+|       semester forms even when campus Wi-Fi or internet connection is spotty.     |
+|                                                                                   |
+|  2. SQLITE / Drizzle ORM (Server Relational Datastore)                            |
+|     • Purpose: Server-authoritative storage, ORM schema migration, & SQL joins.   |
+|     • Strengths: Structured SQL queries, complex JOIN operations, departmental      |
+|       aggregations, ACID-compliant transactions, and fast local file persistence  |
+|       (`app.db`) managed via Drizzle ORM on the Node.js backend server.           |
+|     • Enterprise Auditing: Generates server-side PDF compliance reports and CSV   |
+|       data exports without hitting cloud document read quotas.                    |
+|                                                                                   |
++-----------------------------------------------------------------------------------+
+```
+
+### Benefits of the Dual-Database Paradigm:
+- **Zero Data Loss & High Availability**: If the cloud network drops, local client storage and SQLite keep the portal operating offline seamlessly. When online, Cloud Firestore instantly broadcasts edits across all connected user devices.
+- **Relational Integrity + Real-time Push**: Relational foreign keys and ORM constraints are enforced in SQLite, while live real-time subscription feeds are delivered to the frontend UI by Firestore.
+
+---
+
+## 🏢 System Architecture & Synchronization Diagram
 
 ```
 +-----------------------------------------------------------------------+
@@ -73,14 +107,14 @@ The application employs a 3-layer resilient synchronization strategy to ensure z
 
 ---
 
-## 👥 User Roles & Permissions Diagram
+## 👥 User Roles & Permissions Matrix
 
 ```
-                              +--------------------+
-                              |  VICE CHANCELLOR   |
-                              |   & DEANS (VC)     |
-                              +---------+----------+
-                                        |
+                               +--------------------+
+                               |  VICE CHANCELLOR   |
+                               |   & DEANS (VC)     |
+                               +---------+----------+
+                                         |
                  +----------------------+----------------------+
                  |                                             |
                  v                                             v
@@ -88,18 +122,20 @@ The application employs a 3-layer resilient synchronization strategy to ensure z
     |   HEAD OF DEPARTMENT     |                 |     ADMIN REGISTRAR       |
     |          (HOD)           |                 |    (SYSTEM MANAGER)       |
     +------------+-------------+                 +---------------------------+
-                 |
-                 v
-    +--------------------------+
-    |   PROGRAM COORDINATOR    |
-    |      & LECTURER          |
-    +--------------------------+
+    |            |
+    |            v
+    |   +--------------------------+
+    +-->|   PROGRAM COORDINATOR    |
+        |      & LECTURER          |
+        +--------------------------+
 ```
 
-### Roles Breakdown:
-* **Vice Chancellor (VC) / Deans**: Full institutional read/write authority, university completion radar, compliance notification issuance, section parity alerts, and institutional audit trail oversight.
-* **Head of Department (HOD)**: Departmental oversight, approval of coordinator program requests, course allocation, and section result tracking.
-* **Program Coordinator**: Full management of degree program courses. Can self-delete any assigned program from their profile or entry screen, add course rows, set LMS statuses (`Uploaded`, `In Progress`, `Pending`, `Not Applicable`), and request new programs.
+| Role | Access Scope | Key Capabilities |
+| :--- | :--- | :--- |
+| **Vice Chancellor (VC) / Deans** | Institutional (All Depts & Faculties) | Executive dashboard, completion radar, compliance notice issuance, section parity alerts, and system-wide audit logs. |
+| **Head of Department (HOD)** | Departmental | Program allocation, approval/rejection of coordinator requests, course assignment, and department result auditing. |
+| **Program Coordinator** | Coordinated Degree Programs | Form entry, course status management (`Uploaded`, `In Progress`, `Pending`), program self-deletion, and program request submission. |
+| **Lecturer / Visiting Faculty** | Assigned Courses | Course result status updates and LMS verification logs. |
 
 ---
 
@@ -116,7 +152,7 @@ Coordinators can easily manage their coordinated degree programs using the simpl
          v                                                      v
 +-----------------------------------+        +---------------------------+
 |  Click Trash Icon or "Remove"     |        | Click "+ Request Program" |
-|  (No HOD permission required)    |        | Select Program & Shifts   |
+|  (No HOD permission required)     |        | Select Program & Shifts   |
 +-----------------------------------+        +---------------------------+
          |                                                      |
          v                                                      v
@@ -125,10 +161,6 @@ Coordinators can easily manage their coordinated degree programs using the simpl
 | & synced across DBs + Audit Trail |        | (Auto-approved if set)    |
 +-----------------------------------+        +---------------------------+
 ```
-
-### Program Deletion Policy:
-* **Deletion**: Coordinators have total authority to remove **any program** from their active portfolio, whether they coordinate 1 program or multiple programs. No HOD permission is required to delete a program.
-* **Addition**: Adding a brand new program to a coordinator's profile is submitted to the HOD for approval, ensuring administrative accountability.
 
 ---
 
@@ -142,16 +174,15 @@ For any submitted semester record $R$ with active courses $S = \{s_1, s_2, \dots
 * **In Progress Courses**: $IP = \sum \text{Status}(s) = \text{'In Progress'}$
 * **Completion Rate**: $\text{Completion \%} = \frac{U}{\text{Total Active}} \times 100$
 
-### 2. Multi-Semester Result Incomplete & Pending Aggregation
-When reviewing program metrics across semesters (e.g. 4 semesters submitted across different programs):
-* **Result Incomplete / Pending Count**: Aggregates the sum of all `Pending` + `In Progress` subjects across **only the semesters that have actually been submitted**.
-* **Zero Phantom Data**: Programs or semesters without submitted forms are not artificially injected as pending, preventing misleading numbers.
+### 2. Submitted Data Uploaded vs. Pending Breakdown
+* **Uploaded %**: $\frac{\text{Uploaded Courses}}{\text{Total Courses in Entered Forms}} \times 100$
+* **Pending %**: $\frac{\text{Pending Courses}}{\text{Total Courses in Entered Forms}} \times 100$
 
 ---
 
 ## 🗄️ Database Schema & Entity Relationships
 
-The relational datastore consists of 9 core entities managed via **Drizzle ORM**:
+The relational datastore consists of 9 core entities managed via **Drizzle ORM** (SQLite) and mirrored in **Cloud Firestore**:
 
 1. **`users`**: Master user credentials, academic roles (`VC`, `HOD`, `COORDINATOR`, `LECTURER`), department, assigned programs array, and security logs.
 2. **`programs`**: University degree programs (e.g., "BS Computer Science", "BS Artificial Intelligence") mapped to academic faculties.
@@ -169,6 +200,7 @@ The relational datastore consists of 9 core entities managed via **Drizzle ORM**
 
 * **Frontend**: React 19, TypeScript 5.5+, Vite 6, Tailwind CSS v4, Recharts, Lucide React Icons.
 * **Backend**: Node.js, Express, Drizzle ORM, SQLite / libSQL, esbuild.
+* **Cloud Database**: Cloud Firestore (Firebase SDK v10+).
 * **Real-Time Toast & Audio Engine**: Web Audio API sine synthesizers + Custom Event Bus (`mnsuet_sync_evidence`).
 
 ---
