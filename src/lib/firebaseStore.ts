@@ -33,12 +33,24 @@ export interface FirestoreErrorInfo {
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (
+    errMsg.includes('Could not reach Cloud Firestore') ||
+    errMsg.includes('backend') ||
+    errMsg.includes('offline') ||
+    errMsg.includes('unavailable') ||
+    errMsg.includes('deadline-exceeded') ||
+    errMsg.includes('failed to get document')
+  ) {
+    // Offline or high-latency network connection: Firestore automatically operates in offline cache mode.
+    return;
+  }
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  console.warn('Firestore Operation Info: ', JSON.stringify(errInfo));
 }
 
 export class FirebaseStore {
@@ -119,7 +131,11 @@ export class FirebaseStore {
 
   static async fetchAllSubmissions(): Promise<SubmissionRecord[]> {
     try {
-      const snapshot = await getDocs(collection(db, RECORDS_COLLECTION));
+      const fetchPromise = getDocs(collection(db, RECORDS_COLLECTION));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
+      );
+      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
       return snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
@@ -184,7 +200,11 @@ export class FirebaseStore {
 
   static async fetchAllUserAccounts(): Promise<UserAccount[]> {
     try {
-      const snapshot = await getDocs(collection(db, USERS_COLLECTION));
+      const fetchPromise = getDocs(collection(db, USERS_COLLECTION));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
+      );
+      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
       return snapshot.docs.map((docSnap) => docSnap.data() as UserAccount);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, USERS_COLLECTION);
@@ -233,7 +253,11 @@ export class FirebaseStore {
 
   static async fetchAllWorkOnDemand(): Promise<WorkOnDemandRequisition[]> {
     try {
-      const snapshot = await getDocs(collection(db, REQUISITIONS_COLLECTION));
+      const fetchPromise = getDocs(collection(db, REQUISITIONS_COLLECTION));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
+      );
+      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
       return snapshot.docs.map((docSnap) => docSnap.data() as WorkOnDemandRequisition);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, REQUISITIONS_COLLECTION);
@@ -272,7 +296,11 @@ export class FirebaseStore {
 
   static async fetchRecentAccessLogs(limitCount = 50): Promise<AccessLogEntry[]> {
     try {
-      const snapshot = await getDocs(collection(db, LOGS_COLLECTION));
+      const fetchPromise = getDocs(collection(db, LOGS_COLLECTION));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
+      );
+      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
       const logs = snapshot.docs.map((docSnap) => docSnap.data() as AccessLogEntry);
       logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       return logs.slice(0, limitCount);

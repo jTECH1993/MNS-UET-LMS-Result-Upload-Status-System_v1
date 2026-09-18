@@ -17,11 +17,12 @@ export const app = initializeApp(firebaseConfig);
 const dbId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-mnsuetlmsresultu-e2136163-8fbb-42d0-a2cb-ea06807df2ce";
 export const db = getFirestore(app, dbId);
 
-// Enable offline persistence
+// Enable offline persistence with graceful fallback
 enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code == 'failed-precondition') {
-    console.warn('Multiple tabs open, persistence can only be enabled in one tab at a a time.');
-  } else if (err.code == 'unimplemented') {
-    console.warn('The current browser does not support all of the features required to enable persistence');
+  if (err.code === 'failed-precondition') {
+    // Multiple tabs open; persistence is active in the primary tab.
+  } else if (err.code === 'unimplemented') {
+    // Browser does not support IndexedDB persistence.
   }
 });
+

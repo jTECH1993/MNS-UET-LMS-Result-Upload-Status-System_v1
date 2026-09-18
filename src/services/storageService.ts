@@ -527,8 +527,9 @@ export class StorageService {
   }
 
   public static getAccessLogs(): AccessLogEntry[] {
+    const LOGS_KEY = 'mnsuet_lms_access_logs_v100_authentic';
     try {
-      const stored = localStorage.getItem('mnsuet_lms_access_logs_v99');
+      const stored = localStorage.getItem(LOGS_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -537,62 +538,33 @@ export class StorageService {
       }
     } catch(e) {}
 
-    const seedLogs: AccessLogEntry[] = [
-      {
-        id: 'log_seed_1',
-        userName: 'Dr. Muhammad Tariq',
-        designation: 'Head of Department',
-        department: 'Department of Electrical Engineering & Technology',
-        action: 'Verified and submitted Semester 1 result sheet into LMS portal',
-        program: 'B.Sc. Electrical Engineering',
-        shift: 'Morning',
-        coordinatorName: 'Engr. Ahmad Hassan',
-        coordinatorDesignation: 'Program Coordinator',
-        timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      },
-      {
-        id: 'log_seed_2',
-        userName: 'Engr. M. Arslan Qasim',
-        designation: 'Program Coordinator',
-        department: 'Department of Mechanical Engineering & Technology',
-        action: 'Updated final marks sheet for MET-101 Technical Drawing',
-        program: 'B.Sc. Mechanical Engineering',
-        shift: 'Morning',
-        coordinatorName: 'Engr. M. Arslan Qasim',
-        coordinatorDesignation: 'Program Coordinator',
-        timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-      },
-      {
-        id: 'log_seed_3',
-        userName: 'Prof. Dr. Kamran',
-        designation: 'Vice Chancellor',
-        department: 'Department of Computer Science & Information Technology',
-        action: 'Reassigned Program Coordinator role to Dr. Usman Ali for Evening Shift',
-        program: 'BS Computer Science',
-        shift: 'Evening',
-        coordinatorName: 'Dr. Usman Ali',
-        coordinatorDesignation: 'Program Coordinator',
-        timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
-      },
-      {
-        id: 'log_seed_4',
-        userName: 'Engr. Saad Ahmad',
-        designation: 'Assistant Professor',
-        department: 'Department of Civil Engineering & Technology',
-        action: 'Created new course entry CVE-102 Surveying-I and uploaded assessment data',
-        program: 'B.Sc. Civil Engineering',
-        shift: 'Morning',
-        coordinatorName: 'Dr. Faisal',
-        coordinatorDesignation: 'Program Coordinator',
-        timestamp: new Date(Date.now() - 1000 * 60 * 720).toISOString(),
-      },
-    ];
-
+    const authenticLogs: AccessLogEntry[] = [];
     try {
-      localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify(seedLogs));
+      const store = this.getStore();
+      const records = Object.values(store);
+      records.forEach((r, idx) => {
+        if (r && r.program) {
+          authenticLogs.push({
+            id: `log_auth_${idx}_${r.id || Math.random().toString(36).substring(2, 6)}`,
+            userName: r.accessedBy || r.hodCoordinator || 'Program Coordinator',
+            designation: r.userDesignation || 'Program Coordinator',
+            department: r.department || 'Department of Computer Science & IT',
+            action: `Synchronized LMS semester result entry for ${r.program} (${r.shift || 'Morning'} Shift, Sec ${r.section || 'A'})`,
+            program: r.program,
+            shift: r.shift || 'Morning',
+            coordinatorName: r.hodCoordinator || 'Program Coordinator',
+            coordinatorDesignation: r.userDesignation || 'Program Coordinator',
+            timestamp: r.updatedAt || r.createdAt || new Date(Date.now() - 1000 * 60 * (idx + 1) * 45).toISOString(),
+          });
+        }
+      });
     } catch (e) {}
 
-    return seedLogs;
+    try {
+      localStorage.setItem(LOGS_KEY, JSON.stringify(authenticLogs));
+    } catch (e) {}
+
+    return authenticLogs;
   }
 
   public static logAccess(action: string, department?: string, program?: string, shift?: AcademicShift): void {
@@ -647,8 +619,11 @@ export class StorageService {
         coordinatorDesignation: coordDesig || undefined,
         timestamp: new Date().toISOString(),
       };
-      const updated = [entry, ...logs].slice(0, 100);
-      localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify(updated));
+      const updated = [entry, ...logs].slice(0, 500);
+      localStorage.setItem('mnsuet_lms_access_logs_v100_authentic', JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
     } catch(e) {}
   }
 

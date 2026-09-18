@@ -40,6 +40,7 @@ export const ChangeHistoryModal: React.FC<Props> = ({
   const [selectedShift, setSelectedShift] = useState<string>(initialShift);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedAction, setSelectedAction] = useState<string>('ALL');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>('ALL');
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +85,19 @@ export const ChangeHistoryModal: React.FC<Props> = ({
         return false;
       }
 
+      if (selectedTimeRange !== 'ALL') {
+        const logTime = new Date(log.timestamp).getTime();
+        if (!isNaN(logTime)) {
+          const diffMs = Date.now() - logTime;
+          if (selectedTimeRange === '12H' && diffMs > 12 * 3600 * 1000) return false;
+          if (selectedTimeRange === '24H' && diffMs > 24 * 3600 * 1000) return false;
+          if (selectedTimeRange === '48H' && diffMs > 48 * 3600 * 1000) return false;
+          if (selectedTimeRange === '3D' && diffMs > 3 * 24 * 3600 * 1000) return false;
+          if (selectedTimeRange === '7D' && diffMs > 7 * 24 * 3600 * 1000) return false;
+          if (selectedTimeRange === '30D' && diffMs > 30 * 24 * 3600 * 1000) return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const match =
@@ -97,7 +111,7 @@ export const ChangeHistoryModal: React.FC<Props> = ({
 
       return true;
     });
-  }, [logs, selectedDept, selectedProg, selectedShift, selectedAction, searchQuery]);
+  }, [logs, selectedDept, selectedProg, selectedShift, selectedAction, selectedTimeRange, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -139,7 +153,7 @@ export const ChangeHistoryModal: React.FC<Props> = ({
         </div>
 
         {/* Filter Toolbar */}
-        <div className="p-4 bg-slate-950/50 border-b border-slate-800 grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+        <div className="p-4 bg-slate-950/50 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
           {/* Department Filter */}
           <div>
             <label className="block text-slate-400 text-[11px] font-bold mb-1">Department</label>
@@ -157,6 +171,26 @@ export const ChangeHistoryModal: React.FC<Props> = ({
                   {d.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Time Range Filter */}
+          <div>
+            <label className="block text-amber-400/90 text-[11px] font-bold mb-1 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-amber-400" /> Time Window
+            </label>
+            <select
+              value={selectedTimeRange}
+              onChange={(e) => setSelectedTimeRange(e.target.value)}
+              className="w-full bg-slate-900 border border-amber-500/30 text-amber-200 font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
+            >
+              <option value="ALL">All Time History</option>
+              <option value="12H">Last 12 Hours</option>
+              <option value="24H">Last 24 Hours (1 Day)</option>
+              <option value="48H">Last 48 Hours (2 Days)</option>
+              <option value="3D">Last 3 Days</option>
+              <option value="7D">Last 7 Days (1 Week)</option>
+              <option value="30D">Last 30 Days (1 Month)</option>
             </select>
           </div>
 

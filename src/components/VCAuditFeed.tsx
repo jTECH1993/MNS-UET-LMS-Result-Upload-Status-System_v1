@@ -22,6 +22,7 @@ function formatAuditDateTime(timestampStr: string): { day: string; date: string;
 export const VCAuditFeed: React.FC = () => {
   const [logs, setLogs] = useState<AccessLogEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [timeRange, setTimeRange] = useState<string>('ALL');
 
   const refreshLogs = () => {
     setLogs(StorageService.getAccessLogs());
@@ -78,9 +79,22 @@ export const VCAuditFeed: React.FC = () => {
   };
 
   const filteredLogs = useMemo(() => {
-    if (!searchQuery.trim()) return logs;
-    const lowerQ = searchQuery.toLowerCase();
     return logs.filter((log) => {
+      if (timeRange !== 'ALL') {
+        const logTime = new Date(log.timestamp).getTime();
+        if (!isNaN(logTime)) {
+          const diffMs = Date.now() - logTime;
+          if (timeRange === '12H' && diffMs > 12 * 3600 * 1000) return false;
+          if (timeRange === '24H' && diffMs > 24 * 3600 * 1000) return false;
+          if (timeRange === '48H' && diffMs > 48 * 3600 * 1000) return false;
+          if (timeRange === '3D' && diffMs > 3 * 24 * 3600 * 1000) return false;
+          if (timeRange === '7D' && diffMs > 7 * 24 * 3600 * 1000) return false;
+          if (timeRange === '30D' && diffMs > 30 * 24 * 3600 * 1000) return false;
+        }
+      }
+
+      if (!searchQuery.trim()) return true;
+      const lowerQ = searchQuery.toLowerCase();
       const coord = getCoordinatorForLog(log);
       const dt = formatAuditDateTime(log.timestamp);
       return (
@@ -93,7 +107,7 @@ export const VCAuditFeed: React.FC = () => {
         dt.date.toLowerCase().includes(lowerQ)
       );
     });
-  }, [logs, searchQuery]);
+  }, [logs, searchQuery, timeRange]);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-[640px] animate-in fade-in duration-300">
@@ -115,12 +129,28 @@ export const VCAuditFeed: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1">
+            <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="text-xs bg-transparent text-slate-900 dark:text-slate-100 font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Time</option>
+              <option value="12H">Last 12 Hours</option>
+              <option value="24H">Last 24 Hours (1 Day)</option>
+              <option value="48H">Last 48 Hours (2 Days)</option>
+              <option value="3D">Last 3 Days</option>
+              <option value="7D">Last 7 Days (1 Week)</option>
+              <option value="30D">Last 30 Days</option>
+            </select>
+          </div>
           <input
             type="text"
             placeholder="Search coordinator, program, day..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg w-56 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
+            className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg w-52 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
           />
           <button
             onClick={refreshLogs}
