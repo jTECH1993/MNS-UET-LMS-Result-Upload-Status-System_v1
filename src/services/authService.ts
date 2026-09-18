@@ -142,7 +142,7 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
     department: 'Department of Computer Science',
     role: 'COORDINATOR',
     program: 'BS Artificial Intelligence',
-    assignedPrograms: ['BS Artificial Intelligence', 'BS Computer Science'],
+    assignedPrograms: ['BS Artificial Intelligence'],
     assignedShifts: ['Morning', 'Evening'],
     createdAt: '2026-09-01T08:00:00.000Z',
   },
@@ -177,7 +177,13 @@ export class AuthService {
             remoteAcc.name !== existing.name ||
             remoteAcc.designation !== existing.designation ||
             remoteAcc.department !== existing.department ||
-            remoteAcc.role !== existing.role
+            remoteAcc.role !== existing.role ||
+            remoteAcc.program !== existing.program ||
+            JSON.stringify(remoteAcc.assignedPrograms) !== JSON.stringify(existing.assignedPrograms) ||
+            JSON.stringify(remoteAcc.assignedShifts) !== JSON.stringify(existing.assignedShifts) ||
+            remoteAcc.avatarUrl !== existing.avatarUrl ||
+            remoteAcc.themePreference !== existing.themePreference ||
+            remoteAcc.email !== existing.email
           ) {
             mergedMap.set(remoteAcc.id, { ...existing, ...remoteAcc });
             changed = true;
@@ -222,19 +228,6 @@ export class AuthService {
             this.saveAccounts(Array.from(mergedMap.values()));
             window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
           }
-
-          // Ensure default accounts are pushed to both databases if missing
-          DEFAULT_ACCOUNTS.forEach((def) => {
-            const inApi = apiUsers.some((u) => u.username.toLowerCase() === def.username.toLowerCase());
-            if (!inApi) {
-              fetch('/api/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(def),
-              }).catch(() => {});
-            }
-            FirebaseStore.saveUserAccount(def).catch(() => {});
-          });
         })
         .catch((e) => {
           console.warn('Backend SQLite user fetch sync note:', e);

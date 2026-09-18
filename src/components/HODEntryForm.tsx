@@ -244,13 +244,36 @@ export const HODEntryForm: React.FC<Props> = ({
       if (section === secTarget) {
         setSection('A');
         if (onSectionChangedProp) onSectionChangedProp('A');
+        // Load Section A record if present or clean rows
+        const existingA = StorageService.getSubmission(
+          department,
+          program,
+          degreeLevel,
+          shift,
+          session,
+          semester,
+          'A'
+        );
+        if (existingA) {
+          setIsExistingRecord(true);
+          setLastSavedTime(existingA.updatedAt);
+          setSubjects(existingA.subjects);
+        } else {
+          setIsExistingRecord(false);
+          setSubjects(createInitialBlankRows(1, shift, semester, 'A'));
+        }
+      } else {
+        setLastSavedTime(Date.now().toString());
       }
       setSectionToDelete(null);
       setFeedbackMessage({
         type: 'success',
-        text: `Section ${secTarget} deleted successfully and returned cohort to Single Section. All records synced with database.`,
+        text: `Section ${secTarget} deleted successfully and returned cohort to single Section A. All records synced with database and executive dashboard.`,
       });
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
     } catch (err) {
       console.error('Failed to remove section', err);
       setFeedbackMessage({

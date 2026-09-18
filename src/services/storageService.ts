@@ -685,6 +685,17 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     return {};
   }
 
+  private static _normalizeStr(s: string): string {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  private static _isMatch(a: string, b: string): boolean {
+    const na = this._normalizeStr(a);
+    const nb = this._normalizeStr(b);
+    if (!na || !nb) return false;
+    return na === nb || (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
+  }
+
   public static getAvailableSectionsForCohort(
     department: string,
     program: string,
@@ -695,8 +706,8 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     const store = this.getStore();
     const foundSections = new Set<string>(['A']); // Section A is always default baseline
 
-    const cleanDept = (department || '').trim().toLowerCase();
-    const cleanProg = (program || '').trim().toLowerCase();
+    const normDept = this._normalizeStr(department);
+    const normProg = this._normalizeStr(program);
     const cleanSem = String(semester || '1').trim();
     const cleanShift = (shift || 'Morning').trim().toLowerCase();
     const cleanSess = (session || '2023').trim();
@@ -704,12 +715,12 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     // 1. From registered custom/added sections for this exact cohort
     const sectionsMap = this.getCohortSectionsMap();
     Object.keys(sectionsMap).forEach((key) => {
-      const lowerKey = key.toLowerCase();
-      if (
-        lowerKey.includes(cleanDept) &&
-        lowerKey.includes(cleanProg) &&
-        (lowerKey.includes(`__${cleanSem}__`) || lowerKey.includes(`__semester ${cleanSem}__`) || lowerKey.endsWith(`__${cleanSem}`))
-      ) {
+      const normKey = this._normalizeStr(key);
+      const matchDept = !normDept || normKey.includes(normDept) || normDept.includes(normKey);
+      const matchProg = !normProg || normKey.includes(normProg) || normProg.includes(normKey);
+      const matchSem = !cleanSem || normKey.includes(cleanSem);
+
+      if (matchDept && matchProg && matchSem) {
         const list = sectionsMap[key];
         if (Array.isArray(list)) {
           list.forEach((s) => {
@@ -723,16 +734,11 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     // 2. Discover from stored non-empty submissions strictly for this cohort
     Object.values(store).forEach((rec) => {
       if (!rec) return;
-      const rDept = (rec.department || '').trim().toLowerCase();
-      const rProg = (rec.program || '').trim().toLowerCase();
-      const rSem = String(rec.semester || '').trim();
-      const rShift = (rec.shift || 'Morning').trim().toLowerCase();
+      const matchDept = this._isMatch(department, rec.department);
+      const matchProg = this._isMatch(program, rec.program);
+      const matchSem = !cleanSem || String(rec.semester || '').trim() === cleanSem;
+      const matchShift = !shift || (rec.shift || 'Morning').trim().toLowerCase() === cleanShift;
       const rSess = (rec.session || '').trim();
-
-      const matchDept = rDept === cleanDept;
-      const matchProg = rProg === cleanProg;
-      const matchSem = rSem === cleanSem;
-      const matchShift = !shift || rShift === cleanShift;
       const matchSess = !cleanSess || rSess.startsWith(cleanSess) || cleanSess.startsWith(rSess);
 
       const hasValidSubjects =
@@ -796,19 +802,19 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
       return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
     }
 
-    const cleanDept = (department || '').trim().toLowerCase();
-    const cleanProg = (program || '').trim().toLowerCase();
+    const normDept = this._normalizeStr(department);
+    const normProg = this._normalizeStr(program);
     const cleanSem = String(semester || '').trim();
 
     // 1. Remove from all matching keys in cohort sections map
     const sectionsMap = this.getCohortSectionsMap();
     Object.keys(sectionsMap).forEach((key) => {
-      const lowerKey = key.toLowerCase();
-      if (
-        lowerKey.includes(cleanDept) &&
-        lowerKey.includes(cleanProg) &&
-        (!cleanSem || lowerKey.includes(`__${cleanSem}__`) || lowerKey.endsWith(`__${cleanSem}`))
-      ) {
+      const normKey = this._normalizeStr(key);
+      const matchDept = !normDept || normKey.includes(normDept) || normDept.includes(normKey);
+      const matchProg = !normProg || normKey.includes(normProg) || normProg.includes(normKey);
+      const matchSem = !cleanSem || normKey.includes(cleanSem);
+
+      if (matchDept && matchProg && matchSem) {
         if (Array.isArray(sectionsMap[key])) {
           sectionsMap[key] = sectionsMap[key].filter((s) => (s || '').trim().toUpperCase() !== cleanSec);
           if (sectionsMap[key].length === 0 || (sectionsMap[key].length === 1 && sectionsMap[key][0] === 'A')) {
@@ -830,22 +836,23 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
 
     Object.keys(store).forEach((k) => {
       const rec = store[k];
-      if (
-        rec &&
-        (rec.department || '').trim().toLowerCase() === cleanDept &&
-        (rec.program || '').trim().toLowerCase() === cleanProg &&
-        (!cleanSem || String(rec.semester).trim() === cleanSem) &&
-        (rec.section || '').trim().toUpperCase() === cleanSec
-      ) {
+      if (!rec) return;
+      const matchDept = this._isMatch(department, rec.department);
+      const matchProg = this._isMatch(program, rec.program);
+      const matchSem = !cleanSem || String(rec.semester || '').trim() === cleanSem;
+      const matchSec = (rec.section || '').trim().toUpperCase() === cleanSec;
+
+      if (matchDept && matchProg && matchSem && matchSec) {
         delete store[k];
         storeChanged = true;
         try {
-          deletePromises.push(FirebaseStore.deleteSubmission(rec.id || k).catch(() => {}));
+          const docId = rec.id || k;
+          deletePromises.push(FirebaseStore.deleteSubmission(docId).catch(() => {}));
         } catch (e) {}
       }
     });
 
-    // Also remove by generated record key
+    // Also remove by generated record key variations
     const directKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, cleanSec);
     if (store[directKey]) {
       delete store[directKey];

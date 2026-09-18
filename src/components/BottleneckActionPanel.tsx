@@ -78,7 +78,7 @@ export const BottleneckActionPanel: React.FC<Props> = ({
                   type="button"
                   onClick={handlePrev}
                   className="text-rose-200 hover:text-white p-1 cursor-pointer transition-colors"
-                  title="Previous Department Bottleneck"
+                  title="Previous Program Bottleneck"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -89,7 +89,7 @@ export const BottleneckActionPanel: React.FC<Props> = ({
                   type="button"
                   onClick={handleNext}
                   className="text-rose-200 hover:text-white p-1 cursor-pointer transition-colors"
-                  title="Next Department Bottleneck"
+                  title="Next Program Bottleneck"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>

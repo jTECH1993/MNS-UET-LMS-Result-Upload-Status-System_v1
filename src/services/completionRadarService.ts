@@ -735,20 +735,21 @@ export class CompletionRadarService {
       });
     });
 
-    // Department-level deduplication: Find the most critical bottleneck for EACH department across the university
-    const deptBottlenecksMap: Record<string, BottleneckInfo> = {};
+    // Program-level deduplication: Find the most critical bottleneck for EACH program across all departments
+    const progBottlenecksMap: Record<string, BottleneckInfo> = {};
 
     candidates.forEach((cand) => {
-      const existing = deptBottlenecksMap[cand.department];
+      const key = `${cand.department}__${cand.program}`;
+      const existing = progBottlenecksMap[key];
       if (!existing || cand.riskScore > existing.riskScore) {
-        deptBottlenecksMap[cand.department] = cand;
+        progBottlenecksMap[key] = cand;
       }
     });
 
-    const sortedDeptBottlenecks = Object.values(deptBottlenecksMap).sort((a, b) => b.riskScore - a.riskScore);
+    const sortedProgBottlenecks = Object.values(progBottlenecksMap).sort((a, b) => b.riskScore - a.riskScore);
 
     // Fallback if zero candidates found (i.e. 100% submission)
-    const primary: BottleneckInfo = sortedDeptBottlenecks[0] || candidates[0] || {
+    const primary: BottleneckInfo = sortedProgBottlenecks[0] || candidates[0] || {
       department: 'Department of Computer Science',
       deptCode: 'CS',
       program: 'BS Computer Science',
@@ -785,10 +786,10 @@ export class CompletionRadarService {
       ],
     };
 
-    // Include top bottlenecks from other departments so carousel cycles across all departments
-    const runnerUps = sortedDeptBottlenecks.length > 1 
-      ? sortedDeptBottlenecks.slice(1) 
-      : candidates.filter(c => c.department !== primary.department || c.program !== primary.program).slice(0, 5);
+    // Include top bottlenecks from all other programs/departments so carousel cycles across all lagging programs
+    const runnerUps = sortedProgBottlenecks.length > 1 
+      ? sortedProgBottlenecks.slice(1) 
+      : candidates.filter(c => c.program !== primary.program || c.section !== primary.section).slice(0, 15);
 
     return { primary, runnerUps };
   }
