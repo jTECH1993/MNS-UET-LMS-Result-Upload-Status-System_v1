@@ -1398,6 +1398,136 @@ export class StorageService {
     }
   }
 
+  /**
+   * Migrate (Move or Copy) Submission records from a source Program/Shift/Session/Semester
+   * to a destination Program/Shift/Session/Semester.
+   * If action is 'move', the original records are deleted. If action is 'copy', they remain.
+   */
+  public static migrateSubmissions(
+    action: 'move' | 'copy',
+    source: { department: string; program: string; shift: AcademicShift; session: string; semester?: string },
+    destination: { department: string; program: string; shift: AcademicShift; session: string; semester?: string },
+    overwriteExisting: boolean = true
+  ): { success: boolean; message: string; count: number } {
+    const store = this.getStore();
+    let count = 0;
+    const updatedStore = { ...store };
+
+    // Find all records that match the source criteria
+    const matchKeys = Object.keys(store).filter((key) => {
+      const record = store[key];
+      if (!record) return false;
+      
+      const matchDept = record.department.trim().toLowerCase() === source.department.trim().toLowerCase() ||
+        this._isDeptMatch(source.department, record.department);
+      const matchProg = record.program.trim().toLowerCase() === source.program.trim().toLowerCase() ||
+        this._isProgMatch(source.program, record.program);
+      const matchShift = String(record.shift || 'Morning').trim().toLowerCase() === String(source.shift).trim().toLowerCase();
+      const matchSession = String(record.session || '2023').trim() === String(source.session).trim();
+      
+      let matchSemester = true;
+      if (source.semester) {
+        matchSemester = String(record.semester) === String(source.semester);
+      }
+      
+      return matchDept && matchProg && matchShift && matchSession && matchSemester;
+    });
+
+    if (matchKeys.length === 0) {
+      return { success: false, message: 'No records found matching the source parameters.', count: 0 };
+    }
+
+    // Determine degreeLevel for the destination program
+    let destDegreeLevel = 'BS';
+    const deptObj = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === destination.department.trim().toLowerCase()
+    );
+    if (deptObj) {
+      const progObj = deptObj.programs.find(
+        (p) => p.name.trim().toLowerCase() === destination.program.trim().toLowerCase()
+      );
+      if (progObj) {
+        destDegreeLevel = progObj.degreeLevel;
+      }
+    }
+
+    // Copy or Move records
+    matchKeys.forEach((key) => {
+      const sourceRecord = store[key];
+      const targetSemester = destination.semester || sourceRecord.semester;
+      const targetSection = sourceRecord.section || 'A';
+
+      // Generate the new destination key
+      const destKey = getRecordKey(
+        destination.department,
+        destination.program,
+        destDegreeLevel,
+        destination.shift,
+        destination.session,
+        targetSemester,
+        targetSection
+      );
+
+      // If overwrite is disabled and target exists, skip
+      if (!overwriteExisting && store[destKey]) {
+        return;
+      }
+
+      const activeUser = this.getActiveUser();
+
+      // Create a cloned record with updated parameters
+      const clonedRecord: SubmissionRecord = {
+        ...sourceRecord,
+        id: destKey,
+        department: destination.department,
+        program: destination.program,
+        degreeLevel: destDegreeLevel,
+        shift: destination.shift,
+        session: destination.session,
+        semester: targetSemester,
+        // Update subjects' shift and section labels if needed
+        subjects: sourceRecord.subjects.map((sub) => ({
+          ...sub,
+          sectionShift: `${destination.shift} - Sem ${targetSemester} (Sec ${targetSection})`
+        })),
+        accessedBy: activeUser.name || 'Administrator',
+        updatedAt: new Date().toISOString()
+      };
+
+      // Store in updated store
+      updatedStore[destKey] = clonedRecord;
+      count++;
+
+      // If it's a move, delete from the store if the destination key is different
+      if (action === 'move' && key !== destKey) {
+        delete updatedStore[key];
+        // Delete original from Firestore
+        FirebaseStore.deleteSubmission(key).catch(() => {});
+      }
+
+      // Sync the new/updated record to Firestore
+      FirebaseStore.saveSubmission(clonedRecord).catch(() => {});
+    });
+
+    // Save back to local storage
+    this.setStore(updatedStore);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
+
+    this.logAccess(
+      `Admin bulk ${action}d ${count} records from ${source.program} (${source.shift}, ${source.session}) to ${destination.program} (${destination.shift}, ${destination.session})`,
+      destination.department,
+      destination.program
+    );
+
+    return {
+      success: true,
+      message: `Successfully ${action === 'move' ? 'moved' : 'copied'} ${count} records from ${source.program} (${source.shift}, ${source.session}) to ${destination.program} (${destination.shift}, ${destination.session}) successfully.`,
+      count
+    };
+  }
+
   // Calculate executive summary based on subjects entered (blank rows excluded!)
   public static calculateSummary(subjects: SubjectRow[]): ExecutiveSummary {
     const activeSubjects = subjects.filter((row) => {

@@ -15,6 +15,7 @@ import { SidebarNavigation } from './components/SidebarNavigation';
 import { WorkOnDemandView } from './components/WorkOnDemandView';
 import { Session2023SelectorModal } from './components/Session2023SelectorModal';
 import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
+import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
@@ -79,6 +80,7 @@ export default function App() {
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [isUserAccountsModalOpen, setIsUserAccountsModalOpen] = useState<boolean>(false);
+  const [isDataMigrationModalOpen, setIsDataMigrationModalOpen] = useState<boolean>(false);
   const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
@@ -391,6 +393,7 @@ export default function App() {
           }}
           onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
           onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
+          onOpenDataMigrationModal={() => setIsDataMigrationModalOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           onLogout={handleLogout}
           currentUser={currentUser}
@@ -1130,6 +1133,14 @@ export default function App() {
           currentRecord={currentRecord}
           allRecords={allRecords}
           isAdmin={isAdmin}
+        />
+      )}
+
+      {/* Admin Bulk Data Migration & Re-allocation Modal */}
+      {isAdmin && (
+        <AdminDataMigrationModal
+          isOpen={isDataMigrationModalOpen}
+          onClose={() => setIsDataMigrationModalOpen(false)}
         />
       )}
       {/* Session Program Roster Selector Modal for Coordinator / VC */}

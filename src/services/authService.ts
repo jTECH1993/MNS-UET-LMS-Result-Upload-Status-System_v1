@@ -443,6 +443,59 @@ export class AuthService {
     };
   }
 
+  // Check whether another coordinator or lecturer in the same department & program already holds the requested shift(s)
+  public static checkDeptProgramShiftConflict(
+    department: string,
+    program: string,
+    requestedShifts: AcademicShift[],
+    targetUserId?: string
+  ): { hasConflict: boolean; conflictingUser?: string; conflictingShift?: AcademicShift; message?: string } {
+    const accounts = this.getAccounts();
+    const normDept = (department || '').trim().toLowerCase();
+    const normProg = (program || '').trim().toLowerCase();
+
+    for (const acc of accounts) {
+      if (targetUserId && acc.id === targetUserId) continue;
+      if (acc.username.toLowerCase() === 'admin' || acc.username.toLowerCase() === 'vc') continue;
+      if (acc.approvalStatus === 'REJECTED') continue;
+
+      const accDept = (acc.department || '').trim().toLowerCase();
+      if (accDept !== normDept && !accDept.includes(normDept) && !normDept.includes(accDept)) continue;
+
+      const assignedProgs = acc.assignedPrograms && acc.assignedPrograms.length > 0
+        ? acc.assignedPrograms
+        : acc.program ? [acc.program] : [];
+
+      const matchesProg = assignedProgs.some(
+        (p) => p.trim().toLowerCase() === normProg || p.trim().toLowerCase().includes(normProg) || normProg.includes(p.trim().toLowerCase())
+      );
+
+      if (!matchesProg) continue;
+
+      let existingShifts: AcademicShift[] = [];
+      if (acc.programShiftAssignments && acc.programShiftAssignments[program]) {
+        existingShifts = acc.programShiftAssignments[program];
+      } else if (acc.assignedShifts && acc.assignedShifts.length > 0) {
+        existingShifts = acc.assignedShifts;
+      } else {
+        existingShifts = ['Morning', 'Evening'];
+      }
+
+      for (const reqShift of requestedShifts) {
+        if (existingShifts.includes(reqShift)) {
+          return {
+            hasConflict: true,
+            conflictingUser: acc.name,
+            conflictingShift: reqShift,
+            message: `Account Conflict Detected: Same Department, Program, and Shift combination is already registered. An active account for ${acc.name} (${acc.designation}) is already assigned to ${program} under the ${reqShift} shift for the ${department}. Multiple user accounts for the exact same offering are prohibited in order to secure student record management.`,
+          };
+        }
+      }
+    }
+
+    return { hasConflict: false };
+  }
+
   // Check whether another coordinator in same department & program already holds the requested shift(s)
   public static checkShiftConflict(
     department: string,
@@ -598,13 +651,13 @@ export class AuthService {
       ? data.assignedShifts
       : (assignedRole === 'COORDINATOR' ? ['Morning', 'Evening'] : undefined);
 
-    // RULE 4: Shift Conflict Check for Program Coordinators
-    if (assignedRole === 'COORDINATOR' && rawAssigned.length > 0) {
+    // RULE 4: Strictly prevent duplicate accounts under the same Department, Program, and Shift
+    if (assignedRole !== 'HOD' && assignedRole !== 'VC' && assignedRole !== 'ADMIN' && rawAssigned.length > 0) {
       for (const prog of rawAssigned) {
         const shiftsForProg = data.programShiftAssignments && data.programShiftAssignments[prog]
           ? data.programShiftAssignments[prog]
           : resolvedShifts || ['Morning', 'Evening'];
-        const conflict = this.checkShiftConflict(cleanDept, prog, shiftsForProg);
+        const conflict = this.checkDeptProgramShiftConflict(cleanDept, prog, shiftsForProg);
         if (conflict.hasConflict) {
           return {
             success: false,
@@ -995,6 +1048,33 @@ export class AuthService {
     if (data.themePreference) {
       account.themePreference = data.themePreference;
       this.applyTheme(data.themePreference);
+    }
+
+    // RULE 4: Strictly prevent duplicate accounts under the same Department, Program, and Shift on profile updates
+    const finalRole = data.role !== undefined ? data.role : account.role;
+    if (finalRole !== 'HOD' && finalRole !== 'VC' && finalRole !== 'ADMIN') {
+      const finalDept = data.department !== undefined ? data.department : account.department;
+      const finalAssignedProgs = data.assignedPrograms !== undefined
+        ? data.assignedPrograms
+        : (account.assignedPrograms || (account.program ? [account.program] : []));
+      const finalShifts = data.assignedShifts !== undefined
+        ? data.assignedShifts
+        : (account.assignedShifts || ['Morning', 'Evening']);
+
+      if (finalAssignedProgs && finalAssignedProgs.length > 0) {
+        for (const prog of finalAssignedProgs) {
+          const shiftsForProg = data.programShiftAssignments && data.programShiftAssignments[prog]
+            ? data.programShiftAssignments[prog]
+            : finalShifts;
+          const conflict = this.checkDeptProgramShiftConflict(finalDept, prog, shiftsForProg, userId);
+          if (conflict.hasConflict) {
+            return {
+              success: false,
+              message: conflict.message!,
+            };
+          }
+        }
+      }
     }
 
     this.saveAccounts(accounts);

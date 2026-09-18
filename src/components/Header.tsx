@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Sun, Moon, User, Users, Database, Palette, Menu, FileText, BarChart3 } from 'lucide-react';
+import { LogOut, Sun, Moon, User, Users, Database, Palette, Menu, FileText, BarChart3, RefreshCw } from 'lucide-react';
 import { ActiveUserSession, AppTheme } from '../types';
 import { AuthService } from '../services/authService';
 import { MnsUetLogo } from './MnsUetLogo';
@@ -10,6 +10,7 @@ interface Props {
   onOpenProfileModal: () => void;
   onOpenUserAccountsModal?: () => void;
   onOpenFirebaseModal?: () => void;
+  onOpenDataMigrationModal?: () => void;
   savedCount?: number;
   currentSession?: string;
   currentSemester?: string;
@@ -23,6 +24,7 @@ export const Header: React.FC<Props> = ({
   onOpenProfileModal,
   onOpenUserAccountsModal,
   onOpenFirebaseModal,
+  onOpenDataMigrationModal,
   savedCount = 0,
   currentSession = '2023',
   currentSemester = '1',
@@ -145,6 +147,7 @@ export const Header: React.FC<Props> = ({
             <button onClick={onOpenProfileModal} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors"><User className="w-3.5 h-3.5" />Profile</button>
             {isAdmin && onOpenUserAccountsModal && (<button onClick={onOpenUserAccountsModal} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors"><Users className="w-3.5 h-3.5" />Accounts</button>)}
             {isAdmin && onOpenFirebaseModal && (<button onClick={onOpenFirebaseModal} className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/50 text-red-800 dark:text-red-300 text-xs font-semibold rounded-lg border border-red-300 dark:border-red-900 flex items-center gap-1.5 shadow-2xs"><Database className="w-3.5 h-3.5" />DB Admin</button>)}
+            {isAdmin && onOpenDataMigrationModal && (<button onClick={onOpenDataMigrationModal} className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-lg border border-emerald-300 dark:border-emerald-900 flex items-center gap-1.5 shadow-2xs" title="Institutional Data Migration & Correction"><RefreshCw className="w-3.5 h-3.5" />Migration Tool</button>)}
             
             <button onClick={handleToggleTheme} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors">{isDark ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}</button>
             <button onClick={onLogout} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-200 text-xs font-bold rounded-lg border border-rose-300 dark:border-rose-800 flex items-center gap-1.5 shadow-2xs transition-all"><LogOut className="w-3.5 h-3.5" />Sign Out</button>
