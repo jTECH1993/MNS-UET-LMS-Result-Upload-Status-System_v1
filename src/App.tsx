@@ -14,6 +14,7 @@ import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
 import { SidebarNavigation } from './components/SidebarNavigation';
 import { WorkOnDemandView } from './components/WorkOnDemandView';
 import { Session2023SelectorModal } from './components/Session2023SelectorModal';
+import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
 import {
@@ -21,6 +22,7 @@ import {
   Database,
   Building,
   User,
+  Users,
   ShieldCheck,
   GraduationCap,
   Layers,
@@ -76,6 +78,7 @@ export default function App() {
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [isUserAccountsModalOpen, setIsUserAccountsModalOpen] = useState<boolean>(false);
+  const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Initialize theme on app boot
@@ -989,6 +992,22 @@ export default function App() {
                 (Edit Profile)
               </span>
             </button>
+
+            {(currentUser.role === 'HOD' || currentUser.role === 'ADMIN' || currentUser.role === 'VC') && (
+              <>
+                <span className="text-slate-300 dark:text-slate-700">|</span>
+                <button
+                  type="button"
+                  onClick={() => setIsCoordinatorAssignModalOpen(true)}
+                  className="flex items-center gap-1 text-emerald-800 dark:text-emerald-300 font-bold bg-emerald-100/90 dark:bg-emerald-950/80 hover:bg-emerald-200 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 rounded cursor-pointer transition-colors text-[11px]"
+                  title="Assign and shift coordinators to other programs, or change role to Regular/Visiting faculty"
+                >
+                  <Users className="w-3 h-3" />
+                  <span className="hidden sm:inline">Coordinators &amp; Faculty</span>
+                  <span className="sm:hidden">Staff</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -1120,6 +1139,20 @@ export default function App() {
         sessionName={targetSession}
         onRosterUpdated={() => {
           setActiveSessions([...StorageService.getActiveSessions()]);
+          reloadRecords();
+        }}
+      />
+
+      {/* Coordinator & Faculty Program Allocation Modal (HOD / Admin / VC Control) */}
+      <CoordinatorAssignmentModal
+        isOpen={isCoordinatorAssignModalOpen}
+        onClose={() => setIsCoordinatorAssignModalOpen(false)}
+        defaultDepartment={currentUser.department || targetDept}
+        currentUserRole={currentUser.role}
+        onCoordinatorUpdated={(updatedAcc) => {
+          if (updatedAcc.id === currentUser.id) {
+            setCurrentUser(AuthService.getCurrentSession() || currentUser);
+          }
           reloadRecords();
         }}
       />

@@ -18,6 +18,7 @@ import { DeleteModal } from './DeleteModal';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { BulkCourseImportModal } from './BulkCourseImportModal';
+import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
 import {
   Save,
   Trash2,
@@ -32,6 +33,8 @@ import {
   Info,
   Calendar,
   User,
+  Users,
+  UserCheck,
   Building2,
   GraduationCap,
   Layers,
@@ -169,6 +172,7 @@ export const HODEntryForm: React.FC<Props> = ({
   // Filter to show only programs that belong to the selected session
   const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(false);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
+  const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState<boolean>(false);
 
@@ -1560,7 +1564,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
       {/* HOD Full Department Oversight Banner */}
       {currentUser?.role === 'HOD' && currentUser.department && (
-        <div id="hod-authority-banner" className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-emerald-950 shadow-2xs">
+        <div id="hod-authority-banner" className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-emerald-950 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
             <div>
@@ -1570,9 +1574,20 @@ export const HODEntryForm: React.FC<Props> = ({
               </p>
             </div>
           </div>
-          <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
-            HOD Verified
-          </span>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsCoordinatorAssignModalOpen(true)}
+              className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer"
+              title="Manage coordinator program allocations, shift programs, or change role to Regular/Visiting faculty"
+            >
+              <Users className="w-4 h-4" />
+              <span>Manage Coordinators &amp; Faculty</span>
+            </button>
+            <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
+              HOD Verified
+            </span>
+          </div>
         </div>
       )}
 
@@ -1651,16 +1666,29 @@ export const HODEntryForm: React.FC<Props> = ({
                   ) : null
                 )}
               </label>
-              {!isReadOnly && isPrivilegedUser && (
-                <button
-                  type="button"
-                  onClick={() => setIsRosterModalOpen(true)}
-                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer shrink-0 ml-1"
-                  title="Configure active roster for this session (HOD privilege)"
-                >
-                  Configure
-                </button>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {(isPrivilegedUser || currentUser?.role === 'HOD') && !isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCoordinatorAssignModalOpen(true)}
+                    className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded cursor-pointer shrink-0 flex items-center gap-1 transition-colors"
+                    title="Manage coordinator program allocations, shift programs, or switch roles to Regular/Visiting faculty"
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    <span>Assign Coordinators</span>
+                  </button>
+                )}
+                {!isReadOnly && isPrivilegedUser && (
+                  <button
+                    type="button"
+                    onClick={() => setIsRosterModalOpen(true)}
+                    className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer shrink-0 ml-1"
+                    title="Configure active roster for this session (HOD privilege)"
+                  >
+                    Configure
+                  </button>
+                )}
+              </div>
             </div>
             <select
               id="select-program"
@@ -3552,6 +3580,21 @@ export const HODEntryForm: React.FC<Props> = ({
           setRosterVersion((v) => v + 1);
           if (activeProgs.length > 0 && !activeProgs.includes(program)) {
             setProgram(activeProgs[0]);
+          }
+          if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+        }}
+      />
+
+      {/* Coordinator & Faculty Reallocation Modal (HOD Administrative Control) */}
+      <CoordinatorAssignmentModal
+        isOpen={isCoordinatorAssignModalOpen}
+        onClose={() => setIsCoordinatorAssignModalOpen(false)}
+        defaultDepartment={department}
+        currentUserRole={currentUser?.role}
+        onCoordinatorUpdated={() => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+            window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
           }
           if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
         }}

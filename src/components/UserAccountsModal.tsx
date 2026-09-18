@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount } from '../types';
 import { AuthService } from '../services/authService';
-import { ShieldCheck, Users, Trash2, X, AlertCircle, Building, CheckCircle2, RefreshCw } from 'lucide-react';
+import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
+import { ShieldCheck, Users, Trash2, X, AlertCircle, Building, CheckCircle2, RefreshCw, ArrowRightLeft, Edit3 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -14,6 +15,8 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState<boolean>(false);
+  const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
+  const [selectedDeptForAssign, setSelectedDeptForAssign] = useState<string | undefined>(undefined);
 
   const loadAccounts = () => {
     setAccounts(AuthService.getAccounts());
@@ -132,6 +135,25 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </div>
         )}
 
+        {/* Top Action Toolbar: Reassign Programs & Roles */}
+        <div className="px-4 pt-3 pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <p className="text-xs text-slate-500">
+            Shift coordinators to other degree programs, add/delete programs, or convert profiles to Regular or Visiting faculty.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDeptForAssign(undefined);
+              setIsCoordinatorAssignModalOpen(true);
+            }}
+            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+            title="Open Coordinator & Faculty Program Allocation Manager"
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>Reassign Programs &amp; Roles</span>
+          </button>
+        </div>
+
         {/* Accounts Table */}
         <div className="p-4 overflow-y-auto flex-1">
           <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -237,18 +259,31 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConfirmDeleteId(acc.id);
-                              setFeedback('');
-                              setErrorMessage('');
-                            }}
-                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 group"
-                            title="Delete this account"
-                          >
-                            <Trash2 className="w-4 h-4 text-rose-500 group-hover:text-rose-700" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDeptForAssign(acc.department || undefined);
+                                setIsCoordinatorAssignModalOpen(true);
+                              }}
+                              className="p-1.5 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                              title="Reassign degree program or change role"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmDeleteId(acc.id);
+                                setFeedback('');
+                                setErrorMessage('');
+                              }}
+                              className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1 group"
+                              title="Delete this account"
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-500 group-hover:text-rose-700" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -306,6 +341,19 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
+
+      {/* Coordinator & Faculty Program Allocation Modal */}
+      <CoordinatorAssignmentModal
+        isOpen={isCoordinatorAssignModalOpen}
+        onClose={() => setIsCoordinatorAssignModalOpen(false)}
+        defaultDepartment={selectedDeptForAssign}
+        onCoordinatorUpdated={() => {
+          loadAccounts();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+          }
+        }}
+      />
     </div>
   );
 };
