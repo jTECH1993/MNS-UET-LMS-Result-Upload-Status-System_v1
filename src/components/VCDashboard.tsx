@@ -274,8 +274,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         setCurrentSession(list[0]);
       }
     };
+    const handleRosterUpdate = () => {
+      setRosterVersion((v) => v + 1);
+    };
     window.addEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
-    return () => window.removeEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+    window.addEventListener('mnsuet_roster_updated', handleRosterUpdate);
+    window.addEventListener('mnsuet_storage_updated', handleRosterUpdate);
+    return () => {
+      window.removeEventListener('mnsuet_sessions_updated', handleSessionsUpdate);
+      window.removeEventListener('mnsuet_roster_updated', handleRosterUpdate);
+      window.removeEventListener('mnsuet_storage_updated', handleRosterUpdate);
+    };
   }, []);
 
   // Per-row shift selection state (allows user/VC to toggle Morning/Evening on an individual program row)

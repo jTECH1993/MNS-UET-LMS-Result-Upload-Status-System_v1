@@ -77,7 +77,6 @@ export class StorageService {
       CURRENT_SESSION_KEY,
       ACTIVE_SESSIONS_KEY,
       WORK_ON_DEMAND_KEY,
-      'mnsuet_user_accounts_v99',
       'mnsuet_cohort_sections_v99',
       'mnsuet_session_active_roster_v99__2023',
       'mnsuet_session_active_roster_v99__2024'
@@ -317,7 +316,9 @@ export class StorageService {
 
     // 1. If coordinator/HOD configured a roster for this department and session in database:
     const configuredKey = Object.keys(roster).find(k => k.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    let isConfigured = false;
     if (configuredKey && Array.isArray(roster[configuredKey])) {
+      isConfigured = true;
       activePrograms = roster[configuredKey].filter((progName) => {
         const pObj = dept.programs.find((p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase());
         if (!pObj) return true;
@@ -344,9 +345,10 @@ export class StorageService {
     }
 
     // 3. Dynamic Database inclusion: If any submission record exists in the database for this program in this session,
-    // it is DEFINITELY an active program for this session!
-    try {
-      const records = customRecords || this.getAllSubmissions();
+    // it is DEFINITELY an active program for this session! (Only run if NOT explicitly configured by the user to avoid overriding custom excludes)
+    if (!isConfigured) {
+      try {
+        const records = customRecords || this.getAllSubmissions();
       records.forEach((r) => {
         if (
           r.department &&
@@ -359,6 +361,7 @@ export class StorageService {
         }
       });
     } catch (e) {}
+    }
 
     return activePrograms;
   }

@@ -164,40 +164,54 @@ export class AuthService {
     // 1. Listen to real-time changes in Firestore users collection
     try {
       FirebaseStore.listenToUserAccounts((cloudAccounts) => {
-        if (!cloudAccounts || cloudAccounts.length === 0) return;
+        if (!cloudAccounts) return;
         const localAccounts = this.getAccounts();
         let changed = false;
 
         const mergedMap = new Map<string, UserAccount>();
-        localAccounts.forEach((acc) => mergedMap.set(acc.id, acc));
+        // Initialize map with DEFAULT_ACCOUNTS to ensure master accounts are always preserved
+        DEFAULT_ACCOUNTS.forEach((acc) => mergedMap.set(acc.id, acc));
 
+        // Incorporate cloud accounts
         cloudAccounts.forEach((remoteAcc) => {
-          const existing = mergedMap.get(remoteAcc.id);
-          if (!existing) {
-            mergedMap.set(remoteAcc.id, remoteAcc);
-            changed = true;
-          } else if (
-            remoteAcc.lastLoginAt !== existing.lastLoginAt ||
-            remoteAcc.password !== existing.password ||
-            remoteAcc.name !== existing.name ||
-            remoteAcc.designation !== existing.designation ||
-            remoteAcc.department !== existing.department ||
-            remoteAcc.role !== existing.role ||
-            remoteAcc.program !== existing.program ||
-            JSON.stringify(remoteAcc.assignedPrograms) !== JSON.stringify(existing.assignedPrograms) ||
-            JSON.stringify(remoteAcc.assignedShifts) !== JSON.stringify(existing.assignedShifts) ||
-            remoteAcc.avatarUrl !== existing.avatarUrl ||
-            remoteAcc.themePreference !== existing.themePreference ||
-            remoteAcc.email !== existing.email
-          ) {
-            mergedMap.set(remoteAcc.id, { ...existing, ...remoteAcc });
-            changed = true;
-          }
+          mergedMap.set(remoteAcc.id, remoteAcc);
         });
 
+        const newMergedList = Array.from(mergedMap.values());
+
+        // Compare with local accounts to detect any creations, deletions or updates
+        if (localAccounts.length !== newMergedList.length) {
+          changed = true;
+        } else {
+          for (const localAcc of localAccounts) {
+            const remoteAcc = mergedMap.get(localAcc.id);
+            if (!remoteAcc) {
+              changed = true;
+              break;
+            }
+            if (
+              remoteAcc.lastLoginAt !== localAcc.lastLoginAt ||
+              remoteAcc.password !== localAcc.password ||
+              remoteAcc.name !== localAcc.name ||
+              remoteAcc.designation !== localAcc.designation ||
+              remoteAcc.department !== localAcc.department ||
+              remoteAcc.role !== localAcc.role ||
+              remoteAcc.program !== localAcc.program ||
+              JSON.stringify(remoteAcc.assignedPrograms) !== JSON.stringify(localAcc.assignedPrograms) ||
+              JSON.stringify(remoteAcc.assignedShifts) !== JSON.stringify(localAcc.assignedShifts) ||
+              remoteAcc.avatarUrl !== localAcc.avatarUrl ||
+              remoteAcc.themePreference !== localAcc.themePreference ||
+              remoteAcc.email !== localAcc.email ||
+              remoteAcc.approvalStatus !== localAcc.approvalStatus
+            ) {
+              changed = true;
+              break;
+            }
+          }
+        }
+
         if (changed) {
-          const mergedList = Array.from(mergedMap.values());
-          this.saveAccounts(mergedList);
+          this.saveAccounts(newMergedList);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
           }
@@ -288,6 +302,10 @@ export class AuthService {
         session.avatarUrl = account.avatarUrl;
         session.themePreference = account.themePreference;
         session.email = account.email;
+      } else {
+        // Force signout if their account is deleted from systems
+        localStorage.removeItem(ACTIVE_AUTH_SESSION_KEY);
+        return null;
       }
 
       return session;

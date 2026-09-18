@@ -582,60 +582,15 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* If multi-session: show all programs with their applicable session badges */}
+                              {/* If multi-session: show active programs with their applicable session badges */}
                               {isMulti ? (
                                 <div className="space-y-1">
                                   <div className="text-[10px] uppercase font-bold text-slate-500 px-2 py-0.5">
-                                    Session Applicability Matrix ({dept.programs.length} Programs)
+                                    Session Applicability Matrix ({deptProgDetails.filter(({ detail }) => detail.isApplicableInSelected).length} Programs)
                                   </div>
-                                  {deptProgDetails.map(({ prog, detail }) => {
+                                  {deptProgDetails.filter(({ detail }) => detail.isApplicableInSelected).map(({ prog, detail }) => {
                                     const isSelected =
                                       targetDept === dept.name && targetProg === prog.name;
-                                    const isApplicable = detail.isApplicableInSelected;
-                                    const dynamicSessionName = `Sessions: ${activeSessions.join(' & ')}`;
-                                    const notApplicableTooltip = `Not applicable in selected sessions (${dynamicSessionName})`;
-
-                                    if (!isApplicable) {
-                                      return (
-                                        <div
-                                          key={prog.name}
-                                          className="relative group/offcycle cursor-not-allowed"
-                                        >
-                                          <div
-                                            aria-disabled="true"
-                                            title={notApplicableTooltip}
-                                            className="w-full text-left px-3 py-2 rounded-lg text-xs flex flex-col gap-1 select-none border bg-slate-50/70 dark:bg-slate-850/40 text-slate-400 dark:text-slate-500 border-slate-200/50 dark:border-slate-800/50 group-hover/offcycle:bg-amber-50/20 dark:group-hover/offcycle:bg-amber-950/20 group-hover/offcycle:border-amber-300/60 dark:group-hover/offcycle:border-amber-700/60 transition-colors"
-                                          >
-                                            <div className="flex items-center justify-between gap-2">
-                                              <div className="flex items-center gap-1.5 min-w-0">
-                                                <span className="truncate font-semibold text-slate-400 dark:text-slate-500 line-through decoration-slate-300 dark:decoration-slate-600">
-                                                  {prog.name}
-                                                </span>
-                                                <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-400 font-bold shrink-0">
-                                                  {prog.degreeLevel}
-                                                </span>
-                                              </div>
-                                              <span className="text-[9px] text-amber-600 dark:text-amber-400/90 font-semibold italic shrink-0 flex items-center gap-1">
-                                                <Ban className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-                                                Off-cycle
-                                              </span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border opacity-70 ${detail.badgeClass}`}>
-                                                {detail.statusLabel}
-                                              </span>
-                                            </div>
-                                          </div>
-
-                                          {/* Hover Tooltip dynamically displaying selected session names */}
-                                          <div className="pointer-events-none opacity-0 group-hover/offcycle:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 px-2.5 py-1 text-[11px] font-medium text-white bg-slate-900/95 dark:bg-slate-950 border border-slate-700 dark:border-slate-750 rounded-md shadow-xl whitespace-nowrap flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
-                                            <span>{notApplicableTooltip}</span>
-                                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95 dark:border-t-slate-950" />
-                                          </div>
-                                        </div>
-                                      );
-                                    }
 
                                     return (
                                       <button
@@ -739,62 +694,6 @@ export default function App() {
                                       })}
                                     </div>
                                   </div>
-
-                                  {/* Section 2: Other Department Offerings */}
-                                  {other.length > 0 && (
-                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                                      <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 px-2 py-0.5 mb-1 flex items-center justify-between">
-                                        <span>Other Offerings (Not in Session {targetSession})</span>
-                                        <span className="font-semibold text-slate-400">{other.length}</span>
-                                      </div>
-                                      <div className="space-y-1">
-                                        {other.map(({ prog }) => {
-                                          const isSelected =
-                                            targetDept === dept.name && targetProg === prog.name;
-                                          const dynamicSessionName = `Session ${targetSession}`;
-                                          const notApplicableTooltip = `Not applicable in selected session (${dynamicSessionName})`;
-
-                                          return (
-                                            <div
-                                              key={prog.name}
-                                              className="relative group/offcycle cursor-not-allowed"
-                                            >
-                                              {/* Non-clickable off-cycle program item */}
-                                              <div
-                                                aria-disabled="true"
-                                                title={notApplicableTooltip}
-                                                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 select-none border transition-colors ${
-                                                  isSelected
-                                                    ? 'bg-amber-50/50 dark:bg-amber-950/20 text-slate-500 dark:text-slate-400 border-amber-300/40 dark:border-amber-800/40'
-                                                    : 'bg-slate-50/70 dark:bg-slate-850/40 text-slate-400 dark:text-slate-500 border-slate-200/50 dark:border-slate-800/50 group-hover/offcycle:bg-amber-50/20 dark:group-hover/offcycle:bg-amber-950/20 group-hover/offcycle:border-amber-300/50 dark:group-hover/offcycle:border-amber-750'
-                                                }`}
-                                              >
-                                                <div className="flex items-center gap-1.5 min-w-0">
-                                                  <span className="truncate line-through decoration-slate-300 dark:decoration-slate-600">
-                                                    {prog.name}
-                                                  </span>
-                                                  <span className="text-[9px] px-1 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium shrink-0">
-                                                    {prog.degreeLevel}
-                                                  </span>
-                                                </div>
-                                                <span className="text-[9px] text-amber-600 dark:text-amber-400/90 font-semibold italic shrink-0 flex items-center gap-1">
-                                                  <Ban className="w-2.5 h-2.5 text-amber-500 shrink-0" />
-                                                  Off-cycle
-                                                </span>
-                                              </div>
-
-                                              {/* Hover Tooltip dynamically showing the selected session name */}
-                                              <div className="pointer-events-none opacity-0 group-hover/offcycle:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 px-2.5 py-1 text-[11px] font-medium text-white bg-slate-900/95 dark:bg-slate-950 border border-slate-700 dark:border-slate-750 rounded-md shadow-xl whitespace-nowrap flex items-center gap-1.5">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
-                                                <span>{notApplicableTooltip}</span>
-                                                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95 dark:border-t-slate-950" />
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
                               )}
                             </div>
