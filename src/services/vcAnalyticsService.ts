@@ -234,13 +234,26 @@ export class VCAnalyticsService {
       activePrograms.forEach((prog) => {
         totalUniversityPrograms++;
 
-        // Coordinator Dimension: decoupled from program existence
+        // Coordinator Dimension: dynamic lookup from accounts and stored database records
         const coordinatorAccount = accounts.find((acc) => {
           if (acc.role !== 'COORDINATOR' && acc.role !== 'LECTURER') return false;
           if (acc.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           const assigned = acc.assignedPrograms || (acc.program ? [acc.program] : []);
           return assigned.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
         });
+
+        // Check if any database submission for this program records a coordinator
+        let dbCoordName = '';
+        if (!coordinatorAccount) {
+          const recWithCoord = allRecords.find((r) => {
+            if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
+            if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
+            return !!(r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator'));
+          });
+          if (recWithCoord && recWithCoord.hodCoordinator) {
+            dbCoordName = recWithCoord.hodCoordinator.trim();
+          }
+        }
 
         const coordinatorDim: CoordinatorDimension = coordinatorAccount
           ? {
@@ -250,6 +263,12 @@ export class VCAnalyticsService {
               isAssigned: true,
               accountStatus: 'Active',
               lastLoginAt: coordinatorAccount.lastLoginAt,
+            }
+          : dbCoordName
+          ? {
+              name: dbCoordName,
+              isAssigned: true,
+              accountStatus: 'Active',
             }
           : {
               name: 'Not Assigned',

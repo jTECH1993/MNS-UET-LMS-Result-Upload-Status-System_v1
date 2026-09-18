@@ -57,6 +57,7 @@ export interface BottleneckInfo {
   submittedCourses: number;
   pendingCourses: number;
   completionRate: number;
+  uploadStatus: 'Complete' | 'Partially Uploaded' | 'Pending';
   coordinatorStatus: 'Assigned' | 'Not Assigned';
   coordinatorName: string;
   hodStatus: 'Registered' | 'Not Registered';
@@ -109,29 +110,50 @@ export class CompletionRadarService {
   ): { isAssigned: boolean; name: string; designation?: string } {
     try {
       const accounts = AuthService.getAccounts();
-      const coord = accounts.find((a) => {
+      const allRecords = StorageService.getStore();
+
+      // 1. Look in registered accounts strictly for this program if progName is given
+      if (progName) {
+        const cleanProg = progName.trim().toLowerCase();
+        const coord = accounts.find((a) => {
+          if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
+          const assigned = a.assignedPrograms || (a.program ? [a.program] : []);
+          return assigned.some((p) => p.trim().toLowerCase() === cleanProg);
+        });
+
+        if (coord) {
+          return { isAssigned: true, name: coord.name, designation: coord.designation || 'Program Coordinator' };
+        }
+
+        // 2. Check if a coordinator uploaded results or is recorded in database submissions for this program
+        const matchingRecord = Object.values(allRecords).find((r) => {
+          if (r.department.trim().toLowerCase() !== deptName.trim().toLowerCase()) return false;
+          if (r.program.trim().toLowerCase() !== cleanProg) return false;
+          return !!(r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator'));
+        });
+
+        if (matchingRecord && matchingRecord.hodCoordinator) {
+          return {
+            isAssigned: true,
+            name: matchingRecord.hodCoordinator,
+            designation: matchingRecord.userDesignation || 'Program Coordinator',
+          };
+        }
+
+        // If program is specified, do NOT fallback to a coordinator of a different program!
+        return { isAssigned: false, name: 'Not Assigned', designation: 'Coordinator Unassigned' };
+      }
+
+      // If no program is specified (department level), find if there is a department-level coordinator
+      const deptCoord = accounts.find((a) => {
         if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
-        if (progName && (a.program === progName || a.assignedPrograms?.includes(progName))) {
-          return true;
-        }
-        if (a.department.trim().toLowerCase() === deptName.trim().toLowerCase()) {
-          return true;
-        }
-        return false;
+        return a.department.trim().toLowerCase() === deptName.trim().toLowerCase();
       });
 
-      if (coord) {
-        return { isAssigned: true, name: coord.name, designation: coord.designation };
+      if (deptCoord) {
+        return { isAssigned: true, name: deptCoord.name, designation: deptCoord.designation || 'Coordinator' };
       }
     } catch (e) {}
-
-    if (deptName.includes('Computer Science')) {
-      return {
-        isAssigned: true,
-        name: 'Engr. Muhammad Talha Jahangir',
-        designation: 'Coordinator BS AI / Lecturer',
-      };
-    }
 
     return { isAssigned: false, name: 'Not Assigned', designation: 'Coordinator Unassigned' };
   }
@@ -667,6 +689,9 @@ export class CompletionRadarService {
                 reason = `Stagnant upload progress (${unit.completionRate}% complete)`;
               }
 
+              const uploadStatus: 'Complete' | 'Partially Uploaded' | 'Pending' =
+                unit.pending === 0 ? 'Complete' : unit.submitted > 0 ? 'Partially Uploaded' : 'Pending';
+
               candidates.push({
                 department: dept.name,
                 deptCode: dept.code,
@@ -678,6 +703,7 @@ export class CompletionRadarService {
                 submittedCourses: unit.submitted,
                 pendingCourses: unit.pending,
                 completionRate: unit.completionRate,
+                uploadStatus,
                 coordinatorStatus: coord.isAssigned ? 'Assigned' : 'Not Assigned',
                 coordinatorName: coord.name,
                 hodStatus: hod.isRegistered ? 'Registered' : 'Not Registered',
@@ -719,6 +745,7 @@ export class CompletionRadarService {
       submittedCourses: 0,
       pendingCourses: 6,
       completionRate: 0,
+      uploadStatus: 'Pending',
       coordinatorStatus: 'Not Assigned',
       coordinatorName: 'Not Assigned',
       hodStatus: 'Not Registered',

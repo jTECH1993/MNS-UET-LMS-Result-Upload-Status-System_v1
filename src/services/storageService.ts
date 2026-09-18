@@ -499,9 +499,10 @@ export class StorageService {
       } else {
         const coord = accounts.find((a: any) => {
           if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
-          if (targetProg && (a.program === targetProg || (a.assignedPrograms && a.assignedPrograms.includes(targetProg)))) return true;
-          if (a.department && a.department.trim().toLowerCase() === targetDept.trim().toLowerCase()) return true;
-          return false;
+          if (targetProg) {
+            return a.program === targetProg || (a.assignedPrograms && a.assignedPrograms.includes(targetProg));
+          }
+          return a.department && a.department.trim().toLowerCase() === targetDept.trim().toLowerCase();
         });
         if (coord) {
           coordName = coord.name;
@@ -515,10 +516,10 @@ export class StorageService {
         designation: activeUser?.designation || (coordDesig ? coordDesig : 'Institutional Automation Engine'),
         department: targetDept,
         action,
-        program: targetProg || (targetDept.includes('Computer Science') ? 'BS Computer Science' : undefined),
+        program: targetProg,
         shift,
-        coordinatorName: coordName || (targetDept.includes('Computer Science') ? 'Engr. Muhammad Talha Jahangir' : undefined),
-        coordinatorDesignation: coordDesig || (targetDept.includes('Computer Science') ? 'Program Coordinator (BS AI) / Lecturer' : undefined),
+        coordinatorName: coordName || undefined,
+        coordinatorDesignation: coordDesig || undefined,
         timestamp: new Date().toISOString(),
       };
       const updated = [entry, ...logs].slice(0, 100);

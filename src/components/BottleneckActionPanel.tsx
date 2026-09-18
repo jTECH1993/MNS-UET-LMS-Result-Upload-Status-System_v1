@@ -139,17 +139,45 @@ export const BottleneckActionPanel: React.FC<Props> = ({
                 <span className="font-bold text-slate-200">{currentItem.semesterLabel}</span>
               </div>
               <div className="text-right">
-                <span className="text-slate-400 font-medium block text-[11px]">Section:</span>
+                <span className="text-slate-400 font-medium block text-[11px]">Active Section:</span>
                 <span className="font-bold text-amber-300">{currentItem.section}</span>
               </div>
             </div>
 
-            {/* Pending Workload */}
+            {/* Section Upload Status */}
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">Pending:</span>
-              <span className="font-black text-rose-400 font-mono text-sm">
-                {currentItem.pendingCourses} / {currentItem.totalCourses} courses
+              <span className="text-slate-400 font-medium">Upload Status:</span>
+              <span
+                className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  currentItem.pendingCourses === 0
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                    : currentItem.submittedCourses > 0
+                    ? 'bg-amber-950 text-amber-300 border-amber-800'
+                    : 'bg-rose-950 text-rose-300 border-rose-800'
+                }`}
+              >
+                {currentItem.pendingCourses === 0
+                  ? `✓ Complete (${currentItem.submittedCourses}/${currentItem.totalCourses})`
+                  : currentItem.submittedCourses > 0
+                  ? `🟡 Partial (${currentItem.submittedCourses}/${currentItem.totalCourses})`
+                  : `🔴 Pending (${currentItem.pendingCourses}/${currentItem.totalCourses})`}
               </span>
+            </div>
+
+            {/* Submitted vs Pending Workload */}
+            <div className="grid grid-cols-2 gap-2 border-b border-slate-800/80 pb-2">
+              <div>
+                <span className="text-slate-400 font-medium block text-[11px]">Submitted:</span>
+                <span className="font-bold text-emerald-400 font-mono">
+                  {currentItem.submittedCourses} / {currentItem.totalCourses} courses
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-400 font-medium block text-[11px]">Pending:</span>
+                <span className="font-black text-rose-400 font-mono">
+                  {currentItem.pendingCourses} / {currentItem.totalCourses} courses
+                </span>
+              </div>
             </div>
 
             {/* Coordinator */}

@@ -38,7 +38,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
     if (!sec) {
       return (
         <span
-          title="Single Section Cohort (No Section B registered)"
+          title="Single Section Cohort (Only Section A is active)"
           className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 text-[11px] font-medium border border-slate-200 dark:border-slate-700/60 select-none"
         >
           —
@@ -48,24 +48,24 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
     const rate = sec.completionRate;
     if (rate === 100) {
       return (
-        <div className="flex items-center justify-center gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-1 rounded text-[11px] font-bold border border-emerald-300 dark:border-emerald-800">
-          <span>100%</span>
-          <span>🟢</span>
+        <div className="inline-flex flex-col items-center justify-center gap-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-1 rounded text-[11px] font-bold border border-emerald-300 dark:border-emerald-800 min-w-[80px]">
+          <span className="flex items-center gap-1">100% <span>🟢</span></span>
+          <span className="text-[9px] font-medium text-emerald-700 dark:text-emerald-400">Complete ({sec.uploadedCourses}/{sec.totalCourses})</span>
         </div>
       );
     }
     if (rate > 0) {
       return (
-        <div className="flex items-center justify-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 px-2 py-1 rounded text-[11px] font-bold border border-amber-300 dark:border-amber-800">
-          <span>{rate}%</span>
-          <span>🟡</span>
+        <div className="inline-flex flex-col items-center justify-center gap-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 px-2 py-1 rounded text-[11px] font-bold border border-amber-300 dark:border-amber-800 min-w-[80px]">
+          <span className="flex items-center gap-1">{rate}% <span>🟡</span></span>
+          <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">Pending {sec.pendingCourses}/{sec.totalCourses}</span>
         </div>
       );
     }
     return (
-      <div className="flex items-center justify-center gap-1 bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 px-2 py-1 rounded text-[11px] font-bold border border-rose-300 dark:border-rose-800">
-        <span>0%</span>
-        <span>🔴</span>
+      <div className="inline-flex flex-col items-center justify-center gap-0.5 bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 px-2 py-1 rounded text-[11px] font-bold border border-rose-300 dark:border-rose-800 min-w-[80px]">
+        <span className="flex items-center gap-1">0% <span>🔴</span></span>
+        <span className="text-[9px] font-medium text-rose-700 dark:text-rose-400">Pending {sec.pendingCourses}/{sec.totalCourses}</span>
       </div>
     );
   };

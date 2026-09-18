@@ -52,23 +52,28 @@ export const VCAuditFeed: React.FC = () => {
     }
     try {
       const accounts = AuthService.getAccounts();
-      const coord = accounts.find((a) => {
-        if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
-        if (log.program && (a.program === log.program || a.assignedPrograms?.includes(log.program))) return true;
-        if (log.department && a.department.trim().toLowerCase() === log.department.trim().toLowerCase()) return true;
-        return false;
-      });
-      if (coord) {
-        return { name: coord.name, designation: coord.designation };
+      const allRecords = StorageService.getStore();
+
+      if (log.program) {
+        const cleanProg = log.program.trim().toLowerCase();
+        const coord = accounts.find((a) => {
+          if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
+          const assigned = a.assignedPrograms || (a.program ? [a.program] : []);
+          return assigned.some((p) => p.trim().toLowerCase() === cleanProg);
+        });
+        if (coord) {
+          return { name: coord.name, designation: coord.designation || 'Program Coordinator' };
+        }
+
+        const matchingRec = Object.values(allRecords).find((r) => {
+          return r.program?.trim().toLowerCase() === cleanProg && r.hodCoordinator;
+        });
+        if (matchingRec && matchingRec.hodCoordinator) {
+          return { name: matchingRec.hodCoordinator, designation: matchingRec.userDesignation || 'Program Coordinator' };
+        }
       }
     } catch (e) {}
 
-    if (log.department?.includes('Computer Science')) {
-      return {
-        name: 'Engr. Muhammad Talha Jahangir',
-        designation: 'Program Coordinator (BS AI) / Lecturer',
-      };
-    }
     return null;
   };
 
@@ -188,11 +193,13 @@ export const VCAuditFeed: React.FC = () => {
                             Program Coordinator:
                           </span>
                           <span className="font-semibold text-emerald-950 dark:text-emerald-100">
-                            {coord ? coord.name : 'Engr. Muhammad Talha Jahangir'}
+                            {coord ? coord.name : (log.userName && log.userName.toLowerCase().includes('coordinator') ? log.userName : 'Coordinator Not Assigned')}
                           </span>
-                          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 ml-1">
-                            ({coord ? coord.designation : 'Coordinator BS AI / Lecturer'})
-                          </span>
+                          {coord?.designation && (
+                            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 ml-1">
+                              ({coord.designation})
+                            </span>
+                          )}
                         </div>
                       </div>
 
