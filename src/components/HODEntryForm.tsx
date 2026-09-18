@@ -321,7 +321,28 @@ export const HODEntryForm: React.FC<Props> = ({
   // State flags
   const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
+  const [conflictRecord, setConflictRecord] = useState<SubmissionRecord | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Dynamic status change chronological audit logs for this specific section
+  const currentRecordLogs = useMemo(() => {
+    const logs = AuditTrailService.getLogs();
+    const normDept = (department || '').trim().toLowerCase();
+    const normProg = (program || '').trim().toLowerCase();
+    const normShift = (shift || '').trim().toLowerCase();
+    const normSem = (semester || '').trim().toLowerCase();
+    const normSec = (section || '').trim().toLowerCase();
+
+    return logs.filter((log) => {
+      const matchDept = !normDept || log.department.trim().toLowerCase().includes(normDept) || normDept.includes(log.department.trim().toLowerCase());
+      const matchProg = !normProg || log.program.trim().toLowerCase().includes(normProg) || normProg.includes(log.program.trim().toLowerCase());
+      const matchShift = !normShift || !log.shift || log.shift.trim().toLowerCase() === normShift;
+      const matchSem = !normSem || !log.semester || log.semester.trim().toLowerCase() === normSem;
+      const matchSec = !normSec || !log.section || log.section.trim().toLowerCase() === normSec;
+      return matchDept && matchProg && matchShift && matchSem && matchSec;
+    });
+  }, [department, program, shift, semester, section, storageVersion]);
   const [feedbackMessage, setFeedbackMessage] = useState<{
     type: 'success' | 'info' | 'warning';
     text: string;
@@ -832,6 +853,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // Existing record exists -> LOAD EXACT SAVED ROWS ONLY
       setIsExistingRecord(true);
       setLastSavedTime(existing.updatedAt);
+      setLoadedUpdatedAt(existing.updatedAt);
       setHodCoordinator(resolveProgramCoordinatorName(department, program, shift, existing.hodCoordinator));
       if (existing.submissionDate) setSubmissionDate(existing.submissionDate);
 
@@ -855,6 +877,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
+      setLoadedUpdatedAt(null);
       setHodCoordinator(resolveProgramCoordinatorName(department, program, shift));
 
       setSubjects(createInitialBlankRows(1, shift, semester, section));
@@ -1360,7 +1383,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [missingFields, setMissingFields] = useState<Record<string, boolean>>({});
 
   // Save / Update handler
-  const handleSave = async () => {
+  const handleSave = async (forceOverwrite: boolean = false) => {
     if (!department || !program) {
       showFeedback('warning', 'Please select both Department and Program before saving.');
       return;
@@ -1392,6 +1415,23 @@ export const HODEntryForm: React.FC<Props> = ({
     if (activeRows.length === 0) {
       showFeedback('warning', 'Please add and fill at least one course before saving.');
       return;
+    }
+
+    // Conflict detection check (unless forced)
+    if (!forceOverwrite) {
+      const dbRecord = StorageService.getSubmission(
+        department,
+        program,
+        degreeLevel,
+        shift,
+        session,
+        semester,
+        section
+      );
+      if (dbRecord && dbRecord.updatedAt && loadedUpdatedAt && dbRecord.updatedAt !== loadedUpdatedAt && dbRecord.accessedBy !== currentUser?.name) {
+        setConflictRecord(dbRecord);
+        return;
+      }
     }
 
     // Mandatory Field Validation Engine
@@ -1461,7 +1501,9 @@ export const HODEntryForm: React.FC<Props> = ({
 
     if (result.success) {
       setIsExistingRecord(true);
-      setLastSavedTime(new Date().toISOString());
+      const savedTime = new Date().toISOString();
+      setLastSavedTime(savedTime);
+      setLoadedUpdatedAt(savedTime);
       setSubjects(activeRows);
       setMissingFields({});
       showFeedback(
@@ -4049,7 +4091,7 @@ export const HODEntryForm: React.FC<Props> = ({
               <button
                 id="btn-save-record"
                 type="button"
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 disabled={isSaving}
                 className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
               >
@@ -4102,6 +4144,132 @@ export const HODEntryForm: React.FC<Props> = ({
           </>
         )}
       </div>
+
+      {/* SECTION: PROGRAM RECORD AUDIT TIMELINE */}
+      {isExistingRecord && (
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <Clock className="w-5 h-5 text-indigo-500 shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight uppercase">
+                Submission Audit Trail &amp; Status Changes
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                A vertical chronological log of status changes and approvals for this specific offering record.
+              </p>
+            </div>
+          </div>
+
+          {currentRecordLogs.length === 0 ? (
+            <p className="text-xs text-slate-400 italic py-2 text-center">No status changes or audit history recorded for this specific section yet.</p>
+          ) : (
+            <div className="relative border-l border-slate-200 ml-3 pl-5 space-y-5 py-2">
+              {currentRecordLogs.map((log) => {
+                const actionColors = {
+                  CREATED: 'bg-emerald-500',
+                  UPDATED: 'bg-amber-500',
+                  DELETED: 'bg-rose-500',
+                  APPROVED: 'bg-indigo-500',
+                  REASSIGNED: 'bg-violet-500',
+                  LOCKED: 'bg-slate-700',
+                  SELECTION_SHIFT: 'bg-teal-500'
+                };
+                const color = actionColors[log.action as keyof typeof actionColors] || 'bg-slate-400';
+                return (
+                  <div key={log.id} className="relative">
+                    {/* Node Dot */}
+                    <div className={`absolute -left-[25.5px] top-1.5 w-2 h-2 rounded-full ${color} ring-4 ring-white`} />
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">{new Date(log.timestamp).toLocaleString()}</span>
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.25 rounded text-white ${color}`}>
+                          {log.action}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-850">
+                        {log.summary}
+                      </p>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <span className="font-semibold">{log.actorName}</span>
+                        <span>({log.actorRole})</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CONFLICT DETECTION MODAL */}
+      {conflictRecord && (
+        <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3 border-b border-rose-100 pb-3">
+              <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  ⚠️ Version Conflict Detected
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">Record edited concurrently by another user</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50/50 border border-rose-100 rounded-lg space-y-2 text-xs">
+              <p className="text-slate-700">
+                The submission record for <span className="font-bold">{program}</span> (Shift {shift}, Sem {semester}, Sec {section}) was updated after you loaded it.
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono border-t border-rose-100 pt-2 text-slate-500">
+                <div>
+                  <span className="block text-slate-400 uppercase font-bold text-[9px]">Modified By</span>
+                  <span className="font-bold text-slate-700">{conflictRecord.accessedBy || 'Another Faculty'}</span>
+                </div>
+                <div>
+                  <span className="block text-slate-400 uppercase font-bold text-[9px]">Last Modified</span>
+                  <span className="font-bold text-slate-700">
+                    {conflictRecord.updatedAt ? new Date(conflictRecord.updatedAt).toLocaleTimeString() : 'Unknown'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Saving your changes will overwrite their modifications. Alternatively, you can reload the latest database entries, which will discard your current unsaved edits.
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-150">
+              <button
+                type="button"
+                onClick={() => {
+                  // Refresh: Discard local changes, load DB record
+                  setSubjects(conflictRecord.subjects);
+                  setLastSavedTime(conflictRecord.updatedAt);
+                  setLoadedUpdatedAt(conflictRecord.updatedAt);
+                  setConflictRecord(null);
+                  showFeedback('info', 'Record reloaded from database. Concurrent changes merged.');
+                }}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+              >
+                🔄 Refresh &amp; Discard
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  // Overwrite: Save current copy
+                  setConflictRecord(null);
+                  await handleSave(true);
+                }}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer"
+              >
+                💥 Overwrite Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SECTION 05: OFFICIAL SIGNATURES FOOTER (From MNS-UET Sheet) */}
       <div
