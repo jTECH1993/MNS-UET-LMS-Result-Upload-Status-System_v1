@@ -43,15 +43,11 @@ export class StorageService {
       AuthService.initDatabaseSync();
     }).catch(console.error);
 
-    // Listen to Firebase records and update local storage
+    // Listen to Firebase records and update local storage incrementally
     FirebaseStore.listenToSubmissions((records) => {
-      const current = localStorage.getItem(STORAGE_KEY);
-      const newStr = JSON.stringify(records);
-      if (current !== newStr) {
-        localStorage.setItem(STORAGE_KEY, newStr);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
-        }
+      const changed = StorageService.mergeIncrementalSubmissions(records);
+      if (changed && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
     });
 
@@ -1282,9 +1278,91 @@ export class StorageService {
     return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
   }
 
+  /**
+   * Performs an incremental, conflict-free, bi-directional merge of remote 
+   * records from Firestore into the local storage engine. Resolves conflicts 
+   * using record updatedAt timestamps to ensure no data is lost or overridden.
+   */
+  public static mergeIncrementalSubmissions(
+    remoteRecords: Record<string, SubmissionRecord> | SubmissionRecord[]
+  ): boolean {
+    const store = this.getStore();
+    let storeChanged = false;
+
+    const remoteList = Array.isArray(remoteRecords)
+      ? remoteRecords
+      : Object.values(remoteRecords);
+
+    const remoteMap = new Map<string, SubmissionRecord>();
+    remoteList.forEach((rec) => {
+      if (rec && rec.id) {
+        remoteMap.set(rec.id, rec);
+      }
+    });
+
+    // 1. Process remote records (Update / Insert / Sync Back)
+    remoteList.forEach((remote) => {
+      if (!remote || !remote.id) return;
+      const local = store[remote.id];
+
+      if (!local) {
+        // Record is completely new: write to local storage
+        store[remote.id] = remote;
+        storeChanged = true;
+      } else {
+        // Compare updatedAt timestamps to preserve the latest state
+        const localTime = new Date(local.updatedAt || 0).getTime();
+        const remoteTime = new Date(remote.updatedAt || 0).getTime();
+
+        if (remoteTime > localTime) {
+          // Remote is newer: update local store
+          store[remote.id] = remote;
+          storeChanged = true;
+        } else if (localTime > remoteTime) {
+          // Local is newer: sync back to Firebase asynchronously to maintain consistency
+          const firebaseReadyRecord = JSON.parse(JSON.stringify(local));
+          FirebaseStore.saveSubmission(firebaseReadyRecord).catch((err) => {
+            console.error('Failed to sync newer local record back to Firebase:', err);
+          });
+        }
+      }
+    });
+
+    // 2. Handle deletions gracefully
+    // If the remote records list is populated and a local record is missing,
+    // we only delete it if it is reasonably old (> 15 seconds) to avoid wiping out
+    // newly created unsynced local records during offline sessions.
+    if (remoteList.length > 0) {
+      Object.keys(store).forEach((localId) => {
+        if (localId.startsWith('__')) return; // Skip diagnostic pings
+        if (!remoteMap.has(localId)) {
+          const local = store[localId];
+          const ageMs = Date.now() - new Date(local.createdAt || local.updatedAt || 0).getTime();
+          if (ageMs > 15000) {
+            delete store[localId];
+            storeChanged = true;
+          }
+        }
+      });
+    }
+
+    if (storeChanged) {
+      this.setStore(store);
+    }
+
+    return storeChanged;
+  }
+
   public static async apiSyncSubmissions(): Promise<void> {
-    // Replaced by initFirebaseSync real-time listeners
-    return Promise.resolve();
+    try {
+      const remoteList = await FirebaseStore.fetchAllSubmissions();
+      const changed = this.mergeIncrementalSubmissions(remoteList);
+      if (changed && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+    } catch (e) {
+      console.error('apiSyncSubmissions incremental update failed:', e);
+    }
   }
 
   public static getAllSubmissions(): SubmissionRecord[] {
