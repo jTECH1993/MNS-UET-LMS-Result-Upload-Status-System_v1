@@ -425,7 +425,7 @@ export class CompletionRadarService {
     const semList = Array.isArray(semesterFilter)
       ? semesterFilter.filter((s) => s !== 'ALL')
       : semesterFilter && semesterFilter !== 'ALL'
-      ? [semesterFilter]
+      ? semesterFilter.split(',')
       : [];
 
     const activeSems = semList.length > 0
@@ -624,7 +624,7 @@ export class CompletionRadarService {
     const semList = Array.isArray(semesterFilter)
       ? semesterFilter.filter((s) => s !== 'ALL')
       : semesterFilter && semesterFilter !== 'ALL'
-      ? [semesterFilter]
+      ? semesterFilter.split(',')
       : [];
 
     const progRecords = allRecords.filter((r) => {

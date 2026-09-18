@@ -32,6 +32,7 @@ interface Props {
   onDrillPathChange: (newPath: RadarDrillPath) => void;
   onSelectUnitForInspector?: (unit: RadarUnit | null) => void;
   highlightedBottleneckSection?: string | null;
+  semesterFilter?: string | string[];
 }
 
 export const SubmissionCoverageRadar: React.FC<Props> = ({
@@ -41,6 +42,7 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
   onDrillPathChange,
   onSelectUnitForInspector,
   highlightedBottleneckSection,
+  semesterFilter,
 }) => {
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
 
@@ -64,17 +66,18 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
   // Compute the current list of Radar Units based on drill-down level
   const units = useMemo<RadarUnit[]>(() => {
     if (currentLevel === 'UNIVERSITY') {
-      return CompletionRadarService.getUniversityDepartmentCoverage(allRecords, currentSession);
+      return CompletionRadarService.getUniversityDepartmentCoverage(allRecords, currentSession, semesterFilter);
     }
     if (currentLevel === 'DEPARTMENT' && drillPath.deptName) {
-      return CompletionRadarService.getProgramsCoverage(drillPath.deptName, currentSession, allRecords);
+      return CompletionRadarService.getProgramsCoverage(drillPath.deptName, currentSession, allRecords, semesterFilter);
     }
     if (currentLevel === 'PROGRAM' && drillPath.deptName && drillPath.progName) {
       return CompletionRadarService.getSemestersCoverage(
         drillPath.deptName,
         drillPath.progName,
         currentSession,
-        allRecords
+        allRecords,
+        semesterFilter
       );
     }
     if (currentLevel === 'SEMESTER' && drillPath.deptName && drillPath.progName && drillPath.semId) {
@@ -87,7 +90,7 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
       );
     }
     return [];
-  }, [currentLevel, drillPath, allRecords, currentSession]);
+  }, [currentLevel, drillPath, allRecords, currentSession, semesterFilter]);
 
   // If in COURSES view, retrieve the course items for the selected section
   const sectionCourseUnit = useMemo<RadarUnit | null>(() => {
@@ -102,7 +105,7 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
       );
     }
     return null;
-  }, [currentLevel, drillPath, allRecords, currentSession]);
+  }, [currentLevel, drillPath, allRecords, currentSession, semesterFilter]);
 
   // Inform parent inspector of active unit whenever hovered or selected
   const handleHoverUnit = (unit: RadarUnit | null) => {

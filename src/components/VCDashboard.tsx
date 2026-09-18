@@ -1484,6 +1484,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 onDrillPathChange={setRadarDrillPath}
                 onSelectUnitForInspector={setRadarInspectorUnit}
                 highlightedBottleneckSection={highlightedBottleneckSection}
+                semesterFilter={selectedSemesterFilter}
               />
             </div>
 
