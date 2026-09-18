@@ -595,14 +595,14 @@ export class VCAnalyticsService {
       });
 
       let deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
-      const completedProgramsCount = programDims.filter((p) => p.completionRate >= 100 && p.pendingCourses === 0 && p.totalCourses > 0).length;
-      const totalProgramsCount = programDims.length;
+      const activeProgramsWithCourses = programDims.filter(p => p.totalCourses > 0);
+      const completedProgramsCount = activeProgramsWithCourses.filter((p) => p.completionRate >= 100 && p.pendingCourses === 0).length;
+      const totalProgramsCount = activeProgramsWithCourses.length;
       const hasUnfinishedPrograms = completedProgramsCount < totalProgramsCount;
       const allProgramsCompleted = totalProgramsCount > 0 && completedProgramsCount === totalProgramsCount;
 
-      // CRITICAL FIX: If ANY program in the department is still pending or has courses left,
+      // CRITICAL FIX: If ANY active program with courses in the department is still pending or has courses left,
       // the department completion rate CANNOT read 100%!
-      // If a department has 3 programs and 2 are left unsubmitted, completion is proportional (e.g. 33%-41%), NOT 100%!
       if (hasUnfinishedPrograms) {
         const courseBasedPct = deptCourses > 0 ? Math.floor((deptUploaded / deptCourses) * 100) : 0;
         const programBasedCap = totalProgramsCount > 0 ? Math.floor((completedProgramsCount / totalProgramsCount) * 100) : 0;
@@ -612,6 +612,9 @@ export class VCAnalyticsService {
         if (deptCompletion >= 100) {
           deptCompletion = programBasedCap > 0 ? programBasedCap : Math.min(courseBasedPct, 95);
         }
+      }
+      if (deptCourses > 0 && deptUploaded === deptCourses && deptPending === 0) {
+        deptCompletion = 100;
       }
       if (deptUploaded === 0) {
         deptCompletion = 0;

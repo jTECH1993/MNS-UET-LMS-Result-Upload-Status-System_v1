@@ -13,6 +13,8 @@ import { DepartmentCompletionHeatmap } from './DepartmentCompletionHeatmap';
 import { DepartmentDrillDownModal } from './DepartmentDrillDownModal';
 import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
 import { ActionRequiredPanel } from './ActionRequiredPanel';
+import { ActionCenterPanel } from './ActionCenterPanel';
+import { AdminGodModePanel } from './AdminGodModePanel';
 import { SectionPerformanceMatrix } from './SectionPerformanceMatrix';
 import { DeadlineAgingChart } from './DeadlineAgingChart';
 import { SubmissionCoverageRadar } from './SubmissionCoverageRadar';
@@ -133,7 +135,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'AI_ASSISTANT' | 'DIGITAL_TWIN'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'AI_ASSISTANT' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ADMIN_CONSOLE'>('COMMAND_CENTER');
 
   // AI Assistant State
   const [aiQuestion, setAiQuestion] = useState<string>('');
@@ -619,7 +621,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       });
 
       let percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
-      if ((submittedCohorts < totalCohorts || totalPending > 0) && percentage >= 100) {
+      if (totalPending === 0 && totalUploaded === totalSubjects && totalSubjects > 0) {
+        percentage = 100;
+      } else if ((submittedCohorts < totalCohorts || totalPending > 0) && percentage >= 100) {
         percentage = Math.min(percentage, Math.floor((totalUploaded / Math.max(totalSubjects, 1)) * 100));
         if (percentage >= 100) {
           percentage = 95;
@@ -1519,6 +1523,32 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <Building2 className="w-3.5 h-3.5 text-indigo-400" />
             <span>University Digital Twin</span>
           </button>
+          <button
+            id="btn-vc-mode-action-center"
+            type="button"
+            onClick={() => setDashboardViewMode('ACTION_CENTER')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'ACTION_CENTER'
+                ? 'bg-emerald-750 text-white shadow-xs ring-2 ring-emerald-500/20'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>VC Action Center</span>
+          </button>
+          <button
+            id="btn-vc-mode-admin-console"
+            type="button"
+            onClick={() => setDashboardViewMode('ADMIN_CONSOLE')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              dashboardViewMode === 'ADMIN_CONSOLE'
+                ? 'bg-emerald-750 text-white shadow-xs ring-2 ring-emerald-500/20'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
+            <span>Admin Console</span>
+          </button>
         </div>
       </div>
 
@@ -1893,6 +1923,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             activeSessions={activeSessions}
             selectedSemesterFilter={selectedSemesterFilter}
           />
+        </div>
+      )}
+
+      {/* VC Action Center Tab */}
+      {dashboardViewMode === 'ACTION_CENTER' && (
+        <div className="mt-2">
+          <ActionCenterPanel allRecords={allRecords} />
+        </div>
+      )}
+
+      {/* Admin Console Tab */}
+      {dashboardViewMode === 'ADMIN_CONSOLE' && (
+        <div className="mt-2">
+          <AdminGodModePanel allRecords={allRecords} />
         </div>
       )}
 
