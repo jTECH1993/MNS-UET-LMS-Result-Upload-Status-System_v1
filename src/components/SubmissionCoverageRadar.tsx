@@ -342,9 +342,18 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                 <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
                   Course-Level Verification & Inspection
                 </span>
-                <h4 className="text-base sm:text-lg font-bold text-white">
-                  {sectionCourseUnit.progName} • Semester {sectionCourseUnit.semId} (Section {sectionCourseUnit.sectionId})
-                </h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-base sm:text-lg font-bold text-white">
+                    {sectionCourseUnit.progName} • Semester {sectionCourseUnit.semId} (Section {sectionCourseUnit.sectionId})
+                  </h4>
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shadow-xs ${
+                    (sectionCourseUnit.shift || 'Morning').toLowerCase().includes('evening')
+                      ? 'bg-purple-950/90 text-purple-300 border-purple-700/80'
+                      : 'bg-amber-950/90 text-amber-300 border-amber-700/80'
+                  }`}>
+                    {(sectionCourseUnit.shift || 'Morning')} Shift
+                  </span>
+                </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {sectionCourseUnit.deptName} • Coordinator:{' '}
                   <span className="text-emerald-400 font-semibold">{sectionCourseUnit.coordinatorName}</span>
@@ -394,12 +403,19 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                     </div>
 
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
                           {course.courseCode}
                         </span>
                         <h5 className="text-sm font-bold text-white">{course.subjectTitle}</h5>
                         <span className="text-[10px] text-slate-400">({course.creditHours})</span>
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+                          (course.shift || sectionCourseUnit.shift || 'Morning').toLowerCase().includes('evening')
+                            ? 'bg-purple-950/90 text-purple-300 border-purple-800'
+                            : 'bg-amber-950/90 text-amber-300 border-amber-800'
+                        }`}>
+                          {(course.shift || sectionCourseUnit.shift || 'Morning')} Shift
+                        </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-400">
                         <span>Instructor/By: <strong className="text-slate-300">{course.uploadedBy || 'Awaiting entry'}</strong></span>

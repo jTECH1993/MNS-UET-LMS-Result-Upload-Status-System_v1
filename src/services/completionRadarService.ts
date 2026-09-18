@@ -16,6 +16,7 @@ export interface CourseItem {
   coordinatorName: string;
   deadlineText: string;
   lastActivity: string;
+  shift?: 'Morning' | 'Evening' | string;
 }
 
 export interface RadarUnit {
@@ -43,6 +44,7 @@ export interface RadarUnit {
   semId?: string;
   semLabel?: string;
   sectionId?: string;
+  shift?: 'Morning' | 'Evening' | string;
   courses?: CourseItem[];
 }
 
@@ -517,6 +519,7 @@ export class CompletionRadarService {
           coordinatorName: coord.name,
           deadlineText: deadlineInfo.text,
           lastActivity: subj.dateUploaded || rec.updatedAt || 'Synced',
+          shift: rec?.shift || 'Morning',
         });
       });
     } else {
@@ -534,6 +537,7 @@ export class CompletionRadarService {
         coordinatorName: coord.name,
         deadlineText: deadlineInfo.text,
         lastActivity: 'Awaiting submission',
+        shift: 'Morning',
       });
       pending = 5;
     }
@@ -565,6 +569,7 @@ export class CompletionRadarService {
       progName,
       semId,
       sectionId,
+      shift: rec?.shift || 'Morning',
       courses,
     };
   }

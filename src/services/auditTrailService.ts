@@ -23,12 +23,83 @@ export interface AuditTrailRecord {
 
 const AUDIT_KEY = 'mnsuet_audit_trail_records_v99';
 
+const SEED_AUDIT_LOGS: AuditTrailRecord[] = [
+  {
+    id: 'audit_seed_101',
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+    action: 'APPROVED',
+    actorName: 'Dr. Muhammad Tariq',
+    actorRole: 'Head of Department (HOD)',
+    department: 'Department of Electrical Engineering & Technology',
+    program: 'B.Sc. Electrical Engineering',
+    shift: 'Morning',
+    semester: '1',
+    section: 'A',
+    summary: 'HOD verified and approved Semester 1 (Section A) result sheet submission into LMS.',
+  },
+  {
+    id: 'audit_seed_102',
+    timestamp: new Date(Date.now() - 3600000 * 5).toISOString(),
+    action: 'UPDATED',
+    actorName: 'Engr. M. Arslan Qasim',
+    actorRole: 'Program Coordinator',
+    department: 'Department of Mechanical Engineering & Technology',
+    program: 'B.Sc. Mechanical Engineering',
+    shift: 'Morning',
+    semester: '1',
+    section: 'A',
+    summary: 'Uploaded course MET-101 Technical Drawing final grade sheet and synchronized with LMS.',
+  },
+  {
+    id: 'audit_seed_103',
+    timestamp: new Date(Date.now() - 3600000 * 12).toISOString(),
+    action: 'REASSIGNED',
+    actorName: 'Prof. Dr. Kamran',
+    actorRole: 'Vice Chancellor',
+    department: 'Department of Computer Science & Information Technology',
+    program: 'B.Sc. Computer Science',
+    shift: 'Evening',
+    semester: '3',
+    section: 'B',
+    summary: 'Reassigned Program Coordinator role to Dr. Usman Ali for Evening Shift Session 2023.',
+  },
+  {
+    id: 'audit_seed_104',
+    timestamp: new Date(Date.now() - 3600000 * 24).toISOString(),
+    action: 'CREATED',
+    actorName: 'Engr. Saad Ahmad',
+    actorRole: 'Course Instructor',
+    department: 'Department of Civil Engineering & Technology',
+    program: 'B.Sc. Civil Engineering',
+    shift: 'Morning',
+    semester: '2',
+    section: 'A',
+    summary: 'Created new result entry for Surveying-I (CVE-102) and attached mid & final assessment marks.',
+  },
+  {
+    id: 'audit_seed_105',
+    timestamp: new Date(Date.now() - 3600000 * 36).toISOString(),
+    action: 'UPDATED',
+    actorName: 'Dr. Shahbaz',
+    actorRole: 'Head of Department (HOD)',
+    department: 'Department of Chemical Engineering & Technology',
+    program: 'B.Sc. Chemical Engineering',
+    shift: 'Morning',
+    semester: '1',
+    section: 'A',
+    summary: 'Updated delay justification remarks for Fluid Mechanics result tabulations.',
+  },
+];
+
 export class AuditTrailService {
   private static isInitialized = false;
 
   public static init(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
+
+    // Seed logs if empty
+    this.getLogs();
 
     // Listen to Firebase audit logs
     FirebaseStore.listenGlobalState(AUDIT_KEY, (data) => {
@@ -48,9 +119,21 @@ export class AuditTrailService {
   public static getLogs(): AuditTrailRecord[] {
     try {
       const stored = localStorage.getItem(AUDIT_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
     } catch (e) {}
-    return [];
+
+    // Populate seed audit logs if empty
+    try {
+      localStorage.setItem(AUDIT_KEY, JSON.stringify(SEED_AUDIT_LOGS));
+      FirebaseStore.syncGlobalState(AUDIT_KEY, SEED_AUDIT_LOGS).catch(console.error);
+    } catch (e) {}
+
+    return SEED_AUDIT_LOGS;
   }
 
   public static logChange(entry: {
