@@ -77,6 +77,7 @@ export class StorageService {
       ACTIVE_SESSIONS_KEY,
       WORK_ON_DEMAND_KEY,
       'mnsuet_user_accounts_v99',
+      'mnsuet_cohort_sections_v99',
       'mnsuet_session_active_roster_v99__2023',
       'mnsuet_session_active_roster_v99__2024'
     ];
@@ -673,6 +674,86 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
       console.error(e);
       return false;
     }
+  }
+
+  public static getCohortSectionsMap(): Record<string, string[]> {
+    try {
+      const raw = localStorage.getItem('mnsuet_cohort_sections_v99');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  }
+
+  public static getAvailableSectionsForCohort(
+    department: string,
+    program: string,
+    session: string,
+    semester: string,
+    shift: string
+  ): string[] {
+    const store = this.getStore();
+    const foundSections = new Set<string>(['A']); // Section A is baseline
+
+    // 1. From registered custom/added sections
+    const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
+    const progKey = `${department}__${program}`;
+    const sectionsMap = this.getCohortSectionsMap();
+    if (sectionsMap[cohortKey]) {
+      sectionsMap[cohortKey].forEach((s) => foundSections.add(s.trim().toUpperCase()));
+    }
+    if (sectionsMap[progKey]) {
+      sectionsMap[progKey].forEach((s) => foundSections.add(s.trim().toUpperCase()));
+    }
+
+    // 2. Discover from stored submissions
+    Object.values(store).forEach((rec) => {
+      if (
+        rec.department === department &&
+        rec.program === program &&
+        (!session || rec.session === session) &&
+        (!semester || rec.semester === semester) &&
+        (!shift || rec.shift === shift) &&
+        rec.section
+      ) {
+        foundSections.add(rec.section.trim().toUpperCase());
+      }
+    });
+
+    return Array.from(foundSections).sort((a, b) => {
+      if (a === 'A') return -1;
+      if (b === 'A') return 1;
+      if (a === 'B') return -1;
+      if (b === 'B') return 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  public static registerCohortSection(
+    department: string,
+    program: string,
+    session: string,
+    semester: string,
+    shift: string,
+    sectionToAdd: string
+  ): string[] {
+    const cleanSec = (sectionToAdd || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
+    const sectionsMap = this.getCohortSectionsMap();
+    const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
+    const progKey = `${department}__${program}`;
+
+    const current = new Set<string>(sectionsMap[cohortKey] || ['A']);
+    current.add(cleanSec);
+    sectionsMap[cohortKey] = Array.from(current);
+
+    const progCurrent = new Set<string>(sectionsMap[progKey] || ['A']);
+    progCurrent.add(cleanSec);
+    sectionsMap[progKey] = Array.from(progCurrent);
+
+    localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
+    return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
   }
 
   public static async apiSyncSubmissions(): Promise<void> {

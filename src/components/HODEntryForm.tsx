@@ -250,10 +250,32 @@ export const HODEntryForm: React.FC<Props> = ({
     });
   }, [department, program, degreeLevel, shift, session, section, lastSavedTime, isExistingRecord]);
 
-  // Status of standard sections (A and B) for the currently selected semester & shift
+  // Available sections for the current cohort (synced with database and user additions)
+  const availableSections = useMemo(() => {
+    return StorageService.getAvailableSectionsForCohort(
+      department,
+      program,
+      session,
+      semester,
+      shift
+    );
+  }, [department, program, session, semester, shift, lastSavedTime, isExistingRecord]);
+
+  // Status of all active sections for the currently selected semester & shift
   const sectionStatuses = useMemo(() => {
-    const defaultSections = ['A', 'B'];
-    return defaultSections.map((secId) => {
+    const sectionSet = new Set<string>(availableSections);
+    sectionSet.add('A');
+    if (section) sectionSet.add(section);
+
+    const sorted = Array.from(sectionSet).sort((a, b) => {
+      if (a === 'A') return -1;
+      if (b === 'A') return 1;
+      if (a === 'B') return -1;
+      if (b === 'B') return 1;
+      return a.localeCompare(b);
+    });
+
+    return sorted.map((secId) => {
       const existing = StorageService.getSubmission(
         department,
         program,
@@ -281,10 +303,11 @@ export const HODEntryForm: React.FC<Props> = ({
         summary: summaryInfo,
       };
     });
-  }, [department, program, degreeLevel, shift, session, semester, section, lastSavedTime, isExistingRecord]);
+  }, [department, program, degreeLevel, shift, session, semester, section, availableSections, lastSavedTime, isExistingRecord]);
 
   const handleSectionChange = (newSec: string) => {
     const cleanSec = (newSec || 'A').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'A';
+    StorageService.registerCohortSection(department, program, session, semester, shift, cleanSec);
     setSection(cleanSec);
     setIsCustomSectionOpen(false);
     if (onSectionChangedProp) onSectionChangedProp(cleanSec);
@@ -305,22 +328,6 @@ export const HODEntryForm: React.FC<Props> = ({
   const [submissionDate, setSubmissionDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
-
-  const programHasSectionB = (progName: string): boolean => {
-    if (!progName) return true;
-    const lower = progName.toLowerCase();
-    if (lower.includes('ms ') || lower.includes('phd') || lower.includes('m.sc') || lower.includes('b.tech')) {
-      return false;
-    }
-    return true;
-  };
-
-  useEffect(() => {
-    if (!programHasSectionB(program) && section === 'B') {
-      setSection('A');
-      if (onSectionChangedProp) onSectionChangedProp('A');
-    }
-  }, [program]);
 
   // Update hodCoordinator if currentUser changes and not editing an existing locked record
   useEffect(() => {
@@ -1437,20 +1444,31 @@ export const HODEntryForm: React.FC<Props> = ({
                 <Layers className="w-3.5 h-3.5 text-indigo-700" />
                 Sections Filter:
               </span>
-              <span
-                className={`font-bold px-2 py-0.5 rounded text-[10px] ${
-                  programHasSectionB(program)
-                    ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                    : 'bg-amber-50 text-amber-800 border border-amber-200'
-                }`}
-                title={
-                  programHasSectionB(program)
-                    ? 'Section A & Section B are available for this program'
-                    : 'Section B is not available for this program (Single Section)'
-                }
-              >
-                {programHasSectionB(program) ? 'Sec A & Sec B Active' : 'Sec A Only (Section B N/A)'}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                    sectionStatuses.length > 1
+                      ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  }`}
+                  title={`${sectionStatuses.length} section(s) currently configured for this program`}
+                >
+                  {sectionStatuses.length > 1
+                    ? `${sectionStatuses.length} Sections: ${sectionStatuses.map((s) => s.shortLabel).join(', ')}`
+                    : `Sec A Active (Single Section)`}
+                </span>
+                {!sectionStatuses.some((s) => s.id === 'B') && (
+                  <button
+                    type="button"
+                    onClick={() => handleSectionChange('B')}
+                    className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-all cursor-pointer flex items-center gap-0.5"
+                    title="Enable Section B for this program and cohort"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Sec B</span>
+                  </button>
+                )}
+              </div>
             </div>
             {/* Quick multi-program switcher chips for coordinators overseeing >1 program */}
             {currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 1 && (
@@ -1572,20 +1590,32 @@ export const HODEntryForm: React.FC<Props> = ({
             </div>
             <select
               id="select-section"
-              value={section === 'B' ? 'B' : 'A'}
+              value={section}
               onChange={(e) => {
-                handleSectionChange(e.target.value);
+                const val = e.target.value;
+                if (val === '__ADD_B__') {
+                  handleSectionChange('B');
+                } else if (val === '__ADD_OTHER__') {
+                  setIsCustomSectionOpen(true);
+                  setCustomSectionInput('');
+                } else {
+                  handleSectionChange(val);
+                }
               }}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer"
             >
-              <option value="A">Section A</option>
-              <option
-                value="B"
-                disabled={!programHasSectionB(program)}
-                title={!programHasSectionB(program) ? 'Not available for this program' : undefined}
-                className={!programHasSectionB(program) ? 'text-slate-400 bg-slate-100 italic' : ''}
-              >
-                Section B {!programHasSectionB(program) ? '(Not available for this program)' : ''}
+              {sectionStatuses.map((sec) => (
+                <option key={sec.id} value={sec.id}>
+                  {sec.label} {sec.hasRecord ? `(● ${sec.courseCount} courses logged)` : '(Empty)'}
+                </option>
+              ))}
+              {!sectionStatuses.some((s) => s.id === 'B') && (
+                <option value="__ADD_B__" className="text-indigo-700 font-bold">
+                  + Add Section B...
+                </option>
+              )}
+              <option value="__ADD_OTHER__" className="text-slate-600 font-semibold">
+                + Add Other Section (C, D...)...
               </option>
             </select>
           </div>
@@ -1599,7 +1629,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 Class Section:
               </span>
               <span className="text-[11px] text-slate-500 font-normal">
-                (Data is strictly isolated per section — Section A & B never overlap)
+                (Data is strictly isolated per section — Section A &amp; B never overlap)
               </span>
             </div>
             <div className="text-[11px] text-indigo-900 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
@@ -1609,22 +1639,14 @@ export const HODEntryForm: React.FC<Props> = ({
           <div className="flex flex-wrap items-center gap-2">
             {sectionStatuses.map((sec) => {
               const isSelected = sec.id === section;
-              const isSecBDisabled = sec.id === 'B' && !programHasSectionB(program);
               return (
                 <button
                   key={sec.id}
                   id={`btn-section-tab-${sec.id}`}
                   type="button"
-                  disabled={isSecBDisabled}
-                  onClick={() => {
-                    if (isSecBDisabled) return;
-                    handleSectionChange(sec.id);
-                  }}
-                  title={isSecBDisabled ? 'Not available for this program' : undefined}
+                  onClick={() => handleSectionChange(sec.id)}
                   className={`py-2 px-3.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border ${
-                    isSecBDisabled
-                      ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200 line-through'
-                      : isSelected
+                    isSelected
                       ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30 cursor-pointer'
                       : sec.hasRecord
                       ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100 cursor-pointer'
@@ -1632,11 +1654,7 @@ export const HODEntryForm: React.FC<Props> = ({
                   }`}
                 >
                   <span className="text-sm font-black">{sec.label}</span>
-                  {isSecBDisabled ? (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded font-normal text-slate-400">
-                      N/A ✕
-                    </span>
-                  ) : sec.hasRecord ? (
+                  {sec.hasRecord ? (
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
                         isSelected ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-200 text-indigo-900'
@@ -1656,6 +1674,20 @@ export const HODEntryForm: React.FC<Props> = ({
                 </button>
               );
             })}
+
+            {/* Quick Add Section B if not already present */}
+            {!sectionStatuses.some((s) => s.id === 'B') && (
+              <button
+                id="btn-add-section-b"
+                type="button"
+                onClick={() => handleSectionChange('B')}
+                className="py-2 px-3 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 hover:border-indigo-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Create / Activate Section B for this cohort"
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                <span>+ Section B</span>
+              </button>
+            )}
 
             {/* Custom section button */}
             <button
