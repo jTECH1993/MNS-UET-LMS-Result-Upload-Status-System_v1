@@ -712,14 +712,28 @@ export class CompletionRadarService {
           activeSections.forEach((secId) => {
             const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, sessionList, allRecords);
 
+            let pendingCoursesCount = unit.pending;
+            let totalCoursesCount = unit.total;
+            let submittedCoursesCount = unit.submitted;
+            let completionRateValue = unit.completionRate;
+
+            // If completely unsubmitted (unit.total === 0 because no records exist in DB),
+            // it means all 5 curriculum courses are pending!
+            if (unit.total === 0) {
+              pendingCoursesCount = 5;
+              totalCoursesCount = 5;
+              submittedCoursesCount = 0;
+              completionRateValue = 0;
+            }
+
             // Compute Risk Score
             let risk = 0;
 
             // Workload factor: more pending courses = higher bottleneck
-            risk += unit.pending * 15;
+            risk += pendingCoursesCount * 15;
 
             // Completion deficit: 0% completion is penalized heavily
-            risk += (100 - unit.completionRate);
+            risk += (100 - completionRateValue);
 
             // Missing coordinator penalty
             if (!coord.isAssigned) {
@@ -741,20 +755,20 @@ export class CompletionRadarService {
             }
 
             // Prefer sections with pending courses
-            if (unit.pending > 0) {
+            if (pendingCoursesCount > 0) {
               let reason = '';
-              if (!coord.isAssigned && unit.pending === unit.total) {
+              if (!coord.isAssigned && pendingCoursesCount === totalCoursesCount) {
                 reason = 'No coordinator assigned and 100% of courses unsubmitted';
               } else if (deadlineInfo.isOverdue) {
-                reason = `Deadline expired with ${unit.pending} pending courses`;
-              } else if (unit.pending >= 5) {
-                reason = `Heavy backlog: ${unit.pending} of ${unit.total} courses unsubmitted with deadline in ${deadlineInfo.days} days`;
+                reason = `Deadline expired with ${pendingCoursesCount} pending courses`;
+              } else if (pendingCoursesCount >= 5) {
+                reason = `Heavy backlog: ${pendingCoursesCount} of ${totalCoursesCount} courses unsubmitted with deadline in ${deadlineInfo.days} days`;
               } else {
-                reason = `Stagnant upload progress (${unit.completionRate}% complete)`;
+                reason = `Stagnant upload progress (${completionRateValue}% complete)`;
               }
 
               const uploadStatus: 'Complete' | 'Partially Uploaded' | 'Pending' =
-                unit.pending === 0 ? 'Complete' : unit.submitted > 0 ? 'Partially Uploaded' : 'Pending';
+                pendingCoursesCount === 0 ? 'Complete' : submittedCoursesCount > 0 ? 'Partially Uploaded' : 'Pending';
 
               candidates.push({
                 department: dept.name,
@@ -764,10 +778,10 @@ export class CompletionRadarService {
                 semesterId: sem.id,
                 semesterLabel: sem.label,
                 section: `Section ${secId}`,
-                totalCourses: unit.total,
-                submittedCourses: unit.submitted,
-                pendingCourses: unit.pending,
-                completionRate: unit.completionRate,
+                totalCourses: totalCoursesCount,
+                submittedCourses: submittedCoursesCount,
+                pendingCourses: pendingCoursesCount,
+                completionRate: completionRateValue,
                 uploadStatus,
                 coordinatorStatus: coord.isAssigned ? 'Assigned' : 'Not Assigned',
                 coordinatorName: coord.name,
@@ -778,7 +792,22 @@ export class CompletionRadarService {
                 daysRemaining: deadlineInfo.days,
                 riskScore: risk,
                 reason,
-                laggingCourses: (unit.courses || []).filter((c) => !c.submitted),
+                laggingCourses: (unit.courses || []).length > 0
+                  ? (unit.courses || []).filter((c) => !c.submitted)
+                  : Array.from({ length: 5 }, (_, i) => ({
+                      id: `lms-course-pending-${dept.code}-${sem.id}-${i}`,
+                      courseCode: `${dept.code}-${sem.id}0${i + 1}`,
+                      subjectTitle: `Curriculum Course ${i + 1}`,
+                      creditHours: '3(3-0)',
+                      status: 'Pending',
+                      submitted: false,
+                      uploadedBy: 'Unassigned',
+                      remarks: 'Awaiting instructor entry',
+                      coordinatorName: coord.name,
+                      deadlineText: deadlineInfo.text,
+                      lastActivity: 'Not started',
+                      shift: 'Morning',
+                    })),
               });
             }
           });

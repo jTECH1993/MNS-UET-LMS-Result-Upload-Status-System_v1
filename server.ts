@@ -3,6 +3,7 @@ import cors from 'cors';
 import asyncHandler from 'express-async-handler';
 import bcrypt from 'bcryptjs';
 import { db } from './src/db/index.js';
+import { GoogleGenAI } from '@google/genai';
 import {
   users,
   programs,
@@ -411,6 +412,186 @@ app.delete('/api/work-on-demand/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   await db.delete(workOnDemand).where(eq(workOnDemand.id, id));
   res.json({ success: true });
+}));
+
+// -----------------------------------------------------------------------------
+// AI EXECUTIVE ASSISTANT ENDPOINT (GEMINI API)
+// -----------------------------------------------------------------------------
+app.post('/api/gemini/vc-assistant', asyncHandler(async (req, res) => {
+  const { question } = req.body;
+  if (!question) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+
+  // 1. Gather all structured data
+  const subs = await db.select().from(submissions);
+  const subjs = await db.select().from(subjects);
+  const usersList = await db.select().from(users);
+  const reqs = await db.select().from(workOnDemand);
+  const logs = await db.select().from(accessLogs).orderBy(desc(accessLogs.timestamp)).limit(30);
+
+  // Summarize submissions with subjects
+  const subMap: Record<string, typeof subjs> = {};
+  subjs.forEach(s => {
+    if (s.submissionId) {
+      if (!subMap[s.submissionId]) subMap[s.submissionId] = [];
+      subMap[s.submissionId].push(s);
+    }
+  });
+
+  const summarizedSubmissions = subs.map(sub => {
+    const list = subMap[sub.id] || [];
+    const total = list.length;
+    const uploaded = list.filter(c => c.status === 'Uploaded').length;
+    const pending = list.filter(c => c.status === 'Pending' || !c.status).length;
+    const inProgress = list.filter(c => c.status === 'In Progress').length;
+    
+    return {
+      id: sub.id,
+      department: sub.department,
+      program: sub.program,
+      shift: sub.shift,
+      session: sub.session,
+      semester: sub.semester,
+      section: sub.section,
+      coordinator: sub.hodCoordinator || 'Unassigned',
+      totalCourses: total,
+      uploadedCourses: uploaded,
+      pendingCourses: pending,
+      inProgressCourses: inProgress,
+      updatedAt: sub.updatedAt,
+      courses: list.map(c => ({
+        code: c.courseCode,
+        title: c.subjectTitle,
+        status: c.status,
+        instructor: c.uploadedBy || 'Unassigned'
+      }))
+    };
+  });
+
+  const summaryText = `
+Academics Database Summary:
+- Total submissions in system: ${subs.length}
+- Submissions Details:
+${JSON.stringify(summarizedSubmissions, null, 2)}
+
+User Accounts:
+${JSON.stringify(usersList.map(u => ({ name: u.name, role: u.role, dept: u.department, designation: u.designation, isLocked: u.isLocked })), null, 2)}
+
+Work On Demand Requisitions:
+${JSON.stringify(reqs, null, 2)}
+
+Recent Access Logs:
+${JSON.stringify(logs, null, 2)}
+`;
+
+  const systemInstruction = `You are the executive AI assistant to the Vice Chancellor of MNS-UET. 
+You are answering questions about the university's academic compliance, grade sheet submissions, delays, and coordinator status.
+Use the structured Academics Database Summary below to answer the VC's question. 
+You MUST provide actual facts, numbers, names, and specifics (like course codes, department names, program names, and coordinator/HOD names) as evidence for your answers.
+If there are no issues, state that clearly. DO NOT invent or make up any records, numbers, or details. Keep your response highly professional, structured, and easy for an executive to read (use clear bolding, bullet points, and tables where appropriate).`;
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    // Fallback simulation based on actual database facts
+    let responseText = `(Diagnostic Engine Analysing Direct Database: GEMINI_API_KEY environment variable is currently not set)\n\n`;
+    const lowerQuestion = question.toLowerCase();
+
+    if (lowerQuestion.includes('delay') || lowerQuestion.includes('overdue') || lowerQuestion.includes('pending')) {
+      const lagging = summarizedSubmissions.filter(s => s.pendingCourses > 0);
+      if (lagging.length > 0) {
+        responseText += `### Delays & Pending Uploads Report (Actual Database Facts):\n`;
+        lagging.forEach(l => {
+          responseText += `- **${l.program}** (${l.shift}, Semester ${l.semester}, Section ${l.section}):\n`;
+          responseText += `  - **Status**: **${l.pendingCourses} pending courses** out of ${l.totalCourses} total (${Math.round((l.uploadedCourses / l.totalCourses) * 100)}% complete).\n`;
+          responseText += `  - **Coordinator**: *${l.coordinator}*\n`;
+          responseText += `  - **Last Updated**: ${l.updatedAt ? new Date(l.updatedAt).toLocaleString() : 'N/A'}\n`;
+          const pendingList = l.courses.filter(c => c.status === 'Pending' || !c.status).map(c => `\`${c.code}\` (*${c.title}*)`);
+          if (pendingList.length > 0) {
+            responseText += `  - **Lagging Subjects**: ${pendingList.join(', ')}\n`;
+          }
+          responseText += `\n`;
+        });
+      } else {
+        responseText += `✓ **Perfect Compliance**: There are currently **no lagging or pending courses** in the entire system database! All submissions are fully uploaded.\n`;
+      }
+    } else if (lowerQuestion.includes('hod') || lowerQuestion.includes('coordinator')) {
+      responseText += `### HOD & Coordinator Assignment Audit:\n\n`;
+      const criticalProgs = summarizedSubmissions.filter(s => s.coordinator === 'Unassigned' || s.coordinator === 'Not Assigned');
+      if (criticalProgs.length > 0) {
+        responseText += `⚠️ **Unassigned Roster Delays**:\n`;
+        criticalProgs.forEach(p => {
+          responseText += `- **${p.program}** (Semester ${p.semester}, ${p.shift}): Marked as *Unassigned*. (Has ${p.pendingCourses} pending courses)\n`;
+        });
+      } else {
+        responseText += `✓ All active student cohorts in the database currently have an assigned Program Coordinator.\n\n`;
+      }
+      const lockedCoords = usersList.filter(u => (u.role === 'COORDINATOR' || u.role === 'HOD') && u.isLocked);
+      if (lockedCoords.length > 0) {
+        responseText += `🔒 **Account Locks**: The following leadership accounts are locked:\n`;
+        lockedCoords.forEach(c => {
+          responseText += `- **${c.name}** (${c.role} - ${c.dept || 'General'})\n`;
+        });
+      } else {
+        responseText += `✓ All registered HOD & Coordinator portal accounts are active and unlocked.\n`;
+      }
+    } else if (lowerQuestion.includes('program') || lowerQuestion.includes('overdue')) {
+      const activePending = summarizedSubmissions.filter(s => s.pendingCourses > 0);
+      if (activePending.length > 0) {
+        responseText += `### Active Programs with Overdue Submissions:\n\n`;
+        activePending.forEach(p => {
+          responseText += `- **${p.program}** (${p.shift}, Semester ${p.semester}, ${p.section}): **${p.pendingCourses} courses pending** out of ${p.totalCourses} expected.\n`;
+        });
+      } else {
+        responseText += `✓ Zero active programs are currently overdue. Overall compliance is at 100%.\n`;
+      }
+    } else {
+      // Default Executive Summary
+      const totalCohorts = summarizedSubmissions.length;
+      const completed = summarizedSubmissions.filter(s => s.pendingCourses === 0).length;
+      const rate = totalCohorts > 0 ? Math.round((completed / totalCohorts) * 100) : 100;
+      
+      responseText += `### Today's Executive Academic Monitoring Summary:\n\n`;
+      responseText += `- **University Academic Compliance**: **${rate}%**\n`;
+      responseText += `- **Total Tracked Cohorts**: **${totalCohorts}** across all faculties\n`;
+      responseText += `- **Fully Completed Submissions**: **${completed}** cohorts\n`;
+      responseText += `- **Action Interventions Needed**: **${totalCohorts - completed}** active cohorts\n\n`;
+      
+      const laggingDepts = Array.from(new Set(summarizedSubmissions.filter(s => s.pendingCourses > 0).map(s => s.department)));
+      if (laggingDepts.length > 0) {
+        responseText += `⚠️ **Key Delays Identified In**:\n`;
+        laggingDepts.forEach(d => {
+          const count = summarizedSubmissions.filter(s => s.department === d && s.pendingCourses > 0).length;
+          responseText += `- *${d.replace('Department of ', '')}* (${count} cohorts stalling)\n`;
+        });
+      }
+    }
+    return res.json({ response: responseText });
+  }
+
+  try {
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: `Question from VC: "${question}"\n\nStructured Database Context:\n${summaryText}`,
+      config: {
+        systemInstruction,
+        temperature: 0.1
+      }
+    });
+
+    res.json({ response: response.text || 'No response generated by the model.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Error executing Gemini prompt' });
+  }
 }));
 
 // Fallback for vite middleware in dev, or static files in prod

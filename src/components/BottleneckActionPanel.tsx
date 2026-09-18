@@ -114,127 +114,172 @@ export const BottleneckActionPanel: React.FC<Props> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-5 space-y-4 text-white">
-          <div className="space-y-2.5 text-xs">
-            {/* Department */}
-            <div className="flex items-baseline justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">Department:</span>
-              <span className="font-bold text-slate-100 text-right truncate max-w-[210px]" title={currentItem.department}>
-                {currentItem.department.replace('Department of ', '')}
+        <div className="p-5 sm:p-6 space-y-6 text-white">
+          {/* Section 1: Academic Structure & Team */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {/* Left Column: Academic Entity */}
+            <div className="space-y-3 bg-slate-950/45 p-3.5 rounded-xl border border-slate-800/60">
+              <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider block border-b border-rose-900/30 pb-1.5 mb-2">
+                Academic Entity
               </span>
-            </div>
-
-            {/* Program */}
-            <div className="flex items-baseline justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">Program:</span>
-              <span className="font-bold text-rose-300 text-right truncate max-w-[210px]" title={currentItem.program}>
-                {currentItem.program}
-              </span>
-            </div>
-
-            {/* Semester & Section */}
-            <div className="grid grid-cols-2 gap-2 border-b border-slate-800/80 pb-2">
-              <div>
-                <span className="text-slate-400 font-medium block text-[11px]">Semester:</span>
-                <span className="font-bold text-slate-200">{currentItem.semesterLabel}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400 font-medium block text-[11px]">Active Section:</span>
-                <span className="font-bold text-amber-300">{currentItem.section}</span>
-              </div>
-            </div>
-
-            {/* Section Upload Status */}
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">Upload Status:</span>
-              <span
-                className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                  currentItem.pendingCourses === 0
-                    ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                    : currentItem.submittedCourses > 0
-                    ? 'bg-amber-950 text-amber-300 border-amber-800'
-                    : 'bg-rose-950 text-rose-300 border-rose-800'
-                }`}
-              >
-                {currentItem.pendingCourses === 0
-                  ? `✓ Complete (${currentItem.submittedCourses}/${currentItem.totalCourses})`
-                  : currentItem.submittedCourses > 0
-                  ? `🟡 Partial (${currentItem.submittedCourses}/${currentItem.totalCourses})`
-                  : `🔴 Pending (${currentItem.pendingCourses}/${currentItem.totalCourses})`}
-              </span>
-            </div>
-
-            {/* Submitted vs Pending Workload */}
-            <div className="grid grid-cols-2 gap-2 border-b border-slate-800/80 pb-2">
-              <div>
-                <span className="text-slate-400 font-medium block text-[11px]">Submitted:</span>
-                <span className="font-bold text-emerald-400 font-mono">
-                  {currentItem.submittedCourses} / {currentItem.totalCourses} courses
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400 font-medium block text-[11px]">Pending:</span>
-                <span className="font-black text-rose-400 font-mono">
-                  {currentItem.pendingCourses} / {currentItem.totalCourses} courses
-                </span>
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-slate-400">Department:</span>
+                  <span className="font-bold text-slate-100 truncate max-w-[150px]" title={currentItem.department}>
+                    {currentItem.department.replace('Department of ', '')}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-slate-400">Program:</span>
+                  <span className="font-bold text-rose-300 truncate max-w-[150px]" title={currentItem.program}>
+                    {currentItem.program}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-slate-400">Semester:</span>
+                  <span className="font-bold text-slate-100">{currentItem.semesterLabel}</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-slate-400">Active Section:</span>
+                  <span className="font-bold text-amber-300">{currentItem.section}</span>
+                </div>
               </div>
             </div>
 
-            {/* Coordinator */}
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">Coordinator:</span>
-              <span
-                className={`font-semibold flex items-center gap-1 ${
-                  currentItem.coordinatorStatus === 'Assigned' ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                {currentItem.coordinatorStatus === 'Assigned' ? (
-                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                ) : (
-                  <UserX className="w-3.5 h-3.5 shrink-0" />
-                )}
-                <span className="truncate max-w-[170px]" title={currentItem.coordinatorName}>{currentItem.coordinatorName}</span>
+            {/* Right Column: Key Contacts */}
+            <div className="space-y-3 bg-slate-950/45 p-3.5 rounded-xl border border-slate-800/60">
+              <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider block border-b border-rose-900/30 pb-1.5 mb-2">
+                Responsible Leadership
+              </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">HOD:</span>
+                  <div className="text-right">
+                    <span className="font-bold text-slate-100 block truncate max-w-[150px]" title={currentItem.hodName}>
+                      {currentItem.hodName}
+                    </span>
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full font-mono ${
+                      currentItem.hodStatus === 'Registered' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-slate-900 text-slate-400'
+                    }`}>
+                      {currentItem.hodStatus === 'Registered' ? 'Registered' : 'Not Registered'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-slate-400">Coordinator:</span>
+                  <div className="text-right">
+                    <span className="font-bold text-slate-100 block truncate max-w-[150px]" title={currentItem.coordinatorName}>
+                      {currentItem.coordinatorName}
+                    </span>
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full font-mono ${
+                      currentItem.coordinatorStatus === 'Assigned' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-rose-950 text-rose-300 border border-rose-800/50'
+                    }`}>
+                      {currentItem.coordinatorStatus === 'Assigned' ? 'Assigned' : 'Not Assigned'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Submission Stats & Progress Bar */}
+          <div className="space-y-2 bg-slate-950/25 p-4 rounded-xl border border-slate-800/40 text-xs">
+            <div className="flex justify-between items-center text-xs font-bold font-mono">
+              <span className="text-slate-300">Grade Upload Coverage</span>
+              <span className={`${currentItem.completionRate === 100 ? 'text-emerald-400' : currentItem.completionRate > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                {currentItem.completionRate}% ({currentItem.submittedCourses}/{currentItem.totalCourses} Courses)
               </span>
             </div>
-
-            {/* HOD */}
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-400 font-medium">HOD:</span>
-              <span
-                className={`font-semibold truncate max-w-[170px] ${
-                  currentItem.hodStatus === 'Registered' ? 'text-emerald-400' : 'text-slate-400'
+            <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800/80">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  currentItem.completionRate === 100
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                    : currentItem.completionRate > 0
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                    : 'bg-gradient-to-r from-rose-600 to-red-500'
                 }`}
-                title={currentItem.hodName}
-              >
-                {currentItem.hodName}
-              </span>
+                style={{ width: `${currentItem.completionRate}%` }}
+              />
             </div>
-
-            {/* Deadline */}
-            <div className="flex items-center justify-between pt-0.5">
-              <span className="text-slate-400 font-medium flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Deadline:</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>{currentItem.submittedCourses} Submitted</span>
               </span>
-              <span
-                className={`font-bold font-mono ${
-                  currentItem.isOverdue ? 'text-rose-400' : 'text-amber-300'
-                }`}
-              >
-                {currentItem.deadlineText}
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span>{currentItem.pendingCourses} Pending</span>
               </span>
             </div>
           </div>
 
-          {/* Action Button: Jump into Radar */}
-          <button
-            type="button"
-            onClick={() => onJumpToBottleneck(currentItem)}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-xs shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all transform active:scale-[0.98]"
-          >
-            <Target className="w-4 h-4" />
-            <span>Inspect in Completion Radar →</span>
-          </button>
+          {/* Section 3: Lagging Courses List (Real Dynamic Data) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span>Lagging Courses ({currentItem.laggingCourses?.length || 0})</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Real Dynamic Data</span>
+            </div>
+
+            <div className="max-h-[220px] overflow-y-auto pr-1 space-y-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              {currentItem.laggingCourses && currentItem.laggingCourses.length > 0 ? (
+                currentItem.laggingCourses.map((course, idx) => (
+                  <div key={course.id || idx} className="bg-slate-950/60 hover:bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors">
+                    <div className="truncate">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] font-black px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                          {course.courseCode}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-200 truncate block max-w-[200px]" title={course.subjectTitle}>
+                          {course.subjectTitle}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block mt-1">
+                        Credit: {course.creditHours} • Instructor/Uploader: {course.uploadedBy || 'Not assigned'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                        course.status === 'In Progress' ? 'bg-amber-950/40 text-amber-300 border-amber-800/40' : 'bg-rose-950/40 text-rose-300 border-rose-800/40'
+                      }`}>
+                        {course.status || 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  ✓ No lagging courses found for this cohort.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 4: Deadline & Actions */}
+          <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <span className="text-slate-400 block text-[10px]">Action Deadline</span>
+                <span className={`font-bold font-mono ${currentItem.isOverdue ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
+                  {currentItem.deadlineText}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onJumpToBottleneck(currentItem)}
+              className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-xs shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all transform active:scale-[0.98] sm:w-auto w-full"
+            >
+              <Target className="w-4 h-4" />
+              <span>Inspect in Radar →</span>
+            </button>
+          </div>
         </div>
       </div>
 
