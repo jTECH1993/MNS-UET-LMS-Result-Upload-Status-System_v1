@@ -695,26 +695,51 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     const store = this.getStore();
     const foundSections = new Set<string>(['A']); // Section A is always default baseline
 
-    // 1. From registered custom/added sections for this exact cohort
-    const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
-    const sectionsMap = this.getCohortSectionsMap();
-    if (sectionsMap[cohortKey] && Array.isArray(sectionsMap[cohortKey])) {
-      sectionsMap[cohortKey].forEach((s) => {
-        const cleaned = s.trim().toUpperCase();
-        if (cleaned) foundSections.add(cleaned);
-      });
-    }
+    const cleanDept = (department || '').trim().toLowerCase();
+    const cleanProg = (program || '').trim().toLowerCase();
+    const cleanSem = String(semester || '1').trim();
+    const cleanShift = (shift || 'Morning').trim().toLowerCase();
+    const cleanSess = (session || '2023').trim();
 
-    // 2. Discover from stored submissions strictly for this cohort
-    Object.values(store).forEach((rec) => {
+    // 1. From registered custom/added sections for this exact cohort
+    const sectionsMap = this.getCohortSectionsMap();
+    Object.keys(sectionsMap).forEach((key) => {
+      const lowerKey = key.toLowerCase();
       if (
-        rec.department === department &&
-        rec.program === program &&
-        rec.session === session &&
-        rec.semester === semester &&
-        rec.shift === shift &&
-        rec.section
+        lowerKey.includes(cleanDept) &&
+        lowerKey.includes(cleanProg) &&
+        (lowerKey.includes(`__${cleanSem}__`) || lowerKey.includes(`__semester ${cleanSem}__`) || lowerKey.endsWith(`__${cleanSem}`))
       ) {
+        const list = sectionsMap[key];
+        if (Array.isArray(list)) {
+          list.forEach((s) => {
+            const cleaned = (s || '').trim().toUpperCase();
+            if (cleaned) foundSections.add(cleaned);
+          });
+        }
+      }
+    });
+
+    // 2. Discover from stored non-empty submissions strictly for this cohort
+    Object.values(store).forEach((rec) => {
+      if (!rec) return;
+      const rDept = (rec.department || '').trim().toLowerCase();
+      const rProg = (rec.program || '').trim().toLowerCase();
+      const rSem = String(rec.semester || '').trim();
+      const rShift = (rec.shift || 'Morning').trim().toLowerCase();
+      const rSess = (rec.session || '').trim();
+
+      const matchDept = rDept === cleanDept;
+      const matchProg = rProg === cleanProg;
+      const matchSem = rSem === cleanSem;
+      const matchShift = !shift || rShift === cleanShift;
+      const matchSess = !cleanSess || rSess.startsWith(cleanSess) || cleanSess.startsWith(rSess);
+
+      const hasValidSubjects =
+        Array.isArray(rec.subjects) &&
+        rec.subjects.some((s) => s && (s.subjectTitle?.trim() || s.courseCode?.trim()));
+
+      if (matchDept && matchProg && matchSem && matchShift && matchSess && rec.section && hasValidSubjects) {
         const sec = rec.section.trim().toUpperCase();
         if (sec) foundSections.add(sec);
       }
@@ -771,56 +796,68 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
       return this.getAvailableSectionsForCohort(department, program, session, semester, shift);
     }
 
-    // 1. Remove from cohort sections map
-    const sectionsMap = this.getCohortSectionsMap();
-    const cohortKey = `${department}__${program}__${session}__${semester}__${shift}`;
+    const cleanDept = (department || '').trim().toLowerCase();
+    const cleanProg = (program || '').trim().toLowerCase();
+    const cleanSem = String(semester || '').trim();
 
-    if (sectionsMap[cohortKey]) {
-      sectionsMap[cohortKey] = sectionsMap[cohortKey].filter((s) => s.trim().toUpperCase() !== cleanSec);
-      if (sectionsMap[cohortKey].length === 0 || (sectionsMap[cohortKey].length === 1 && sectionsMap[cohortKey][0] === 'A')) {
-        delete sectionsMap[cohortKey];
+    // 1. Remove from all matching keys in cohort sections map
+    const sectionsMap = this.getCohortSectionsMap();
+    Object.keys(sectionsMap).forEach((key) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes(cleanDept) &&
+        lowerKey.includes(cleanProg) &&
+        (!cleanSem || lowerKey.includes(`__${cleanSem}__`) || lowerKey.endsWith(`__${cleanSem}`))
+      ) {
+        if (Array.isArray(sectionsMap[key])) {
+          sectionsMap[key] = sectionsMap[key].filter((s) => (s || '').trim().toUpperCase() !== cleanSec);
+          if (sectionsMap[key].length === 0 || (sectionsMap[key].length === 1 && sectionsMap[key][0] === 'A')) {
+            delete sectionsMap[key];
+          }
+        }
       }
-    }
+    });
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
     try {
       await FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(console.error);
     } catch (e) {}
 
-    // 2. Delete any submission record for this section if present
+    // 2. Delete all records in local store and Firestore matching this department + program + section
     const store = this.getStore();
-    const recordKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, cleanSec);
-    if (store[recordKey]) {
-      delete store[recordKey];
-      this.setStore(store);
-      try {
-        await FirebaseStore.deleteSubmission(recordKey).catch(console.error);
-      } catch (e) {}
-    }
-
-    // 3. Delete any other matching records in store that match this exact section
     let storeChanged = false;
+    const deletePromises: Promise<void>[] = [];
+
     Object.keys(store).forEach((k) => {
       const rec = store[k];
       if (
         rec &&
-        rec.department === department &&
-        rec.program === program &&
-        rec.session === session &&
-        rec.semester === semester &&
-        rec.shift === shift &&
+        (rec.department || '').trim().toLowerCase() === cleanDept &&
+        (rec.program || '').trim().toLowerCase() === cleanProg &&
+        (!cleanSem || String(rec.semester).trim() === cleanSem) &&
         (rec.section || '').trim().toUpperCase() === cleanSec
       ) {
         delete store[k];
         storeChanged = true;
         try {
-          FirebaseStore.deleteSubmission(rec.id || k).catch(console.error);
+          deletePromises.push(FirebaseStore.deleteSubmission(rec.id || k).catch(() => {}));
         } catch (e) {}
       }
     });
 
+    // Also remove by generated record key
+    const directKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, cleanSec);
+    if (store[directKey]) {
+      delete store[directKey];
+      storeChanged = true;
+      try {
+        deletePromises.push(FirebaseStore.deleteSubmission(directKey).catch(() => {}));
+      } catch (e) {}
+    }
+
     if (storeChanged) {
       this.setStore(store);
+      await Promise.all(deletePromises);
     }
 
     this.logAccess(

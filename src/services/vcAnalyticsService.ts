@@ -301,16 +301,27 @@ export class VCAnalyticsService {
         });
 
         // Determine active sections for this specific program:
-        // Always starts with baseline Section A. Extra sections (like B) only exist if registered or if records exist.
+        // Always starts with baseline Section A. Extra sections (like B) only exist if registered or if valid submitted records exist.
+        const cleanDeptName = dept.name.trim().toLowerCase();
+        const cleanProgName = prog.name.trim().toLowerCase();
         const progActiveSections = new Set<string>(['A']);
+
         matchingRecords.forEach((r) => {
-          const sec = (r.section || 'A').trim().toUpperCase();
-          if (sec) progActiveSections.add(sec);
+          if (r.subjects && r.subjects.some((s) => s && (s.subjectTitle?.trim() || s.courseCode?.trim()))) {
+            const sec = (r.section || 'A').trim().toUpperCase();
+            if (sec) progActiveSections.add(sec);
+          }
         });
 
         const cohortMap = StorageService.getCohortSectionsMap();
+        const activeSemId = semesterList.length === 1 ? semesterList[0] : (typeof semesterFilter === 'string' && semesterFilter !== 'ALL' ? semesterFilter : '');
         Object.keys(cohortMap).forEach((key) => {
-          if (key.includes(dept.name) && key.includes(prog.name)) {
+          const lowerKey = key.toLowerCase();
+          if (
+            lowerKey.includes(cleanDeptName) &&
+            lowerKey.includes(cleanProgName) &&
+            (!activeSemId || lowerKey.includes(`__${activeSemId}__`) || lowerKey.endsWith(`__${activeSemId}`))
+          ) {
             const list = cohortMap[key];
             if (Array.isArray(list)) {
               list.forEach((s) => {
@@ -355,6 +366,7 @@ export class VCAnalyticsService {
           let secUploaded = 0;
           let secPending = 0;
           let secInProgress = 0;
+          let secTotal = 0;
           const courseDetails: CourseDetail[] = [];
 
           if (validSubjects.length > 0) {
@@ -380,26 +392,31 @@ export class VCAnalyticsService {
                 lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
               });
             });
+            secTotal = validSubjects.length;
           } else {
-            // Awaiting initial submission: zero dummy data
-            courseDetails.push({
-              id: `awaiting-${secName}`,
-              courseCode: 'PENDING',
-              subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
-              creditHours: '—',
-              status: 'Pending',
-              dateUploaded: '',
-              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-              remarks: `Awaiting LMS result upload for Section ${secName}`,
-              expected: true,
-              submitted: false,
-              coordinatorName: coordinatorDim.name,
-              deadline,
-              lastActivity: 'Awaiting submission',
-            });
+            // Awaiting initial submission: 6 expected core curriculum courses for this active cohort
+            secTotal = 6;
+            secPending = 6;
+            const displaySem = activeSemId || '1';
+            for (let cIdx = 1; cIdx <= 6; cIdx++) {
+              courseDetails.push({
+                id: `awaiting-${secName}-${cIdx}`,
+                courseCode: `CURR-${displaySem}0${cIdx}`,
+                subjectTitle: `Semester ${displaySem} Core Course ${cIdx}`,
+                creditHours: '3(3-0)',
+                status: 'Pending',
+                dateUploaded: '',
+                uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+                remarks: `Awaiting LMS result upload for Section ${secName}`,
+                expected: true,
+                submitted: false,
+                coordinatorName: coordinatorDim.name,
+                deadline,
+                lastActivity: 'Awaiting submission',
+              });
+            }
           }
 
-          const secTotal = validSubjects.length;
           const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
           const secStatus = secPct === 100 ? 'Completed' : secPct > 0 ? 'Partial' : 'Not Started';
 
@@ -424,12 +441,12 @@ export class VCAnalyticsService {
         const progCompletion = progCourses > 0 ? Math.round((progUploaded / progCourses) * 100) : 0;
         let progStatus: 'Verified' | 'Partial' | 'Not Started' | 'Overdue' | 'Attention Required';
 
-        if (progCompletion === 100 && progCourses > 0) {
+        if (progCompletion === 100 && progPending === 0 && progCourses > 0) {
           progStatus = 'Verified';
         } else if (isDeadlinePassed && progPending > 0) {
           progStatus = 'Overdue';
           overdueCount++;
-        } else if (progCompletion > 0) {
+        } else if (progUploaded > 0 || progInProgress > 0) {
           progStatus = 'Partial';
         } else {
           progStatus = !coordinatorDim.isAssigned ? 'Attention Required' : 'Not Started';
@@ -514,9 +531,9 @@ export class VCAnalyticsService {
 
       const deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
       let deptStatus: 'Completed' | 'Good' | 'Needs Attention' | 'Critical';
-      if (deptCompletion >= 90) deptStatus = 'Completed';
+      if (deptCompletion === 100 && deptPending === 0) deptStatus = 'Completed';
       else if (deptCompletion >= 70) deptStatus = 'Good';
-      else if (deptCompletion >= 50) deptStatus = 'Needs Attention';
+      else if (deptCompletion >= 30) deptStatus = 'Needs Attention';
       else deptStatus = 'Critical';
 
       departments.push({
@@ -540,7 +557,7 @@ export class VCAnalyticsService {
     const overallRate =
       totalUniversityCourses > 0 ? Math.round((totalUniversityUploaded / totalUniversityCourses) * 100) : 0;
 
-    const completedDepts = departments.filter((d) => d.completionRate >= 90).length;
+    const completedDepts = departments.filter((d) => d.completionRate === 100 && d.pendingCourses === 0).length;
 
     return {
       departments: departments.sort((a, b) => b.completionRate - a.completionRate),

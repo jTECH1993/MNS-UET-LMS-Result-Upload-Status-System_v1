@@ -423,7 +423,7 @@ export class CompletionRadarService {
   }
 
   /**
-   * LEVEL 3: Sections Coverage (Section A & Section B) inside a specific Semester
+   * LEVEL 3: Sections Coverage (Active sections only) inside a specific Semester
    */
   public static getSectionsCoverage(
     deptName: string,
@@ -432,8 +432,16 @@ export class CompletionRadarService {
     currentSession: string | string[],
     allRecords: SubmissionRecord[]
   ): RadarUnit[] {
-    return STANDARD_ACADEMIC_SECTIONS.map((sec) =>
-      this.getSectionUnit(deptName, progName, semId, sec.id, currentSession, allRecords)
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
+    const activeSections = StorageService.getAvailableSectionsForCohort(
+      deptName,
+      progName,
+      sessionList[0] || '2023',
+      semId,
+      'Morning'
+    );
+    return activeSections.map((secId) =>
+      this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords)
     );
   }
 
@@ -444,7 +452,7 @@ export class CompletionRadarService {
     deptName: string,
     progName: string,
     semId: string,
-    sectionId: string, // 'A' | 'B'
+    sectionId: string, // 'A' | 'B' | custom
     currentSession: string | string[],
     allRecords: SubmissionRecord[]
   ): RadarUnit {
@@ -459,11 +467,13 @@ export class CompletionRadarService {
 
     // Find authentic record if exists
     const rec = allRecords.find((r) => {
-      const matchDept = r.department.trim().toLowerCase() === deptName.trim().toLowerCase();
-      const matchProg = r.program.trim().toLowerCase() === progName.trim().toLowerCase();
-      const matchSem = String(r.semester).trim() === String(semId).trim();
+      if (!r) return false;
+      const matchDept = (r.department || '').trim().toLowerCase() === deptName.trim().toLowerCase();
+      const matchProg = (r.program || '').trim().toLowerCase() === progName.trim().toLowerCase();
+      const matchSem = String(r.semester || '').trim() === String(semId).trim();
       const matchSec = (r.section || 'A').trim().toUpperCase() === sectionId.trim().toUpperCase();
-      const matchSession = sessionList.includes(r.session || '2023');
+      const rSess = (r.session || '2023').trim();
+      const matchSession = sessionList.some((s) => rSess.startsWith(s) || s.startsWith(rSess));
       return matchDept && matchProg && matchSem && matchSec && matchSession;
     });
 

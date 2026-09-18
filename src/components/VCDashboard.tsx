@@ -468,14 +468,19 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sum.totalSubjects;
             totalUploadedAcrossUni += sum.uploaded;
             totalPendingAcrossUni += sum.pending;
+          } else {
+            // Expected curriculum pending for this active cohort
+            totalSubjectsAcrossUni += 6;
+            totalPendingAcrossUni += 6;
           }
         } else {
           if (sData.hasSubmission) {
             submittedSlots++;
           }
-          totalSubjectsAcrossUni += sData.totalSubjects;
+          const hasLoggedCourses = sData.totalSubjects > 0;
+          totalSubjectsAcrossUni += hasLoggedCourses ? sData.totalSubjects : 6;
           totalUploadedAcrossUni += sData.totalUploaded;
-          totalPendingAcrossUni += sData.totalPending;
+          totalPendingAcrossUni += hasLoggedCourses ? sData.totalPending : 6;
         }
       });
     });
@@ -529,10 +534,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         ];
         shifts.forEach(({ name, data: shift }) => {
           if (selectedSemesterFilter === 'ALL') {
-            if (shift.totalSubjects > 0) totalCohorts += 1;
-            totalSubjects += shift.totalSubjects;
-            totalUploaded += shift.totalUploaded;
-            totalPending += shift.totalPending;
+            totalCohorts += 1;
+            if (shift.totalSubjects > 0) {
+              totalSubjects += shift.totalSubjects;
+              totalUploaded += shift.totalUploaded;
+              totalPending += shift.totalPending;
+            } else {
+              totalSubjects += 6;
+              totalPending += 6;
+            }
             if (shift.hasSubmission) submittedCohorts += 1;
           } else {
             const rec = shift.semesterRecords[selectedSemesterFilter];
@@ -545,6 +555,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalPending += s.pending;
             } else if (name === 'Morning') {
               totalCohorts += 1;
+              totalSubjects += 6;
+              totalPending += 6;
             }
           }
         });
@@ -1110,10 +1122,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
               {hierarchy.completedDepartments} / {hierarchy.totalDepartments}
             </span>
-            <span className="text-xs font-bold text-indigo-600">100% Done</span>
+            <span className="text-xs font-bold text-indigo-600">
+              {hierarchy.completedDepartments === hierarchy.totalDepartments
+                ? '100% Done'
+                : `${hierarchy.departments.filter((d) => d.uploadedCourses > 0).length} In Progress`}
+            </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-            Decoupled hierarchy tracks all academic entities
+            {hierarchy.completedDepartments} fully complete, {hierarchy.totalDepartments - hierarchy.completedDepartments} pending completion
           </p>
         </div>
 
