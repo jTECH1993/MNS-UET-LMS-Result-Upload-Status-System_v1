@@ -1663,8 +1663,9 @@ export const HODEntryForm: React.FC<Props> = ({
                     <optgroup label={!isPrivilegedUser ? `Your Assigned Coordinated Programs (${coordinatorAllowedPrograms.length})` : `Session ${session} Enrolled Programs`}>
                       {(() => {
                         const activeNames = StorageService.getSessionPrograms(department, session);
-                        const enrolled = (!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms)
-                          .filter((p) => activeNames.includes(p.name));
+                        const allowed = !isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms;
+                        const enrolledList = allowed.filter((p) => activeNames.includes(p.name));
+                        const enrolled = enrolledList.length > 0 ? enrolledList : allowed;
                         return enrolled.map((p) => (
                           <option key={p.name} value={p.name} className="bg-slate-900 text-emerald-300 font-bold">
                             {p.name} ({p.degreeLevel}) {!isPrivilegedUser ? '★ Assigned' : `✓ [Session ${session}]`}
@@ -2182,7 +2183,8 @@ export const HODEntryForm: React.FC<Props> = ({
               {(() => {
                 const activeNames = StorageService.getSessionPrograms(department, session);
                 if (!isPrivilegedUser) {
-                  const activeAllowed = coordinatorAllowedPrograms.filter((p) => activeNames.includes(p.name));
+                  const activeAllowedList = coordinatorAllowedPrograms.filter((p) => activeNames.includes(p.name));
+                  const activeAllowed = activeAllowedList.length > 0 ? activeAllowedList : coordinatorAllowedPrograms;
                   return (
                     <optgroup label={`Your Coordinated Programs (${activeAllowed.length})`}>
                       {activeAllowed.map((p) => (
@@ -2194,10 +2196,12 @@ export const HODEntryForm: React.FC<Props> = ({
                   );
                 }
 
-                const enrolled = allDeptPrograms.filter((p) => activeNames.includes(p.name));
+                const enrolledList = allDeptPrograms.filter((p) => activeNames.includes(p.name));
+                const enrolled = enrolledList.length > 0 ? enrolledList : allDeptPrograms;
+                const isFallback = enrolledList.length === 0;
 
                 return (
-                  <optgroup label={`Department Degree Offerings (${enrolled.length})`}>
+                  <optgroup label={isFallback ? `Department Degree Offerings (${enrolled.length})` : `Department Degree Offerings (${enrolled.length})`}>
                     {enrolled.map((p) => {
                       const isCoordinated = currentUser?.assignedPrograms
                         ? currentUser.assignedPrograms.includes(p.name)
@@ -2215,8 +2219,9 @@ export const HODEntryForm: React.FC<Props> = ({
             {/* Quick program switcher buttons for HOD & Assigned Coordinators */}
             {(() => {
               const activeNames = StorageService.getSessionPrograms(department, session);
-              const visibleProgs = (!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms)
-                .filter((p) => activeNames.includes(p.name));
+              const allowed = !isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms;
+              const enrolledList = allowed.filter((p) => activeNames.includes(p.name));
+              const visibleProgs = enrolledList.length > 0 ? enrolledList : allowed;
               if (visibleProgs.length <= 1) return null;
               return (
                 <div className="mt-2 pt-1.5 border-t border-slate-200">
