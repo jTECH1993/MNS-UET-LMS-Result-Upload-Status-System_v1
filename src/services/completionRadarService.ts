@@ -197,8 +197,10 @@ export class CompletionRadarService {
     // Add any programs with authentic submissions in these sessions
     allRecords.forEach((r) => {
       if (
-        r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
-        sessionList.includes(r.session || '2023') &&
+        r &&
+        r.department &&
+        StorageService._isMatch(r.department, deptName) &&
+        sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023')) &&
         r.program &&
         r.program.trim()
       ) {
@@ -468,8 +470,8 @@ export class CompletionRadarService {
     // Find authentic record if exists
     const rec = allRecords.find((r) => {
       if (!r) return false;
-      const matchDept = (r.department || '').trim().toLowerCase() === deptName.trim().toLowerCase();
-      const matchProg = (r.program || '').trim().toLowerCase() === progName.trim().toLowerCase();
+      const matchDept = StorageService._isMatch(r.department || '', deptName);
+      const matchProg = StorageService._isMatch(r.program || '', progName);
       const matchSem = String(r.semester || '').trim() === String(semId).trim();
       const matchSec = (r.section || 'A').trim().toUpperCase() === sectionId.trim().toUpperCase();
       const rSess = (r.session || '2023').trim();
@@ -579,8 +581,8 @@ export class CompletionRadarService {
 
     const progRecords = allRecords.filter((r) => {
       if (!r) return false;
-      const matchDept = (r.department || '').trim().toLowerCase() === deptName.trim().toLowerCase();
-      const matchProg = (r.program || '').trim().toLowerCase() === progName.trim().toLowerCase();
+      const matchDept = StorageService._isMatch(r.department || '', deptName);
+      const matchProg = StorageService._isMatch(r.program || '', progName);
       const rSess = (r.session || '2023').trim();
       const matchSession = sessionList.some((s) => rSess.startsWith(s) || s.startsWith(rSess));
       return matchDept && matchProg && matchSession;

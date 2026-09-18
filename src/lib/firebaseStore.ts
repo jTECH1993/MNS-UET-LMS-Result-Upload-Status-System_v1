@@ -47,7 +47,7 @@ export class FirebaseStore {
   // ---------------------------------------------------------------------------
   static async syncGlobalState(key: string, data: any): Promise<void> {
     try {
-      await setDoc(doc(db, 'config', key), { data, updatedAt: new Date().toISOString() }, { merge: true });
+      await setDoc(doc(db, 'config', key), { data: data ?? null, updatedAt: new Date().toISOString() });
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `config/${key}`);
     }

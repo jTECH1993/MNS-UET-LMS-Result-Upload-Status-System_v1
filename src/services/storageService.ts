@@ -527,21 +527,70 @@ export class StorageService {
     } catch(e) {}
   }
 
+  public static _normalizeStr(s: string): string {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  public static _isMatch(a: string, b: string): boolean {
+    const na = this._normalizeStr(a);
+    const nb = this._normalizeStr(b);
+    if (!na || !nb) return false;
+    return na === nb || (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
+  }
+
   public static getSubmission(
     department: string,
     program: string,
-    degreeLevel: string,
-    shift: AcademicShift | string,
-    session: string,
-    semester: string,
-    section: string
+    degreeLevel?: string,
+    shift: AcademicShift | string = 'Morning',
+    session: string = '2023',
+    semester: string = '1',
+    section: string = 'A'
   ): SubmissionRecord | null {
-    const key = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, section);
     const store = this.getStore();
-    return store[key] || null;
+    const sec = (section || 'A').trim().toUpperCase();
+    const cleanShift = (shift || 'Morning').trim().toLowerCase();
+    const cleanSem = String(semester || '1').trim();
+    const cleanSess = (session || '2023').trim();
+
+    // 1. Direct canonical key match
+    const canonicalKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, sec);
+    if (store[canonicalKey]) {
+      return store[canonicalKey];
+    }
+
+    // 2. Legacy key format match if Section A
+    if (sec === 'A') {
+      const legKey = getLegacyRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester);
+      if (store[legKey]) {
+        return store[legKey];
+      }
+    }
+
+    // 3. Fallback: robust field-level search through all store records
+    const records = Object.values(store);
+    for (const rec of records) {
+      if (!rec) continue;
+      const matchDept = this._isMatch(department, rec.department);
+      const matchProg = this._isMatch(program, rec.program);
+      const rShift = (rec.shift || 'Morning').trim().toLowerCase();
+      const matchShift = !cleanShift || rShift === cleanShift;
+      const rSem = String(rec.semester || '1').trim();
+      const matchSem = !cleanSem || rSem === cleanSem;
+      const rSec = (rec.section || 'A').trim().toUpperCase();
+      const matchSec = rSec === sec;
+      const rSess = (rec.session || '2023').trim();
+      const matchSess = !cleanSess || rSess === cleanSess || rSess.startsWith(cleanSess) || cleanSess.startsWith(rSess);
+
+      if (matchDept && matchProg && matchShift && matchSem && matchSec && matchSess) {
+        return rec;
+      }
+    }
+
+    return null;
   }
 
-public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean }> {
+  public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean }> {
     const activeUser = this.getActiveUser();
     const isUpdate = !!this.getSubmission(
       record.department,
@@ -554,7 +603,7 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     );
     
     try {
-      // Update local store to reflect changes instantly (optional but good for sync)
+      // Update local store to reflect changes instantly
       const sec = (record.section || 'A').trim().toUpperCase();
       const key = getRecordKey(
         record.department,
@@ -566,7 +615,7 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
         sec
       );
       const store = this.getStore();
-      const completeRecord = {
+      const completeRecord: SubmissionRecord = {
         ...record,
         id: key,
         section: sec,
@@ -576,15 +625,24 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
         accessedBy: activeUser.name,
         userDesignation: activeUser.designation,
         updatedAt: new Date().toISOString(),
-        createdAt: isUpdate ? store[key]?.createdAt || new Date().toISOString() : new Date().toISOString(),
+        createdAt: isUpdate ? (store[key]?.createdAt || new Date().toISOString()) : new Date().toISOString(),
       };
       
       store[key] = completeRecord;
       this.setStore(store);
       
-      // Update Firebase with the FULL record
+      // Update Firebase in real-time with the full record
       const firebaseReadyRecord = JSON.parse(JSON.stringify(completeRecord));
       FirebaseStore.saveSubmission(firebaseReadyRecord).catch(e => console.error('Firebase save failed', e));
+
+      // Also sync to backend SQLite API if running
+      if (typeof window !== 'undefined') {
+        fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(firebaseReadyRecord),
+        }).catch(() => {});
+      }
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: store[key] } }));
@@ -605,7 +663,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     }
   }
 
-  
   public static async wipeAllSubmissions(): Promise<boolean> {
     try {
       // 1. Wipe Firestore submissions & access logs
@@ -624,8 +681,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
       localStorage.setItem('mnsuet_lms_access_logs_v99', JSON.stringify([]));
       localStorage.setItem('mnsuet_work_on_demand_requisitions_v99', JSON.stringify([]));
 
-      // Note: mnsuet_user_accounts_v99, mnsuet_auth_session_v99, and roster configs are 100% PRESERVED!
-
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
@@ -640,30 +695,70 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
     department: string,
     program: string,
     degreeLevel?: string,
-    shift: AcademicShift = 'Morning',
+    shift: AcademicShift | string = 'Morning',
     session: string = '2023',
     semester: string = '1',
     section: string = 'A'
   ): Promise<boolean> {
     const sec = (section || 'A').trim().toUpperCase();
-    const key = getRecordKey(department, program, degreeLevel, shift, session, semester, sec);
+    const key = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, sec);
+    const cleanShift = (shift || 'Morning').trim().toLowerCase();
+    const cleanSem = String(semester || '1').trim();
+    const cleanSess = (session || '2023').trim();
     
     try {
       const store = this.getStore();
       let deleted = false;
+      const deletePromises: Promise<void>[] = [];
+
+      // 1. Delete canonical key
       if (store[key]) {
         delete store[key];
         deleted = true;
       }
+      deletePromises.push(FirebaseStore.deleteSubmission(key).catch(() => {}));
+
+      // 2. Delete legacy key if Section A
       if (sec === 'A') {
-        const legKey = getLegacyRecordKey(department, program, degreeLevel, shift, session, semester);
+        const legKey = getLegacyRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester);
         if (store[legKey]) {
           delete store[legKey];
           deleted = true;
         }
+        deletePromises.push(FirebaseStore.deleteSubmission(legKey).catch(() => {}));
       }
+
+      // 3. Scan store for any matching records and delete them from Firestore and store
+      Object.keys(store).forEach((k) => {
+        const rec = store[k];
+        if (!rec) return;
+        const matchDept = this._isMatch(department, rec.department);
+        const matchProg = this._isMatch(program, rec.program);
+        const rShift = (rec.shift || 'Morning').trim().toLowerCase();
+        const matchShift = !cleanShift || rShift === cleanShift;
+        const rSem = String(rec.semester || '1').trim();
+        const matchSem = !cleanSem || rSem === cleanSem;
+        const rSec = (rec.section || 'A').trim().toUpperCase();
+        const matchSec = rSec === sec;
+        const rSess = (rec.session || '2023').trim();
+        const matchSess = !cleanSess || rSess === cleanSess || rSess.startsWith(cleanSess) || cleanSess.startsWith(rSess);
+
+        if (matchDept && matchProg && matchShift && matchSem && matchSec && matchSess) {
+          delete store[k];
+          deleted = true;
+          const docId = rec.id || k;
+          deletePromises.push(FirebaseStore.deleteSubmission(docId).catch(() => {}));
+        }
+      });
+
+      // 4. Delete from SQLite API
+      if (typeof window !== 'undefined') {
+        fetch(`/api/submissions/${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(() => {});
+      }
+
       if (deleted) {
         this.setStore(store);
+        await Promise.all(deletePromises);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
         }
@@ -683,17 +778,6 @@ public static async saveSubmission(record: SubmissionRecord): Promise<{ success:
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return {};
-  }
-
-  private static _normalizeStr(s: string): string {
-    return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  }
-
-  private static _isMatch(a: string, b: string): boolean {
-    const na = this._normalizeStr(a);
-    const nb = this._normalizeStr(b);
-    if (!na || !nb) return false;
-    return na === nb || (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
   }
 
   public static getAvailableSectionsForCohort(

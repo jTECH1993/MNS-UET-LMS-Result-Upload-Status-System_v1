@@ -180,6 +180,15 @@ export default function App() {
             setTargetProg(deptObj.programs[0].name);
           }
         }
+        if (currentUser.assignedShifts && currentUser.assignedShifts.length === 1) {
+          setTargetShift(currentUser.assignedShifts[0]);
+        } else if (currentUser.program && currentUser.department) {
+          const eve = StorageService.getSubmission(currentUser.department, currentUser.program, undefined, 'Evening', targetSession, targetSemester, targetAcademicSection);
+          const morn = StorageService.getSubmission(currentUser.department, currentUser.program, undefined, 'Morning', targetSession, targetSemester, targetAcademicSection);
+          if (eve && !morn) {
+            setTargetShift('Evening');
+          }
+        }
       }
     }
   }, [currentUser]);

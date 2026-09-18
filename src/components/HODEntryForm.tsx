@@ -387,6 +387,35 @@ export const HODEntryForm: React.FC<Props> = ({
     if (onSemesterChangedProp) onSemesterChangedProp(newSem);
   };
 
+  // Status of Morning and Evening shifts for the currently selected program & semester
+  const shiftStatuses = useMemo(() => {
+    const morningRec = StorageService.getSubmission(
+      department,
+      program,
+      degreeLevel,
+      'Morning',
+      session,
+      semester,
+      section
+    );
+    const eveningRec = StorageService.getSubmission(
+      department,
+      program,
+      degreeLevel,
+      'Evening',
+      session,
+      semester,
+      section
+    );
+    const morningCount = morningRec?.subjects?.filter((s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status).length || 0;
+    const eveningCount = eveningRec?.subjects?.filter((s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status).length || 0;
+
+    return {
+      morning: { hasRecord: Boolean(morningRec && morningCount > 0), courseCount: morningCount },
+      evening: { hasRecord: Boolean(eveningRec && eveningCount > 0), courseCount: eveningCount },
+    };
+  }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord]);
+
   // Metadata manual fields - initialized with current user name & designation
   const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
     if (currentUser?.name) {
@@ -1621,9 +1650,15 @@ export const HODEntryForm: React.FC<Props> = ({
                     ? 'bg-amber-500 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-200'
                 }`}
+                title={shiftStatuses.morning.hasRecord ? `Morning: ${shiftStatuses.morning.courseCount} course(s) saved` : 'Morning: No saved courses'}
               >
                 <Sun className="w-3.5 h-3.5" />
                 <span>Morning</span>
+                {shiftStatuses.morning.hasRecord && (
+                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Morning' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                    ● {shiftStatuses.morning.courseCount}
+                  </span>
+                )}
               </button>
               <button
                 id="btn-shift-evening"
@@ -1634,9 +1669,15 @@ export const HODEntryForm: React.FC<Props> = ({
                     ? 'bg-indigo-700 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-200'
                 }`}
+                title={shiftStatuses.evening.hasRecord ? `Evening: ${shiftStatuses.evening.courseCount} course(s) saved` : 'Evening: No saved courses'}
               >
                 <Moon className="w-3.5 h-3.5" />
                 <span>Evening</span>
+                {shiftStatuses.evening.hasRecord && (
+                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Evening' ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900'}`}>
+                    ● {shiftStatuses.evening.courseCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
