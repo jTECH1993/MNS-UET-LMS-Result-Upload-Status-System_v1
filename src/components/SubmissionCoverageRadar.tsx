@@ -549,13 +549,21 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                       </div>
 
                       {/* Quick Summary Pill (Right End) */}
-                      <div className="hidden md:flex items-center justify-end gap-2 w-28 shrink-0 text-right">
-                        <span className="text-xs font-bold text-slate-300 font-mono">
-                          {unit.completionRate}%
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          ({unit.submitted}/{unit.total})
-                        </span>
+                      <div className="hidden md:flex items-center justify-end gap-2 w-36 shrink-0 text-right">
+                        {unit.total > 0 ? (
+                          <>
+                            <span className="text-xs font-bold text-slate-200 font-mono">
+                              {unit.completionRate}%
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              ({unit.submitted}/{unit.total})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/60">
+                            Awaiting Upload
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

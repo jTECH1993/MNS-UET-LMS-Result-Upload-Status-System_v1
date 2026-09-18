@@ -468,19 +468,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sum.totalSubjects;
             totalUploadedAcrossUni += sum.uploaded;
             totalPendingAcrossUni += sum.pending;
-          } else {
-            // Expected curriculum pending for this active cohort
-            totalSubjectsAcrossUni += 6;
-            totalPendingAcrossUni += 6;
           }
         } else {
           if (sData.hasSubmission) {
             submittedSlots++;
           }
-          const hasLoggedCourses = sData.totalSubjects > 0;
-          totalSubjectsAcrossUni += hasLoggedCourses ? sData.totalSubjects : 6;
+          totalSubjectsAcrossUni += sData.totalSubjects;
           totalUploadedAcrossUni += sData.totalUploaded;
-          totalPendingAcrossUni += hasLoggedCourses ? sData.totalPending : 6;
+          totalPendingAcrossUni += sData.totalPending;
         }
       });
     });
@@ -535,14 +530,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         shifts.forEach(({ name, data: shift }) => {
           if (selectedSemesterFilter === 'ALL') {
             totalCohorts += 1;
-            if (shift.totalSubjects > 0) {
-              totalSubjects += shift.totalSubjects;
-              totalUploaded += shift.totalUploaded;
-              totalPending += shift.totalPending;
-            } else {
-              totalSubjects += 6;
-              totalPending += 6;
-            }
+            totalSubjects += shift.totalSubjects;
+            totalUploaded += shift.totalUploaded;
+            totalPending += shift.totalPending;
             if (shift.hasSubmission) submittedCohorts += 1;
           } else {
             const rec = shift.semesterRecords[selectedSemesterFilter];
@@ -555,8 +545,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalPending += s.pending;
             } else if (name === 'Morning') {
               totalCohorts += 1;
-              totalSubjects += 6;
-              totalPending += 6;
             }
           }
         });

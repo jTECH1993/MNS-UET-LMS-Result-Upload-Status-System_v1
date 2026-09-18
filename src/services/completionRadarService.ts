@@ -511,35 +511,21 @@ export class CompletionRadarService {
         });
       });
     } else {
-      // Check if this section is actually active (Section A is always baseline; Section B only if configured)
-      const isSecActive = sectionId === 'A' || StorageService.getAvailableSectionsForCohort(
-        deptName,
-        progName,
-        sessionList[0] || '2023',
-        semId,
-        'Morning'
-      ).includes(sectionId.trim().toUpperCase());
-
-      if (isSecActive) {
-        // Standard configured semester curriculum: 6 core subjects expected for active section
-        pending = 6;
-        for (let i = 1; i <= 6; i++) {
-          courses.push({
-            id: `expected-${sectionId}-${i}`,
-            courseCode: `CURR-${semId}0${i}`,
-            subjectTitle: `Semester ${semId} Core Course ${i}`,
-            creditHours: '3(3-0)',
-            status: 'Pending',
-            submitted: false,
-            dateUploaded: '',
-            uploadedBy: coord.isAssigned ? coord.name : 'Unassigned',
-            remarks: 'Pending result upload into LMS',
-            coordinatorName: coord.name,
-            deadlineText: deadlineInfo.text,
-            lastActivity: 'Not started',
-          });
-        }
-      }
+      // No course records uploaded yet for this cohort - show authentic awaiting state (no fabricated placeholder numbers)
+      courses.push({
+        id: `awaiting-${semId}-${sectionId}`,
+        courseCode: 'PENDING',
+        subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
+        creditHours: '—',
+        status: 'Pending',
+        submitted: false,
+        dateUploaded: '',
+        uploadedBy: coord.isAssigned ? coord.name : 'Coordinator Unassigned',
+        remarks: 'No course sheet uploaded yet for this cohort',
+        coordinatorName: coord.name,
+        deadlineText: deadlineInfo.text,
+        lastActivity: 'Awaiting submission',
+      });
     }
 
     const total = submitted + pending + inProgress;
@@ -584,26 +570,44 @@ export class CompletionRadarService {
     semesterFilter?: string | string[]
   ): RadarUnit[] {
     const list: RadarUnit[] = [];
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const semList = Array.isArray(semesterFilter)
       ? semesterFilter.filter((s) => s !== 'ALL')
       : semesterFilter && semesterFilter !== 'ALL'
       ? [semesterFilter]
       : [];
 
-    const targetSems = semList.length > 0
-      ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
-      : ACADEMIC_SEMESTERS.slice(0, 4);
+    const progRecords = allRecords.filter((r) => {
+      if (!r) return false;
+      const matchDept = (r.department || '').trim().toLowerCase() === deptName.trim().toLowerCase();
+      const matchProg = (r.program || '').trim().toLowerCase() === progName.trim().toLowerCase();
+      const rSess = (r.session || '2023').trim();
+      const matchSession = sessionList.some((s) => rSess.startsWith(s) || s.startsWith(rSess));
+      return matchDept && matchProg && matchSession;
+    });
 
-    targetSems.forEach((sem) => {
+    // Find all semesters with actual records, or fallback to Semester 1
+    const recordedSemIds = new Set<string>();
+    progRecords.forEach((r) => {
+      if (r.semester) recordedSemIds.add(String(r.semester).trim());
+    });
+
+    const targetSemIds = semList.length > 0
+      ? semList
+      : recordedSemIds.size > 0
+      ? Array.from(recordedSemIds)
+      : ['1'];
+
+    targetSemIds.forEach((semId) => {
       const activeSections = StorageService.getAvailableSectionsForCohort(
         deptName,
         progName,
-        Array.isArray(currentSession) ? currentSession[0] : (currentSession || '2023'),
-        sem.id,
+        sessionList[0] || '2023',
+        semId,
         'Morning'
       );
       activeSections.forEach((secId) => {
-        list.push(this.getSectionUnit(deptName, progName, sem.id, secId, currentSession, allRecords));
+        list.push(this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords));
       });
     });
     return list;

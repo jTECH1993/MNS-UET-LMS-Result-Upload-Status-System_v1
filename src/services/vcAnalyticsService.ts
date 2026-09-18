@@ -394,27 +394,24 @@ export class VCAnalyticsService {
             });
             secTotal = validSubjects.length;
           } else {
-            // Awaiting initial submission: 6 expected core curriculum courses for this active cohort
-            secTotal = 6;
-            secPending = 6;
-            const displaySem = activeSemId || '1';
-            for (let cIdx = 1; cIdx <= 6; cIdx++) {
-              courseDetails.push({
-                id: `awaiting-${secName}-${cIdx}`,
-                courseCode: `CURR-${displaySem}0${cIdx}`,
-                subjectTitle: `Semester ${displaySem} Core Course ${cIdx}`,
-                creditHours: '3(3-0)',
-                status: 'Pending',
-                dateUploaded: '',
-                uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-                remarks: `Awaiting LMS result upload for Section ${secName}`,
-                expected: true,
-                submitted: false,
-                coordinatorName: coordinatorDim.name,
-                deadline,
-                lastActivity: 'Awaiting submission',
-              });
-            }
+            // Awaiting initial submission: 0 logged courses (no fake dummy courses)
+            secTotal = 0;
+            secPending = 0;
+            courseDetails.push({
+              id: `awaiting-${secName}`,
+              courseCode: 'PENDING',
+              subjectTitle: 'Awaiting Coordinator LMS Grade Entry',
+              creditHours: '—',
+              status: 'Pending',
+              dateUploaded: '',
+              uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
+              remarks: `Awaiting LMS result upload for Section ${secName}`,
+              expected: true,
+              submitted: false,
+              coordinatorName: coordinatorDim.name,
+              deadline,
+              lastActivity: 'Awaiting submission',
+            });
           }
 
           const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
