@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { UserAccount, ActiveUserSession, UserRole, AppTheme, AcademicShift } from '../types';
+import { UserAccount, ActiveUserSession, UserRole, AppTheme, AcademicShift, ProgramAccessRequest } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SecurityService } from './securityService';
 import { FirebaseStore } from '../lib/firebaseStore';
@@ -119,6 +119,7 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
     designation: 'Director IT / Administrator',
     department: 'Office of the Registrar / IT Directorate',
     role: 'ADMIN',
+    approvalStatus: 'APPROVED',
     createdAt: '2026-09-01T08:00:00.000Z',
   },
   {
@@ -130,6 +131,7 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
     designation: 'Vice Chancellor',
     department: 'Office of the Vice Chancellor',
     role: 'VC',
+    approvalStatus: 'APPROVED',
     createdAt: '2026-09-01T08:00:00.000Z',
   },
   {
@@ -144,6 +146,9 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
     program: 'BS Artificial Intelligence',
     assignedPrograms: ['BS Artificial Intelligence'],
     assignedShifts: ['Morning', 'Evening'],
+    approvalStatus: 'APPROVED',
+    approvedBy: 'Academic Directorate',
+    approvedAt: '2026-09-01T08:00:00.000Z',
     createdAt: '2026-09-01T08:00:00.000Z',
   },
 ];
@@ -415,6 +420,12 @@ export class AuthService {
       assignedPrograms: account.assignedPrograms,
       assignedShifts: account.assignedShifts,
       programShiftAssignments: account.programShiftAssignments,
+      approvalStatus: account.approvalStatus || 'APPROVED',
+      requestedPrograms: account.requestedPrograms,
+      requestedShifts: account.requestedShifts,
+      requestedAt: account.requestedAt,
+      approvedBy: account.approvedBy,
+      approvedAt: account.approvedAt,
       avatarUrl: account.avatarUrl,
       themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -445,6 +456,7 @@ export class AuthService {
     assignedPrograms?: string[];
     assignedShifts?: AcademicShift[];
     programShiftAssignments?: Record<string, AcademicShift[]>;
+    approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
   }): { success: boolean; message: string; session?: ActiveUserSession } {
     const cleanUser = SecurityService.sanitizeInput(data.username).trim();
     const cleanEmail = SecurityService.sanitizeInput(data.email || '').trim().toLowerCase();
@@ -517,6 +529,9 @@ export class AuthService {
       ? data.assignedShifts
       : (assignedRole === 'COORDINATOR' ? ['Morning', 'Evening'] : undefined);
 
+    const isCoordinator = assignedRole === 'COORDINATOR';
+    const initialApproval: 'APPROVED' | 'PENDING' | 'REJECTED' = data.approvalStatus || (isCoordinator ? 'PENDING' : 'APPROVED');
+
     const newAccount: UserAccount = {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: cleanUser,
@@ -530,6 +545,10 @@ export class AuthService {
       assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
       assignedShifts: assignedRole !== 'HOD' ? resolvedShifts : undefined,
       programShiftAssignments: assignedRole !== 'HOD' ? data.programShiftAssignments : undefined,
+      approvalStatus: initialApproval,
+      requestedPrograms: isCoordinator ? rawAssigned : undefined,
+      requestedShifts: isCoordinator ? resolvedShifts : undefined,
+      requestedAt: isCoordinator ? new Date().toISOString() : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       themePreference: 'emerald',
@@ -559,7 +578,7 @@ export class AuthService {
       severity: 'INFO',
       actor: newAccount.username,
       targetAccount: newAccount.username,
-      details: `New account registered and database synchronized: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}. Shifts: ${newAccount.assignedShifts?.join(', ') || 'Default'}.`,
+      details: `New account registered: ${newAccount.username} [${newAccount.role} - ${newAccount.department}] (Status: ${newAccount.approvalStatus}). Requested Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
     });
 
     const session: ActiveUserSession = {
@@ -574,13 +593,19 @@ export class AuthService {
       assignedPrograms: newAccount.assignedPrograms,
       assignedShifts: newAccount.assignedShifts,
       programShiftAssignments: newAccount.programShiftAssignments,
+      approvalStatus: newAccount.approvalStatus,
+      requestedPrograms: newAccount.requestedPrograms,
+      requestedShifts: newAccount.requestedShifts,
+      requestedAt: newAccount.requestedAt,
       token: `auth_tok_${Date.now()}`,
     };
 
     this.setCurrentSession(session);
     return {
       success: true,
-      message: `Account created and synced in university database successfully for ${newAccount.name} (${newAccount.department}).`,
+      message: initialApproval === 'PENDING'
+        ? `Account registered! As a Coordinator, your program assignment request has been queued for authorization by your Head of Department (HOD).`
+        : `Account created and synced in university database successfully for ${newAccount.name} (${newAccount.department}).`,
       session,
     };
   }
@@ -780,6 +805,10 @@ export class AuthService {
       assignedPrograms?: string[];
       assignedShifts?: AcademicShift[];
       programShiftAssignments?: Record<string, AcademicShift[]>;
+      approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+      requestedPrograms?: string[];
+      requestedShifts?: AcademicShift[];
+      rejectionReason?: string;
     }
   ): { success: boolean; message: string; session?: ActiveUserSession } {
     const accounts = this.getAccounts();
@@ -867,6 +896,11 @@ export class AuthService {
       account.programShiftAssignments = Object.keys(data.programShiftAssignments).length > 0 ? data.programShiftAssignments : undefined;
     }
 
+    // Update approval status
+    if (data.approvalStatus !== undefined) {
+      account.approvalStatus = data.approvalStatus;
+    }
+
     // Update avatarUrl (can be empty string to remove avatar)
     if (data.avatarUrl !== undefined) {
       account.avatarUrl = data.avatarUrl.trim();
@@ -908,6 +942,12 @@ export class AuthService {
         assignedPrograms: account.assignedPrograms,
         assignedShifts: account.assignedShifts,
         programShiftAssignments: account.programShiftAssignments,
+        approvalStatus: account.approvalStatus,
+        requestedPrograms: account.requestedPrograms,
+        requestedShifts: account.requestedShifts,
+        requestedAt: account.requestedAt,
+        approvedBy: account.approvedBy,
+        approvedAt: account.approvedAt,
         avatarUrl: account.avatarUrl,
         themePreference: account.themePreference,
       };
@@ -919,6 +959,490 @@ export class AuthService {
       message: 'Profile updated and synchronized successfully!',
       session: updatedSession || currentSession || undefined,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // HOD APPROVAL WORKFLOW FOR COORDINATORS
+  // ---------------------------------------------------------------------------
+  // Request HOD approval or re-send approval request
+  public static requestHODApproval(
+    userId: string,
+    requestedPrograms?: string[],
+    requestedShifts?: AcademicShift[]
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'Account not found.' };
+
+    account.approvalStatus = 'PENDING';
+    account.requestedAt = new Date().toISOString();
+    account.rejectionReason = undefined;
+
+    if (requestedPrograms && requestedPrograms.length > 0) {
+      account.requestedPrograms = requestedPrograms;
+    } else if (!account.requestedPrograms || account.requestedPrograms.length === 0) {
+      account.requestedPrograms = account.assignedPrograms || (account.program ? [account.program] : []);
+    }
+
+    if (requestedShifts && requestedShifts.length > 0) {
+      account.requestedShifts = requestedShifts;
+    } else if (!account.requestedShifts || account.requestedShifts.length === 0) {
+      account.requestedShifts = account.assignedShifts || ['Morning', 'Evening'];
+    }
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined = undefined;
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        approvalStatus: 'PENDING',
+        requestedPrograms: account.requestedPrograms,
+        requestedShifts: account.requestedShifts,
+        requestedAt: account.requestedAt,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'SECURITY_ALERT',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Coordinator ${account.name} submitted approval request to HOD of ${account.department} for programs: ${account.requestedPrograms?.join(', ') || 'Department Programs'}.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+    }
+
+    return {
+      success: true,
+      message: `Approval request forwarded to the Head of Department (HOD) for ${account.department}.`,
+      session: updatedSession,
+    };
+  }
+
+  // HOD or Admin approves coordinator account
+  public static approveCoordinatorAccount(
+    userId: string,
+    approverName: string,
+    assignedPrograms?: string[],
+    assignedShifts?: AcademicShift[],
+    role?: UserRole
+  ): { success: boolean; message: string } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'Account not found.' };
+
+    account.approvalStatus = 'APPROVED';
+    account.approvedBy = approverName;
+    account.approvedAt = new Date().toISOString();
+    account.rejectionReason = undefined;
+
+    if (role) {
+      account.role = role;
+    }
+
+    const finalProgs = assignedPrograms && assignedPrograms.length > 0
+      ? assignedPrograms
+      : (account.requestedPrograms && account.requestedPrograms.length > 0 ? account.requestedPrograms : account.assignedPrograms);
+
+    if (finalProgs && finalProgs.length > 0) {
+      account.assignedPrograms = finalProgs;
+      account.program = finalProgs[0];
+    }
+
+    const finalShifts = assignedShifts && assignedShifts.length > 0
+      ? assignedShifts
+      : (account.requestedShifts && account.requestedShifts.length > 0 ? account.requestedShifts : account.assignedShifts);
+
+    if (finalShifts && finalShifts.length > 0) {
+      account.assignedShifts = finalShifts;
+    }
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    // If current logged-in session is this user, update active session
+    const currentSession = this.getCurrentSession();
+    if (currentSession && currentSession.id === userId) {
+      const updatedSession: ActiveUserSession = {
+        ...currentSession,
+        approvalStatus: 'APPROVED',
+        assignedPrograms: account.assignedPrograms,
+        program: account.program,
+        assignedShifts: account.assignedShifts,
+        role: account.role,
+        approvedBy: account.approvedBy,
+        approvedAt: account.approvedAt,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'USER_ROLE_CHANGED',
+      severity: 'INFO',
+      actor: approverName,
+      targetAccount: account.username,
+      details: `HOD ${approverName} approved and authorized Coordinator ${account.name} for programs: ${account.assignedPrograms?.join(', ')}.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+    }
+
+    return {
+      success: true,
+      message: `Coordinator "${account.name}" has been approved and granted access for ${account.assignedPrograms?.join(', ') || account.program || 'assigned programs'}.`,
+    };
+  }
+
+  // HOD or Admin rejects coordinator account request
+  public static rejectCoordinatorAccount(
+    userId: string,
+    rejectorName: string,
+    reason?: string
+  ): { success: boolean; message: string } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'Account not found.' };
+
+    account.approvalStatus = 'REJECTED';
+    account.rejectionReason = reason || 'Declined by Head of Department.';
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    if (currentSession && currentSession.id === userId) {
+      this.setCurrentSession({
+        ...currentSession,
+        approvalStatus: 'REJECTED',
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+    }
+
+    return {
+      success: true,
+      message: `Account request for "${account.name}" has been declined.`,
+    };
+  }
+
+  // Get pending coordinator approval requests for a specific department (or all if admin)
+  public static getPendingApprovals(department?: string): UserAccount[] {
+    const accounts = this.getAccounts();
+    return accounts.filter((acc) => {
+      if (acc.role === 'ADMIN' || acc.role === 'VC') return false;
+      const isPending = acc.approvalStatus === 'PENDING';
+      if (!isPending) return false;
+      if (!department || department === 'ALL' || department === 'All Departments') return true;
+      return acc.department.trim().toLowerCase() === department.trim().toLowerCase();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST-LOGIN ADDITIONAL PROGRAM ACCESS REQUESTS (COORDINATOR MULTI-PROGRAM)
+  // ---------------------------------------------------------------------------
+
+  // Request access to an additional program (or shift expansion) after login
+  public static requestAdditionalProgramAccess(
+    userId: string,
+    requestedProgram: string,
+    requestedShifts: AcademicShift[],
+    reason?: string
+  ): { success: boolean; message: string; request?: ProgramAccessRequest } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'User account not found.' };
+
+    const cleanProg = SecurityService.sanitizeInput(requestedProgram).trim();
+    if (!cleanProg) return { success: false, message: 'Please specify a valid program name.' };
+
+    const shifts = requestedShifts && requestedShifts.length > 0 ? requestedShifts : ['Morning', 'Evening'] as AcademicShift[];
+
+    if (!account.pendingProgramRequests) {
+      account.pendingProgramRequests = [];
+    }
+
+    // Check if program already actively assigned and has matching shifts
+    const alreadyAssigned = (account.assignedPrograms || []).includes(cleanProg);
+    const existingShifts = account.programShiftAssignments?.[cleanProg] || account.assignedShifts || [];
+    const hasAllShifts = shifts.every((s) => existingShifts.includes(s));
+    if (alreadyAssigned && hasAllShifts && account.approvalStatus === 'APPROVED') {
+      return {
+        success: false,
+        message: `You are already authorized for "${cleanProg}" (${shifts.join(', ')}). You can select it directly from your program dropdown.`,
+      };
+    }
+
+    // Check if there is already a pending request for this program
+    const existingPending = account.pendingProgramRequests.find(
+      (r) => r.requestedProgram.toLowerCase() === cleanProg.toLowerCase() && r.status === 'PENDING'
+    );
+    if (existingPending) {
+      return {
+        success: false,
+        message: `A request for "${cleanProg}" is already pending review by your Head of Department.`,
+      };
+    }
+
+    const newRequest: ProgramAccessRequest = {
+      id: `prog_req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      userId: account.id,
+      userName: account.name,
+      userEmail: account.email,
+      department: account.department,
+      requestedProgram: cleanProg,
+      requestedShifts: shifts,
+      reason: reason ? SecurityService.sanitizeInput(reason).trim() : undefined,
+      status: 'PENDING',
+      requestedAt: new Date().toISOString(),
+    };
+
+    account.pendingProgramRequests.push(newRequest);
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    // Update active session if this is the logged-in user
+    const currentSession = this.getCurrentSession();
+    if (currentSession && currentSession.id === userId) {
+      this.setCurrentSession({
+        ...currentSession,
+        pendingProgramRequests: account.pendingProgramRequests,
+      });
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'SECURITY_ALERT',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Coordinator ${account.name} submitted post-login request to HOD of ${account.department} for additional program access: "${cleanProg}" (${shifts.join(', ')}).`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Request for "${cleanProg}" (${shifts.join(', ')}) submitted to Head of Department (${account.department}) for authorization.`,
+      request: newRequest,
+    };
+  }
+
+  // HOD or Admin approves additional program request
+  public static approveAdditionalProgramRequest(
+    requestId: string,
+    approverName: string
+  ): { success: boolean; message: string; approvedProgram?: string } {
+    const accounts = this.getAccounts();
+    let targetAccount: UserAccount | undefined;
+    let targetRequest: ProgramAccessRequest | undefined;
+
+    for (const acc of accounts) {
+      if (acc.pendingProgramRequests) {
+        const req = acc.pendingProgramRequests.find((r) => r.id === requestId);
+        if (req) {
+          targetAccount = acc;
+          targetRequest = req;
+          break;
+        }
+      }
+    }
+
+    if (!targetAccount || !targetRequest) {
+      return { success: false, message: 'Program authorization request not found.' };
+    }
+
+    targetRequest.status = 'APPROVED';
+    targetRequest.reviewedBy = approverName;
+    targetRequest.reviewedAt = new Date().toISOString();
+    targetRequest.rejectionReason = undefined;
+
+    // Add program to assignedPrograms
+    const existingPrograms = targetAccount.assignedPrograms || (targetAccount.program ? [targetAccount.program] : []);
+    if (!existingPrograms.includes(targetRequest.requestedProgram)) {
+      existingPrograms.push(targetRequest.requestedProgram);
+    }
+    targetAccount.assignedPrograms = existingPrograms;
+    if (!targetAccount.program) {
+      targetAccount.program = targetRequest.requestedProgram;
+    }
+
+    // Set shift assignments for the program
+    if (!targetAccount.programShiftAssignments) {
+      targetAccount.programShiftAssignments = {};
+    }
+    targetAccount.programShiftAssignments[targetRequest.requestedProgram] = targetRequest.requestedShifts;
+
+    // Merge shifts into overall assignedShifts
+    const currentShifts = new Set<AcademicShift>(targetAccount.assignedShifts || []);
+    targetRequest.requestedShifts.forEach((s) => currentShifts.add(s));
+    targetAccount.assignedShifts = Array.from(currentShifts);
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(targetAccount).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${targetAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetAccount),
+      }).catch(() => {});
+    }
+
+    // Update active session if user is logged in
+    const currentSession = this.getCurrentSession();
+    if (currentSession && currentSession.id === targetAccount.id) {
+      this.setCurrentSession({
+        ...currentSession,
+        assignedPrograms: targetAccount.assignedPrograms,
+        program: targetAccount.program,
+        assignedShifts: targetAccount.assignedShifts,
+        programShiftAssignments: targetAccount.programShiftAssignments,
+        pendingProgramRequests: targetAccount.pendingProgramRequests,
+      });
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'USER_ROLE_CHANGED',
+      severity: 'INFO',
+      actor: approverName,
+      targetAccount: targetAccount.username,
+      details: `HOD/Admin ${approverName} approved additional program access for ${targetAccount.name}: "${targetRequest.requestedProgram}" (${targetRequest.requestedShifts.join(', ')}).`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Approved "${targetRequest.requestedProgram}" for ${targetAccount.name}. Coordinator now has full access to this program!`,
+      approvedProgram: targetRequest.requestedProgram,
+    };
+  }
+
+  // HOD or Admin rejects additional program request
+  public static rejectAdditionalProgramRequest(
+    requestId: string,
+    rejectorName: string,
+    reason?: string
+  ): { success: boolean; message: string } {
+    const accounts = this.getAccounts();
+    let targetAccount: UserAccount | undefined;
+    let targetRequest: ProgramAccessRequest | undefined;
+
+    for (const acc of accounts) {
+      if (acc.pendingProgramRequests) {
+        const req = acc.pendingProgramRequests.find((r) => r.id === requestId);
+        if (req) {
+          targetAccount = acc;
+          targetRequest = req;
+          break;
+        }
+      }
+    }
+
+    if (!targetAccount || !targetRequest) {
+      return { success: false, message: 'Program request not found.' };
+    }
+
+    targetRequest.status = 'REJECTED';
+    targetRequest.reviewedBy = rejectorName;
+    targetRequest.reviewedAt = new Date().toISOString();
+    targetRequest.rejectionReason = reason || 'Declined by Head of Department.';
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(targetAccount).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${targetAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetAccount),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    if (currentSession && currentSession.id === targetAccount.id) {
+      this.setCurrentSession({
+        ...currentSession,
+        pendingProgramRequests: targetAccount.pendingProgramRequests,
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Additional program request for "${targetRequest.requestedProgram}" was declined.`,
+    };
+  }
+
+  // Get all pending additional program requests across users in a department (or all)
+  public static getPendingProgramRequests(department?: string): ProgramAccessRequest[] {
+    const accounts = this.getAccounts();
+    const requests: ProgramAccessRequest[] = [];
+    accounts.forEach((acc) => {
+      if (department && department !== 'ALL' && department !== 'All Departments') {
+        if (acc.department.trim().toLowerCase() !== department.trim().toLowerCase()) return;
+      }
+      if (acc.pendingProgramRequests && acc.pendingProgramRequests.length > 0) {
+        acc.pendingProgramRequests.forEach((req) => {
+          if (req.status === 'PENDING') {
+            requests.push(req);
+          }
+        });
+      }
+    });
+    return requests;
+  }
+
+  // Get all program requests for a specific user (pending, approved, rejected)
+  public static getUserProgramRequests(userId: string): ProgramAccessRequest[] {
+    const accounts = this.getAccounts();
+    const acc = accounts.find((a) => a.id === userId);
+    return acc?.pendingProgramRequests || [];
   }
 
   // Normalize legacy and custom themes

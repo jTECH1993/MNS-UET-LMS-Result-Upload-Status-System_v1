@@ -193,7 +193,9 @@ export type SecurityEventType =
   | 'UNAUTHORIZED_ACCESS_ATTEMPT'
   | 'DATA_SANITY_VIOLATION'
   | 'BRUTE_FORCE_THROTTLED'
-  | 'ADMIN_SECURITY_OVERRIDE';
+  | 'ADMIN_SECURITY_OVERRIDE'
+  | 'SECURITY_ALERT'
+  | 'USER_ROLE_CHANGED';
 
 export interface SecurityEventLog {
   id: string;

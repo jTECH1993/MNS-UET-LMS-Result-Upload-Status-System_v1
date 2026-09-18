@@ -10,8 +10,9 @@ import {
   createInitialBlankRows,
   getRecordKey,
 } from '../data/departmentsData';
-import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift } from '../types';
+import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShift, UserAccount, ProgramAccessRequest } from '../types';
 import { StorageService } from '../services/storageService';
+import { AuthService } from '../services/authService';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeadlineBanner } from './DeadlineBanner';
 import { DeleteModal } from './DeleteModal';
@@ -19,6 +20,7 @@ import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { BulkCourseImportModal } from './BulkCourseImportModal';
 import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
+import { RequestAdditionalProgramModal } from './RequestAdditionalProgramModal';
 import {
   Save,
   Trash2,
@@ -61,6 +63,7 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 
 // Standard institutional delay reasons for academic compliance
@@ -315,6 +318,102 @@ export const HODEntryForm: React.FC<Props> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
   const [isDeletingSection, setIsDeletingSection] = useState<boolean>(false);
+
+  // Coordinator Approval Workflow State
+  const [pendingHODApprovals, setPendingHODApprovals] = useState<UserAccount[]>([]);
+  const [pendingProgRequests, setPendingProgRequests] = useState<ProgramAccessRequest[]>([]);
+  const [userProgramRequests, setUserProgramRequests] = useState<ProgramAccessRequest[]>([]);
+  const [isReqProgModalOpen, setIsReqProgModalOpen] = useState<boolean>(false);
+  const isPendingCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'PENDING';
+  const isRejectedCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'REJECTED';
+
+  useEffect(() => {
+    const refreshPending = () => {
+      if (currentUser?.role === 'HOD' && currentUser?.department) {
+        setPendingHODApprovals(AuthService.getPendingApprovals(currentUser.department));
+        setPendingProgRequests(AuthService.getPendingProgramRequests(currentUser.department));
+      } else if (currentUser?.role === 'ADMIN') {
+        setPendingHODApprovals(AuthService.getPendingApprovals());
+        setPendingProgRequests(AuthService.getPendingProgramRequests());
+      }
+      if (currentUser?.id) {
+        setUserProgramRequests(AuthService.getUserProgramRequests(currentUser.id));
+      }
+    };
+    refreshPending();
+    window.addEventListener('mnsuet_accounts_updated', refreshPending);
+    window.addEventListener('mnsuet_auth_changed', refreshPending);
+    return () => {
+      window.removeEventListener('mnsuet_accounts_updated', refreshPending);
+      window.removeEventListener('mnsuet_auth_changed', refreshPending);
+    };
+  }, [currentUser]);
+
+  const handleHODQuickApprove = (accountId: string, coordName: string) => {
+    const res = AuthService.approveCoordinatorAccount(accountId, currentUser?.name || 'HOD');
+    if (res.success) {
+      showFeedback('success', `Approved coordinator authorization for ${coordName}.`);
+      if (currentUser?.department) {
+        setPendingHODApprovals(AuthService.getPendingApprovals(currentUser.department));
+      }
+    } else {
+      showFeedback('warning', res.message);
+    }
+  };
+
+  const handleHODQuickReject = (accountId: string, coordName: string) => {
+    const res = AuthService.rejectCoordinatorAccount(accountId, currentUser?.name || 'HOD', 'Rejected by HOD');
+    if (res.success) {
+      showFeedback('info', `Coordinator authorization for ${coordName} was rejected.`);
+      if (currentUser?.department) {
+        setPendingHODApprovals(AuthService.getPendingApprovals(currentUser.department));
+      }
+    } else {
+      showFeedback('warning', res.message);
+    }
+  };
+
+  const handleHODApproveProgReq = (requestId: string, coordName: string, progName: string) => {
+    const res = AuthService.approveAdditionalProgramRequest(requestId, currentUser?.name || 'HOD');
+    if (res.success) {
+      showFeedback('success', `Approved additional program "${progName}" for ${coordName}.`);
+      if (currentUser?.department) {
+        setPendingProgRequests(AuthService.getPendingProgramRequests(currentUser.department));
+      } else {
+        setPendingProgRequests(AuthService.getPendingProgramRequests());
+      }
+    } else {
+      showFeedback('warning', res.message);
+    }
+  };
+
+  const handleHODRejectProgReq = (requestId: string, coordName: string, progName: string) => {
+    const res = AuthService.rejectAdditionalProgramRequest(requestId, currentUser?.name || 'HOD', 'Declined by HOD');
+    if (res.success) {
+      showFeedback('info', `Additional program request for "${progName}" from ${coordName} was declined.`);
+      if (currentUser?.department) {
+        setPendingProgRequests(AuthService.getPendingProgramRequests(currentUser.department));
+      } else {
+        setPendingProgRequests(AuthService.getPendingProgramRequests());
+      }
+    } else {
+      showFeedback('warning', res.message);
+    }
+  };
+
+  const handleRequestHODReapproval = () => {
+    if (!currentUser) return;
+    const res = AuthService.requestHODApproval(
+      currentUser.id,
+      currentUser.assignedPrograms || [program],
+      currentUser.assignedShifts || [shift]
+    );
+    if (res.success) {
+      showFeedback('success', 'Authorization request sent to the Head of Department. Your status is Pending Approval.');
+    } else {
+      showFeedback('info', res.message);
+    }
+  };
 
   const handleConfirmDeleteSection = async () => {
     if (!sectionToDelete) return;
@@ -1194,6 +1293,16 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
+    // Coordinator Approval Check
+    if (isPendingCoordinator) {
+      showFeedback('warning', 'Authorization Pending: Your coordinator account is awaiting approval by the Head of Department. You cannot submit LMS results until your account is approved.');
+      return;
+    }
+    if (isRejectedCoordinator) {
+      showFeedback('warning', 'Authorization Rejected: Your coordinator account authorization request was rejected by the Head of Department.');
+      return;
+    }
+
     // Strict Department Authorization Check for HOD
     if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
       if (department.trim().toLowerCase() !== currentUser.department.trim().toLowerCase()) {
@@ -1591,6 +1700,195 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
       )}
 
+      {/* HOD Alert: Coordinator Authorization & Additional Program Requests Pending */}
+      {currentUser?.role === 'HOD' && (pendingHODApprovals.length > 0 || pendingProgRequests.length > 0) && (
+        <div id="hod-pending-requests-card" className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 text-xs text-amber-950 shadow-xs space-y-3 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-700 shrink-0 animate-pulse" />
+              <h4 className="font-bold text-amber-950 text-sm">
+                Coordinator &amp; Program Authorization Requests Pending ({pendingHODApprovals.length + pendingProgRequests.length})
+              </h4>
+            </div>
+            <span className="text-[10px] bg-amber-200 text-amber-900 font-black px-2.5 py-0.5 rounded-full self-start sm:self-auto uppercase tracking-wide">
+              Action Required
+            </span>
+          </div>
+
+          {/* 1. Account Registrations Awaiting HOD Approval */}
+          {pendingHODApprovals.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider block">
+                New Coordinator Registrations ({pendingHODApprovals.length}):
+              </span>
+              {pendingHODApprovals.map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white/90 border border-amber-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-xs">{req.name}</span>
+                      <span className="text-[11px] text-slate-500 font-mono">@{req.username}</span>
+                      <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.2 rounded border border-amber-300">
+                        New Account
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-700 mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-teal-900">Requested Program:</span>
+                      <span className="bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 font-medium">
+                        {req.requestedPrograms?.join(', ') || req.program || 'All Programs'}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="font-semibold text-indigo-900">Requested Shift:</span>
+                      <span className="bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200 font-medium">
+                        {req.requestedShifts?.join(', ') || 'Morning & Evening'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleHODQuickApprove(req.id, req.name)}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                      title="Authorize coordinator with requested programs and shifts"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve &amp; Authorize</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleHODQuickReject(req.id, req.name)}
+                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-rose-100 text-slate-700 hover:text-rose-700 rounded-lg font-bold text-xs cursor-pointer transition-colors"
+                      title="Reject request"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 2. Post-Login Additional Program Requests from Existing Faculty/Coordinators */}
+          {pendingProgRequests.length > 0 && (
+            <div className="space-y-2 pt-1 border-t border-amber-200/60">
+              <span className="text-[11px] font-bold text-teal-950 uppercase tracking-wider block">
+                Additional Program Access Requests ({pendingProgRequests.length}):
+              </span>
+              {pendingProgRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white/95 border border-teal-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-xs">{req.userName}</span>
+                      <span className="text-[11px] text-slate-500 font-mono">({req.userEmail})</span>
+                      <span className="text-[10px] bg-teal-100 text-teal-900 font-bold px-1.5 py-0.2 rounded border border-teal-300">
+                        Additional Program Request
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-700 mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-teal-900">Requested Degree:</span>
+                      <span className="bg-teal-50 text-teal-900 font-bold px-1.5 py-0.5 rounded border border-teal-200">
+                        {req.requestedProgram}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="font-semibold text-indigo-900">Shifts:</span>
+                      <span className="bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200 font-medium">
+                        {req.requestedShifts.join(', ')}
+                      </span>
+                      {req.reason && (
+                        <>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-600 italic">Note: "{req.reason}"</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleHODApproveProgReq(req.id, req.userName, req.requestedProgram)}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                      title={`Grant full access to ${req.requestedProgram}`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Approve Program</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleHODRejectProgReq(req.id, req.userName, req.requestedProgram)}
+                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-rose-100 text-slate-700 hover:text-rose-700 rounded-lg font-bold text-xs cursor-pointer transition-colors"
+                      title="Decline program request"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Coordinator Status Banner: Pending Authorization */}
+      {isPendingCoordinator && (
+        <div id="coordinator-pending-banner" className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 text-xs text-amber-950 shadow-xs space-y-2.5 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-700 shrink-0 animate-pulse" />
+              <h4 className="font-bold text-amber-950 text-sm">Coordinator Account Authorization Pending</h4>
+            </div>
+            <span className="text-[10px] bg-amber-200 text-amber-900 font-black px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+              Pending HOD Approval
+            </span>
+          </div>
+          <p className="text-amber-900 text-xs leading-relaxed">
+            Your coordinator account registration has been submitted to the Head of Department for <strong>{currentUser?.department}</strong>.
+            You requested coordination for <strong>{currentUser?.requestedPrograms?.join(', ') || currentUser?.program || program}</strong> ({currentUser?.requestedShifts?.join(', ') || 'Morning/Evening'}).
+            Once approved by your HOD, you will have full authorization to submit and verify LMS records.
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleRequestHODReapproval}
+              className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Refresh / Re-send Request to HOD</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Coordinator Status Banner: Rejected */}
+      {isRejectedCoordinator && (
+        <div id="coordinator-rejected-banner" className="bg-rose-50 border-2 border-rose-300 rounded-xl p-4 text-xs text-rose-950 shadow-xs space-y-2.5 animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-rose-200/80 pb-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-rose-700 shrink-0" />
+              <h4 className="font-bold text-rose-950 text-sm">Coordinator Authorization Request Not Approved</h4>
+            </div>
+            <span className="text-[10px] bg-rose-200 text-rose-900 font-black px-2.5 py-0.5 rounded-full">
+              Rejected
+            </span>
+          </div>
+          <p className="text-rose-900 text-xs">
+            Your request for coordinator access in <strong>{currentUser?.department}</strong> was not approved. {currentUser?.rejectionReason ? `Reason: ${currentUser.rejectionReason}` : 'Please check with your Head of Department.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleRequestHODReapproval}
+            className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Submit New Authorization Request to HOD</span>
+          </button>
+        </div>
+      )}
+
       <div className="mb-4">
         <DeadlineBanner currentSession={session} semesterFilter={semester} isVC={false} />
       </div>
@@ -1667,6 +1965,17 @@ export const HODEntryForm: React.FC<Props> = ({
                 )}
               </label>
               <div className="flex items-center gap-1.5 shrink-0">
+                {!isPrivilegedUser && currentUser?.role === 'COORDINATOR' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReqProgModalOpen(true)}
+                    className="text-[10px] text-teal-800 hover:text-teal-950 font-bold bg-teal-100 hover:bg-teal-200 px-2 py-0.5 rounded cursor-pointer shrink-0 flex items-center gap-1 transition-colors shadow-2xs"
+                    title="Request additional degree program or shift from your HOD"
+                  >
+                    <Plus className="w-3 h-3 text-teal-700" />
+                    <span>Request More Programs</span>
+                  </button>
+                )}
                 {(isPrivilegedUser || currentUser?.role === 'HOD') && !isReadOnly && (
                   <button
                     type="button"
@@ -1760,12 +2069,16 @@ export const HODEntryForm: React.FC<Props> = ({
                     {!isPrivilegedUser ? `Your Coordinated Programs (${coordinatorAllowedPrograms.length}):` : `Department Programs (${allDeptPrograms.length}):`}
                   </span>
                   {!isPrivilegedUser && (
-                    <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
-                      🔒 HOD Privilege for Other Programs
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsReqProgModalOpen(true)}
+                      className="text-[9px] text-teal-700 hover:text-teal-900 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Plus className="w-2.5 h-2.5" /> Request Program
+                    </button>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {(!isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms).map((p) => {
                     const isSelected = program === p.name;
                     return (
@@ -1784,13 +2097,56 @@ export const HODEntryForm: React.FC<Props> = ({
                       </button>
                     );
                   })}
+                  {!isPrivilegedUser && (
+                    <button
+                      type="button"
+                      onClick={() => setIsReqProgModalOpen(true)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer border border-dashed border-teal-400 bg-teal-50/80 hover:bg-teal-100 text-teal-800 flex items-center gap-1"
+                      title="Request access to another program from HOD"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Program</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
             {!isPrivilegedUser && coordinatorAllowedPrograms.length === 1 && (
-              <div className="mt-2 py-1 px-2 bg-amber-50/90 border border-amber-200 rounded text-[10px] text-amber-800 flex items-center gap-1.5">
-                <span className="font-bold shrink-0">🔒 Coordinator Scope:</span>
-                <span>Assigned to <strong>{coordinatorAllowedPrograms[0]?.name}</strong>. Head of Department (HOD) privilege is required to access other degree programs.</span>
+              <div className="mt-2 py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-teal-900 shrink-0">Current Program:</span>
+                  <span className="font-semibold text-slate-800">{coordinatorAllowedPrograms[0]?.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsReqProgModalOpen(true)}
+                  className="text-[10px] font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 px-2 py-0.5 rounded cursor-pointer self-start sm:self-auto flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-2.5 h-2.5" /> Request Additional Program
+                </button>
+              </div>
+            )}
+
+            {/* Coordinator's Pending Program Requests Status Alert */}
+            {!isPrivilegedUser && userProgramRequests.some((r) => r.status === 'PENDING') && (
+              <div className="mt-2 py-1.5 px-2.5 bg-amber-50 border border-amber-300 rounded-lg text-[10px] text-amber-900 flex items-center justify-between gap-1.5 animate-in fade-in">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0 animate-pulse" />
+                  <span className="font-bold">Pending HOD Review:</span>
+                  <span className="truncate">
+                    {userProgramRequests
+                      .filter((r) => r.status === 'PENDING')
+                      .map((r) => `${r.requestedProgram} (${r.requestedShifts.join('/')})`)
+                      .join(', ')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsReqProgModalOpen(true)}
+                  className="font-bold text-amber-800 hover:underline shrink-0"
+                >
+                  View Status
+                </button>
               </div>
             )}
             {/* Sections filter indicator badge */}
@@ -3717,6 +4073,21 @@ export const HODEntryForm: React.FC<Props> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Post-Login Request Additional Program Modal */}
+      {currentUser && (
+        <RequestAdditionalProgramModal
+          isOpen={isReqProgModalOpen}
+          onClose={() => setIsReqProgModalOpen(false)}
+          currentUser={currentUser}
+          onRequestSubmitted={(newReq) => {
+            showFeedback('success', `Request for "${newReq.requestedProgram}" submitted to your Head of Department.`);
+            if (currentUser?.id) {
+              setUserProgramRequests(AuthService.getUserProgramRequests(currentUser.id));
+            }
+          }}
+        />
       )}
     </div>
   );

@@ -13,7 +13,9 @@ import {
   Clock,
   Layers,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface Props {
@@ -30,13 +32,19 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
   onSelectProgram,
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<'ALL' | 'Morning' | 'Evening'>('ALL');
 
   if (!isOpen || !department) return null;
 
-  const filteredPrograms = department.programs.filter((p) =>
-    p.program.toLowerCase().includes(filterQuery.toLowerCase()) ||
-    p.coordinator.name.toLowerCase().includes(filterQuery.toLowerCase())
-  );
+  const filteredPrograms = department.programs.filter((p) => {
+    const matchesSearch =
+      p.program.toLowerCase().includes(filterQuery.toLowerCase()) ||
+      p.coordinator.name.toLowerCase().includes(filterQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (selectedShiftFilter === 'ALL') return true;
+    const coordShifts = p.coordinator.shifts || ['Morning', 'Evening'];
+    return coordShifts.includes(selectedShiftFilter);
+  });
 
   const getStatusBadge = (status: ProgramDimension['status']) => {
     switch (status) {
@@ -94,7 +102,7 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
                 <h2 className="text-base sm:text-lg font-black tracking-tight">{department.name}</h2>
               </div>
               <p className="text-xs text-emerald-200/80 mt-0.5">
-                Executive Academic Hierarchy & Program Cohort Drill-Down
+                Executive Academic Hierarchy &amp; Program Cohort Drill-Down
               </p>
             </div>
           </div>
@@ -193,15 +201,55 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="p-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
-          <input
-            type="text"
-            placeholder="Search programs or coordinators..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            className="w-full sm:w-80 px-3 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
+        {/* Search & Shift Filter Bar */}
+        <div className="p-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+            <input
+              type="text"
+              placeholder="Search programs or coordinators..."
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              className="w-full sm:w-72 px-3 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+            {/* Shift Filter buttons */}
+            <div className="inline-flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-300 dark:border-slate-700 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('ALL')}
+                className={`px-2 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                  selectedShiftFilter === 'ALL'
+                    ? 'bg-emerald-700 text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                All Shifts
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('Morning')}
+                className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  selectedShiftFilter === 'Morning'
+                    ? 'bg-amber-500 text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Sun className="w-2.5 h-2.5" />
+                <span>Morning</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedShiftFilter('Evening')}
+                className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  selectedShiftFilter === 'Evening'
+                    ? 'bg-indigo-700 text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Moon className="w-2.5 h-2.5" />
+                <span>Evening</span>
+              </button>
+            </div>
+          </div>
           <span className="text-xs text-slate-500 shrink-0">
             Showing {filteredPrograms.length} of {department.programs.length} programs
           </span>
@@ -214,6 +262,7 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
               <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="p-3">Program</th>
+                  <th className="p-3 text-center">Academic Shift</th>
                   <th className="p-3">Coordinator Dimension</th>
                   <th className="p-3 text-center">Sections</th>
                   <th className="p-3 text-center">Courses</th>
@@ -223,112 +272,139 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredPrograms.map((prog) => (
-                  <tr
-                    key={prog.program}
-                    onClick={() => onSelectProgram(prog)}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
-                  >
-                    <td className="p-3 font-semibold text-slate-900 dark:text-white">
-                      <div className="font-bold text-sm group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                        {prog.program}
-                      </div>
-                      <div className="text-[11px] text-slate-400">{prog.degreeLevel}</div>
-                    </td>
+                {filteredPrograms.map((prog) => {
+                  const coordShifts = prog.coordinator.shifts || ['Morning', 'Evening'];
+                  const isMorning = coordShifts.includes('Morning');
+                  const isEvening = coordShifts.includes('Evening');
 
-                    {/* Coordinator Dimension (Notice: appears even if not assigned) */}
-                    <td className="p-3">
-                      {prog.coordinator.isAssigned ? (
-                        <div>
-                          <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                            <span>{prog.coordinator.name}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            {prog.coordinator.shiftLabel && (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80">
-                                {prog.coordinator.shiftLabel}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-slate-500">
-                              Account: Active
-                              {prog.coordinator.lastLoginAt && (
-                                <span className="ml-1.5">
-                                  • {new Date(prog.coordinator.lastLoginAt).toLocaleDateString()}
+                  return (
+                    <tr
+                      key={prog.program}
+                      onClick={() => onSelectProgram(prog)}
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="p-3 font-semibold text-slate-900 dark:text-white">
+                        <div className="font-bold text-sm group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                          {prog.program}
+                        </div>
+                        <div className="text-[11px] text-slate-400">{prog.degreeLevel}</div>
+                      </td>
+
+                      {/* Academic Shift Column */}
+                      <td className="p-3 text-center">
+                        <div className="inline-flex items-center gap-1">
+                          {isMorning && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              <Sun className="w-2.5 h-2.5 text-amber-600" />
+                              <span>Morning</span>
+                            </span>
+                          )}
+                          {isEvening && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              <Moon className="w-2.5 h-2.5 text-indigo-600" />
+                              <span>Evening</span>
+                            </span>
+                          )}
+                          {!isMorning && !isEvening && (
+                            <span className="text-[10px] text-slate-400 font-medium">Standard</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Coordinator Dimension */}
+                      <td className="p-3">
+                        {prog.coordinator.isAssigned ? (
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                              <span>{prog.coordinator.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {prog.coordinator.shiftLabel && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80">
+                                  {prog.coordinator.shiftLabel}
                                 </span>
                               )}
-                            </span>
+                              <span className="text-[10px] text-slate-500">
+                                Account: Active
+                                {prog.coordinator.lastLoginAt && (
+                                  <span className="ml-1.5">
+                                    • {new Date(prog.coordinator.lastLoginAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="text-amber-700 dark:text-amber-400">
-                          <div className="font-bold flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                            — Not Assigned
+                        ) : (
+                          <div className="text-amber-700 dark:text-amber-400">
+                            <div className="font-bold flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                              — Not Assigned
+                            </div>
+                            <div className="text-[10px] text-slate-500">Account Not Created</div>
                           </div>
-                          <div className="text-[10px] text-slate-500">Account Not Created</div>
+                        )}
+                      </td>
+
+                      <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                        {prog.sectionsCount}
+                      </td>
+
+                      <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                        {prog.totalCourses}
+                      </td>
+
+                      <td className="p-3 min-w-[140px]">
+                        <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+                          <span>{prog.completionRate}%</span>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            {prog.uploadedCourses}/{prog.totalCourses}
+                          </span>
                         </div>
-                      )}
-                    </td>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              prog.completionRate === 100
+                                ? 'bg-emerald-600'
+                                : prog.completionRate > 0
+                                ? 'bg-blue-600'
+                                : 'bg-slate-300 dark:bg-slate-700'
+                            }`}
+                            style={{ width: `${Math.max(prog.completionRate, 2)}%` }}
+                          />
+                        </div>
+                      </td>
 
-                    <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
-                      {prog.sectionsCount}
-                    </td>
+                      <td className="p-3 text-center">{getStatusBadge(prog.status)}</td>
 
-                    <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
-                      {prog.totalCourses}
-                    </td>
-
-                    <td className="p-3 min-w-[140px]">
-                      <div className="flex items-center justify-between text-[11px] font-bold mb-1">
-                        <span>{prog.completionRate}%</span>
-                        <span className="text-[10px] text-slate-400 font-normal">
-                          {prog.uploadedCourses}/{prog.totalCourses}
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            prog.completionRate === 100
-                              ? 'bg-emerald-600'
-                              : prog.completionRate > 0
-                              ? 'bg-blue-600'
-                              : 'bg-slate-300 dark:bg-slate-700'
-                          }`}
-                          style={{ width: `${Math.max(prog.completionRate, 2)}%` }}
-                        />
-                      </div>
-                    </td>
-
-                    <td className="p-3 text-center">{getStatusBadge(prog.status)}</td>
-
-                    <td className="p-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectProgram(prog);
-                        }}
-                        className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer border border-emerald-200 dark:border-emerald-800"
-                      >
-                        <span>Inspect</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectProgram(prog);
+                          }}
+                          className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer border border-emerald-200 dark:border-emerald-800"
+                        >
+                          <span>Inspect</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-          <span>Click any program row to view section breakdown & course-level audit</span>
+        {/* Modal Footer */}
+        <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+          <span>Click any program row to inspect multi-section course results</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold rounded-md transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
           >
             Close
           </button>

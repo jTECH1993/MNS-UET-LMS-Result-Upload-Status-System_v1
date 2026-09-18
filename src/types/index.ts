@@ -54,6 +54,22 @@ export type AppTheme =
   | 'light'     // Alias for emerald
   | 'dark';     // Alias for midnight
 
+export interface ProgramAccessRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  department: string;
+  requestedProgram: string;
+  requestedShifts: AcademicShift[];
+  reason?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+}
+
 export interface UserAccount {
   id: string;
   username: string; // e.g. "admin", "VC", "hod_cs", or "coordinator"
@@ -67,6 +83,14 @@ export interface UserAccount {
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
   programShiftAssignments?: Record<string, AcademicShift[]>; // Program-specific shifts (e.g. { "BS Computer Science": ["Morning", "Evening"], "BS Artificial Intelligence": ["Morning"] })
+  approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED'; // HOD Approval status for coordinator
+  requestedPrograms?: string[]; // Programs requested during registration/subsequent request
+  requestedShifts?: AcademicShift[]; // Shifts requested
+  requestedAt?: string; // Timestamp of request
+  approvedBy?: string; // HOD/Admin name who approved
+  approvedAt?: string; // Timestamp of approval
+  rejectionReason?: string; // Reason if rejected by HOD
+  pendingProgramRequests?: ProgramAccessRequest[]; // Additional program access requests submitted post-login
   createdAt: string;
   lastLoginAt?: string;
   failedLoginAttempts?: number;
@@ -88,6 +112,14 @@ export interface ActiveUserSession {
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
   assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
   programShiftAssignments?: Record<string, AcademicShift[]>; // Program-specific shifts
+  approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+  requestedPrograms?: string[];
+  requestedShifts?: AcademicShift[];
+  requestedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  pendingProgramRequests?: ProgramAccessRequest[];
   token?: string;
   avatarUrl?: string;
   themePreference?: AppTheme;

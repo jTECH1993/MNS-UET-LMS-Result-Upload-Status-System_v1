@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserAccount, UserRole, AcademicShift } from '../types';
+import { UserAccount, UserRole, AcademicShift, ProgramAccessRequest } from '../types';
 import { AuthService } from '../services/authService';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import {
@@ -20,6 +20,7 @@ import {
   UserPlus,
   Briefcase,
   Layers,
+  Clock,
 } from 'lucide-react';
 
 interface Props {
@@ -101,6 +102,75 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
       return a.department?.trim().toLowerCase() === selectedDept.trim().toLowerCase();
     });
   }, [accounts, selectedDept]);
+
+  // Pending Coordinator approval requests for this department
+  const pendingRequests = useMemo(() => {
+    return accounts.filter((a) => {
+      if (a.username.toLowerCase() === 'admin' || a.username.toLowerCase() === 'vc') return false;
+      if (a.approvalStatus !== 'PENDING') return false;
+      if (currentUserRole !== 'HOD' && selectedDept === 'ALL') return true;
+      return a.department?.trim().toLowerCase() === selectedDept.trim().toLowerCase();
+    });
+  }, [accounts, selectedDept, currentUserRole]);
+
+  // Pending Post-Login Additional Program Requests for this department
+  const pendingProgramAccessRequests = useMemo(() => {
+    return AuthService.getPendingProgramRequests(currentUserRole === 'HOD' || selectedDept !== 'ALL' ? selectedDept : undefined);
+  }, [accounts, selectedDept, currentUserRole]);
+
+  const handleQuickApprove = (user: UserAccount) => {
+    const approver = currentUserRole === 'HOD' ? 'Head of Department' : 'Administrator';
+    const progs = user.requestedPrograms && user.requestedPrograms.length > 0 ? user.requestedPrograms : user.assignedPrograms;
+    const shifts = user.requestedShifts && user.requestedShifts.length > 0 ? user.requestedShifts : user.assignedShifts;
+    const res = AuthService.approveCoordinatorAccount(user.id, approver, progs, shifts);
+    if (res.success) {
+      setSuccessMessage(res.message);
+      reloadAccounts();
+      if (onCoordinatorUpdated) {
+        const updated = AuthService.getAccounts().find((a) => a.id === user.id);
+        if (updated) onCoordinatorUpdated(updated);
+      }
+    } else {
+      setErrorMessage(res.message);
+    }
+  };
+
+  const handleQuickReject = (user: UserAccount) => {
+    const rejector = currentUserRole === 'HOD' ? 'Head of Department' : 'Administrator';
+    const res = AuthService.rejectCoordinatorAccount(user.id, rejector, 'Declined by Head of Department.');
+    if (res.success) {
+      setSuccessMessage(res.message);
+      reloadAccounts();
+    } else {
+      setErrorMessage(res.message);
+    }
+  };
+
+  const handleApproveProgReq = (req: ProgramAccessRequest) => {
+    const approver = currentUserRole === 'HOD' ? 'Head of Department' : 'Administrator';
+    const res = AuthService.approveAdditionalProgramRequest(req.id, approver);
+    if (res.success) {
+      setSuccessMessage(`Approved "${req.requestedProgram}" access for ${req.userName}.`);
+      reloadAccounts();
+      if (onCoordinatorUpdated) {
+        const updated = AuthService.getAccounts().find((a) => a.id === req.userId);
+        if (updated) onCoordinatorUpdated(updated);
+      }
+    } else {
+      setErrorMessage(res.message);
+    }
+  };
+
+  const handleRejectProgReq = (req: ProgramAccessRequest) => {
+    const rejector = currentUserRole === 'HOD' ? 'Head of Department' : 'Administrator';
+    const res = AuthService.rejectAdditionalProgramRequest(req.id, rejector, 'Declined by HOD');
+    if (res.success) {
+      setSuccessMessage(`Declined request for "${req.requestedProgram}".`);
+      reloadAccounts();
+    } else {
+      setErrorMessage(res.message);
+    }
+  };
 
   // Initialize selected user when accounts or department changes
   useEffect(() => {
@@ -261,6 +331,7 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
       assignedPrograms,
       assignedShifts: shiftsArray,
       programShiftAssignments: progShifts,
+      approvalStatus: 'APPROVED',
     });
 
     setIsSaving(false);
@@ -571,6 +642,175 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
           ) : (
             /* MODE 2: REASSIGN / SHIFT PROGRAM & EDIT EXISTING FACULTY */
             <div className="space-y-6">
+              {/* PENDING APPROVAL REQUESTS SECTION */}
+              {pendingRequests.length > 0 && (
+                <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between gap-2 border-b border-amber-200 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                      </span>
+                      <h3 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                        Pending Coordinator Authorization Requests ({pendingRequests.length})
+                      </h3>
+                    </div>
+                    <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                      Action Required from HOD
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-amber-200/80">
+                    {pendingRequests.map((reqUser) => {
+                      const progs = reqUser.requestedPrograms || (reqUser.program ? [reqUser.program] : []);
+                      const shifts = reqUser.requestedShifts || reqUser.assignedShifts || ['Morning', 'Evening'];
+                      return (
+                        <div
+                          key={reqUser.id}
+                          className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-slate-900 font-bold text-sm">{reqUser.name}</strong>
+                              <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono">
+                                @{reqUser.username}
+                              </span>
+                              <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded font-semibold">
+                                {reqUser.designation || 'Coordinator'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap">
+                              <span>Email: {reqUser.email}</span>
+                              <span>•</span>
+                              <span>
+                                Requested Program(s):{' '}
+                                <strong className="text-emerald-800 font-bold">
+                                  {progs.join(', ') || 'Department Offerings'}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Shifts:{' '}
+                                <span className="font-semibold text-indigo-700">
+                                  {shifts.join(' & ')}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedUserId(reqUser.id);
+                              }}
+                              className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1"
+                              title="Review and customize programs or role before approval"
+                            >
+                              <span>Customize</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickReject(reqUser)}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                            >
+                              Decline
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickApprove(reqUser)}
+                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-all flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approve &amp; Authorize</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PENDING ADDITIONAL PROGRAM ACCESS REQUESTS (POST-LOGIN) */}
+              {pendingProgramAccessRequests.length > 0 && (
+                <div className="bg-teal-50/90 border-2 border-teal-300 rounded-xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between gap-2 border-b border-teal-200 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-teal-700 animate-pulse" />
+                      <h3 className="text-xs font-black text-teal-950 uppercase tracking-wider">
+                        Pending Additional Program Access Requests ({pendingProgramAccessRequests.length})
+                      </h3>
+                    </div>
+                    <span className="text-[10px] bg-teal-200 text-teal-900 font-bold px-2 py-0.5 rounded-full">
+                      Post-Login Requests
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-teal-200/80">
+                    {pendingProgramAccessRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <strong className="text-slate-900 font-bold text-sm">{req.userName}</strong>
+                            {req.userEmail && (
+                              <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono">
+                                {req.userEmail}
+                              </span>
+                            )}
+                            <span className="text-[10px] bg-teal-100 text-teal-800 border border-teal-300 px-1.5 py-0.2 rounded font-semibold">
+                              {req.department}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap">
+                            <span>
+                              Requested Program:{' '}
+                              <strong className="text-teal-900 font-bold">
+                                {req.requestedProgram}
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Requested Shifts:{' '}
+                              <span className="font-semibold text-indigo-700">
+                                {req.requestedShifts.join(' & ')}
+                              </span>
+                            </span>
+                            {req.reason && (
+                              <>
+                                <span>•</span>
+                                <span className="italic text-slate-500">"{req.reason}"</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRejectProgReq(req)}
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveProgReq(req)}
+                            className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-all flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Approve Program</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Coordinator / Faculty Dropdown Selector */}
               <div className="bg-white border-2 border-emerald-500/60 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
