@@ -803,7 +803,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       const res = await fetch('/api/gemini/vc-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: questionText })
+        body: JSON.stringify({ 
+          question: questionText,
+          currentRecords: allRecords 
+        })
       });
       if (!res.ok) {
         throw new Error(`Server returned error: ${res.statusText}`);

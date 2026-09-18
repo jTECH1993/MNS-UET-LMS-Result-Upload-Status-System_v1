@@ -75,10 +75,10 @@ export function AdminGodModePanel({ allRecords, onDataUpdate }: { allRecords: an
 
   // Longitudinal Performance Data
   const longitudinalData = [
-    { department: 'Computer Science', '2024': 85, '2025': 91, '2026': 95 },
-    { department: 'Mechanical Engineering', '2024': 78, '2025': 84, '2026': 100 },
-    { department: 'Electrical Engineering', '2024': 81, '2025': 89, '2026': 95 },
-    { department: 'Civil Engineering', '2024': 64, '2025': 73, '2026': 0 }
+    { department: 'Computer Science', '2021-22': 85, '2022-23': 91, '2023-24': 95 },
+    { department: 'Mechanical Engineering', '2021-22': 78, '2022-23': 84, '2023-24': 100 },
+    { department: 'Electrical Engineering', '2021-22': 81, '2022-23': 89, '2023-24': 95 },
+    { department: 'Civil Engineering', '2021-22': 64, '2022-23': 73, '2023-24': 0 }
   ];
 
   // Recognition data
@@ -283,20 +283,20 @@ export function AdminGodModePanel({ allRecords, onDataUpdate }: { allRecords: an
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between items-center text-xs font-bold text-slate-800 dark:text-slate-200">
                   <span>{data.department}</span>
-                  <span className="font-mono text-emerald-600">{data['2026']}% (Current)</span>
+                  <span className="font-mono text-emerald-600">{data['2023-24']}% (Current)</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-[10px] text-slate-500 font-mono">
                   <div className="bg-slate-50 dark:bg-slate-950 p-1.5 rounded">
-                    <span>2024: </span>
-                    <strong className="text-slate-700 dark:text-slate-300">{data['2024']}%</strong>
+                    <span>2021-22: </span>
+                    <strong className="text-slate-700 dark:text-slate-300">{data['2021-22']}%</strong>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-950 p-1.5 rounded">
-                    <span>2025: </span>
-                    <strong className="text-slate-700 dark:text-slate-300">{data['2025']}%</strong>
+                    <span>2022-23: </span>
+                    <strong className="text-slate-700 dark:text-slate-300">{data['2022-23']}%</strong>
                   </div>
                   <div className="bg-emerald-950/20 dark:bg-emerald-950/40 p-1.5 rounded border border-emerald-900/20 text-emerald-600 font-bold">
-                    <span>2026: </span>
-                    <span>{data['2026']}%</span>
+                    <span>2023-24: </span>
+                    <span>{data['2023-24']}%</span>
                   </div>
                 </div>
               </div>

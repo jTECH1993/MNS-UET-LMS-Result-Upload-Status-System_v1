@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Bell, Clock, ShieldAlert, CheckCircle2, Play, ChevronRight, User, HelpCircle, FileText, Send } from 'lucide-react';
+import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 
 interface ActionItem {
   id: string;
@@ -89,12 +90,34 @@ export function ActionCenterPanel({ allRecords }: { allRecords: any[] }) {
   ]);
 
   const [newActionForm, setNewActionForm] = useState({
-    title: '',
-    target: '',
-    assignedTo: '',
+    title: 'Accelerate LMS Grade Sheet Uploads',
+    customTitle: '',
+    department: 'Department of Computer Science',
+    program: 'BS Computer Science',
+    semester: '1',
+    section: 'A',
     priority: 'High' as 'High' | 'Medium' | 'Low',
-    deadline: 'Tomorrow 12:00 PM'
+    deadline: 'Within 24 Hours'
   });
+
+  const handleDepartmentChange = (deptName: string) => {
+    const dept = UNIVERSITY_DEPARTMENTS.find(d => d.name === deptName);
+    const firstProg = dept && dept.programs.length > 0 ? dept.programs[0].name : '';
+    setNewActionForm(prev => ({
+      ...prev,
+      department: deptName,
+      program: firstProg
+    }));
+  };
+
+  const TITLE_TEMPLATES = [
+    'Accelerate LMS Grade Sheet Uploads',
+    'Resolve Pending Semester Results',
+    'Audit Submission Discrepancy & Locked Records',
+    'Urgent Coordination Review Required',
+    'Address Unusual Delay in Midterm/Final Submissions',
+    'Custom Directive...'
+  ];
 
   const [isAddingAction, setIsAddingAction] = useState(false);
   const [newRuleHours, setNewRuleHours] = useState<number>(120);
@@ -133,12 +156,20 @@ export function ActionCenterPanel({ allRecords }: { allRecords: any[] }) {
 
   const handleCreateAction = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newActionForm.title || !newActionForm.target) return;
+    const finalTitle = newActionForm.title === 'Custom Directive...' 
+      ? newActionForm.customTitle 
+      : newActionForm.title;
+
+    if (!finalTitle) return;
+
+    const targetString = `${newActionForm.program} (Sem ${newActionForm.semester}, Sec ${newActionForm.section})`;
+    const assignedToString = `HOD ${newActionForm.department.replace('Department of ', '')}`;
+
     const item: ActionItem = {
       id: `act-${Date.now()}`,
-      title: newActionForm.title,
-      target: newActionForm.target,
-      assignedTo: newActionForm.assignedTo || 'Unassigned',
+      title: finalTitle,
+      target: targetString,
+      assignedTo: assignedToString,
       priority: newActionForm.priority,
       deadline: newActionForm.deadline,
       status: 'Open',
@@ -147,11 +178,14 @@ export function ActionCenterPanel({ allRecords }: { allRecords: any[] }) {
     setActions(prev => [item, ...prev]);
     setIsAddingAction(false);
     setNewActionForm({
-      title: '',
-      target: '',
-      assignedTo: '',
+      title: 'Accelerate LMS Grade Sheet Uploads',
+      customTitle: '',
+      department: 'Department of Computer Science',
+      program: 'BS Computer Science',
+      semester: '1',
+      section: 'A',
       priority: 'High',
-      deadline: 'Tomorrow 12:00 PM'
+      deadline: 'Within 24 Hours'
     });
 
     // Log event
@@ -204,59 +238,139 @@ export function ActionCenterPanel({ allRecords }: { allRecords: any[] }) {
           </div>
 
           {isAddingAction && (
-            <form onSubmit={handleCreateAction} className="p-4 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 space-y-3">
+            <form onSubmit={handleCreateAction} className="p-4 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 space-y-4">
               <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Create New Accountability Action</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Action Title (e.g., Complete Semester 6 LMS submissions)"
-                  value={newActionForm.title}
-                  onChange={e => setNewActionForm(prev => ({ ...prev, title: e.target.value }))}
-                  required
-                  className="p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
-                />
-                <input
-                  type="text"
-                  placeholder="Target (e.g., Mechanical Engineering Semester 6)"
-                  value={newActionForm.target}
-                  onChange={e => setNewActionForm(prev => ({ ...prev, target: e.target.value }))}
-                  required
-                  className="p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
-                />
-                <input
-                  type="text"
-                  placeholder="Assigned To (e.g., HOD Mechanical Engineering)"
-                  value={newActionForm.assignedTo}
-                  onChange={e => setNewActionForm(prev => ({ ...prev, assignedTo: e.target.value }))}
-                  required
-                  className="p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
-                />
-                <div className="grid grid-cols-2 gap-2">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Title Select Template */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Directive Title (Template)</label>
                   <select
-                    value={newActionForm.priority}
-                    onChange={e => setNewActionForm(prev => ({ ...prev, priority: e.target.value as any }))}
-                    className="p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                    value={newActionForm.title}
+                    onChange={e => setNewActionForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
                   >
-                    <option value="High">High Priority</option>
-                    <option value="Medium">Medium Priority</option>
-                    <option value="Low">Low Priority</option>
+                    {TITLE_TEMPLATES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
-                  <input
-                    type="text"
-                    placeholder="Deadline"
-                    value={newActionForm.deadline}
-                    onChange={e => setNewActionForm(prev => ({ ...prev, deadline: e.target.value }))}
-                    required
-                    className="p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
-                  />
+                </div>
+
+                {/* 2. Custom Title Input or Target Receiver Info */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">
+                    {newActionForm.title === 'Custom Directive...' ? 'Enter Custom Title' : 'Assigned Recipient Role'}
+                  </label>
+                  {newActionForm.title === 'Custom Directive...' ? (
+                    <input
+                      type="text"
+                      placeholder="Type custom directive title here..."
+                      value={newActionForm.customTitle}
+                      onChange={e => setNewActionForm(prev => ({ ...prev, customTitle: e.target.value }))}
+                      required
+                      className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                    />
+                  ) : (
+                    <div className="p-2 border rounded text-xs bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono">
+                      HOD {newActionForm.department.replace('Department of ', '')}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Department Selection */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Target Faculty/Department</label>
+                  <select
+                    value={newActionForm.department}
+                    onChange={e => handleDepartmentChange(e.target.value)}
+                    className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {UNIVERSITY_DEPARTMENTS.map(d => (
+                      <option key={d.name} value={d.name}>{d.name.replace('Department of ', '')}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Program Selection */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Target Academic Program</label>
+                  <select
+                    value={newActionForm.program}
+                    onChange={e => setNewActionForm(prev => ({ ...prev, program: e.target.value }))}
+                    className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {(UNIVERSITY_DEPARTMENTS.find(d => d.name === newActionForm.department)?.programs || []).map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Semester, Section, Priority & Deadline Selectors */}
+                <div className="grid grid-cols-4 gap-2 md:col-span-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Semester</label>
+                    <select
+                      value={newActionForm.semester}
+                      onChange={e => setNewActionForm(prev => ({ ...prev, semester: e.target.value }))}
+                      className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                    >
+                      {['1', '2', '3', '4', '5', '6', '7', '8'].map(sem => (
+                        <option key={sem} value={sem}>Sem {sem}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Section</label>
+                    <select
+                      value={newActionForm.section}
+                      onChange={e => setNewActionForm(prev => ({ ...prev, section: e.target.value }))}
+                      className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                    >
+                      {['A', 'B', 'C', 'D'].map(sec => (
+                        <option key={sec} value={sec}>Sec {sec}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Priority</label>
+                    <select
+                      value={newActionForm.priority}
+                      onChange={e => setNewActionForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                      className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="High">⚠️ High</option>
+                      <option value="Medium">⚡ Medium</option>
+                      <option value="Low">✓ Low</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Deadline</label>
+                    <select
+                      value={newActionForm.deadline}
+                      onChange={e => setNewActionForm(prev => ({ ...prev, deadline: e.target.value }))}
+                      className="w-full p-2 border rounded text-xs dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                    >
+                      <option value="Within 24 Hours">Within 24 Hours</option>
+                      <option value="Within 48 Hours">Within 48 Hours</option>
+                      <option value="End of Week">End of Week (Friday)</option>
+                      <option value="Immediate">Immediate (Before 5 PM)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div className="flex justify-end pt-2">
+
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-[10px] text-slate-500">
+                  Target: <span className="font-mono text-emerald-600 font-bold">{newActionForm.program} (Sem {newActionForm.semester}, Sec {newActionForm.section})</span>
+                </div>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded transition-all cursor-pointer"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded transition-all cursor-pointer uppercase tracking-wider"
                 >
-                  Dispatch Accountability Order
+                  Dispatch Directive Order
                 </button>
               </div>
             </form>
@@ -335,11 +449,14 @@ export function ActionCenterPanel({ allRecords }: { allRecords: any[] }) {
                   <button
                     onClick={() => {
                       setNewActionForm({
-                        title: `Complete Semester ${rec.semester} LMS uploads for ${rec.program}`,
-                        target: `${rec.program} - Sem ${rec.semester} (${rec.shift})`,
-                        assignedTo: `HOD of ${rec.department}`,
+                        title: 'Custom Directive...',
+                        customTitle: `Complete Semester ${rec.semester} LMS uploads for ${rec.program}`,
+                        department: rec.department || 'Department of Computer Science',
+                        program: rec.program || 'BS Computer Science',
+                        semester: rec.semester || '1',
+                        section: rec.section || 'A',
                         priority: 'High',
-                        deadline: 'Tomorrow 12:00 PM'
+                        deadline: 'Within 24 Hours'
                       });
                       setIsAddingAction(true);
                     }}
