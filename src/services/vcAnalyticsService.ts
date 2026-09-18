@@ -456,27 +456,6 @@ export class VCAnalyticsService {
                 });
               });
               secTotal += validSubjects.length;
-            } else {
-              // Awaiting initial submission for this semester: 5 expected curriculum courses awaiting grade entry
-              secTotal += 5;
-              secPending += 5;
-              for (let i = 1; i <= 5; i++) {
-                courseDetails.push({
-                  id: `awaiting-${semId}-${secName}-c${i}`,
-                  courseCode: `SUBJ-SEM${semId}-${i}`,
-                  subjectTitle: `Semester ${semId} Subject ${i} (Awaiting LMS Entry)`,
-                  creditHours: '3(3-0)',
-                  status: 'Pending',
-                  dateUploaded: '',
-                  uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Coordinator Unassigned',
-                  remarks: `Awaiting LMS result upload for Semester ${semId} Section ${secName}`,
-                  expected: true,
-                  submitted: false,
-                  coordinatorName: coordinatorDim.name,
-                  deadline,
-                  lastActivity: 'Awaiting submission',
-                });
-              }
             }
           });
 

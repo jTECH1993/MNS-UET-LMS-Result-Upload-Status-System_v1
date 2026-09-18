@@ -519,10 +519,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sum.totalSubjects;
             totalUploadedAcrossUni += sum.uploaded;
             totalPendingAcrossUni += sum.pending;
-          } else {
-            // Awaiting submission for this active cohort slot: 5 expected curriculum courses
-            totalSubjectsAcrossUni += 5;
-            totalPendingAcrossUni += 5;
           }
         } else {
           if (sData.hasSubmission) {
@@ -530,10 +526,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sData.totalSubjects;
             totalUploadedAcrossUni += sData.totalUploaded;
             totalPendingAcrossUni += sData.totalPending;
-          } else {
-            // Awaiting submission: 5 expected curriculum courses
-            totalSubjectsAcrossUni += 5;
-            totalPendingAcrossUni += 5;
           }
         }
       });
@@ -594,25 +586,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalUploaded += shift.totalUploaded;
               totalPending += shift.totalPending;
               submittedCohorts += 1;
-            } else {
-              // Awaiting submission: 5 expected curriculum subjects
-              totalSubjects += 5;
-              totalPending += 5;
             }
           } else {
             const rec = shift.semesterRecords[selectedSemesterFilter];
+            totalCohorts += 1;
             if (rec) {
               submittedCohorts += 1;
-              totalCohorts += 1;
               const s = StorageService.calculateSummary(rec.subjects);
               totalSubjects += s.totalSubjects;
               totalUploaded += s.uploaded;
               totalPending += s.pending;
-            } else {
-              // Awaiting submission for this cohort slot
-              totalCohorts += 1;
-              totalSubjects += 5;
-              totalPending += 5;
             }
           }
         });
@@ -1175,7 +1158,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       {/* 4. High-Level Executive KPIs: Overall (82.4%), Departments (18/24), Programs (47/63), Pending (29), Critical Bottleneck */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div
+          onClick={() => {
+            setDashboardViewMode('COMMAND_CENTER');
+            setTimeout(() => {
+              document.getElementById('university-completion-radar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }}
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
+          title="Click to navigate directly to the Completion Radar"
+        >
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Overall University Completion
           </span>
@@ -1193,7 +1185,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div
+          onClick={() => {
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }}
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-indigo-500 transition-all"
+          title="Click to view department compliance roster"
+        >
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Active Departments
           </span>
@@ -1212,7 +1213,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div
+          onClick={() => {
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }}
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
+          title="Click to inspect all active degree programs"
+        >
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Degree Programs
           </span>
@@ -1227,7 +1237,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50/20 dark:bg-rose-950/10 shadow-xs">
+        <div
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }}
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50/20 dark:bg-rose-950/10 shadow-xs cursor-pointer hover:border-rose-400 transition-all"
+          title="Click to view all pending courses requiring action"
+        >
           <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
             Pending Courses
           </span>
@@ -1280,7 +1300,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             setStatusFilter('ALL');
             setSelectedDeptFilter('ALL');
             setOnlyGenuineSubmissions(false);
-            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
           }}
           className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs text-left hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
         >
@@ -1320,7 +1343,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           onClick={() => {
             setStatusFilter('ALL');
             setSelectedDeptFilter('ALL');
-            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
           }}
           className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs text-left hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group"
         >
@@ -1344,7 +1370,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           onClick={() => {
             setStatusFilter('SUBMITTED');
             setSelectedDeptFilter('ALL');
-            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
           }}
           className="bg-white p-4 rounded-lg border border-emerald-200 shadow-2xs text-left hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
         >
@@ -1375,7 +1404,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             setStatusFilter('PENDING');
             setSelectedDeptFilter('ALL');
             setOnlyGenuineSubmissions(false);
-            window.scrollTo({ top: document.getElementById('vc-roster-table')?.offsetTop || 500, behavior: 'smooth' });
+            setDashboardViewMode('ROSTER');
+            setTimeout(() => {
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
           }}
           className="bg-white p-4 rounded-lg border border-amber-200 shadow-2xs text-left hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
         >
@@ -1662,9 +1694,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             return (
               <div
                 key={dept.deptCode}
-                onClick={() =>
-                  setSelectedDeptFilter(isSelected ? 'ALL' : dept.deptName)
-                }
+                onClick={() => {
+                  setSelectedDeptFilter(isSelected ? 'ALL' : dept.deptName);
+                  setTimeout(() => {
+                    document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
                 className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between group ${
                   isSelected
                     ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'

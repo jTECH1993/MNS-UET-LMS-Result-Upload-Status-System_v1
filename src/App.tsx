@@ -994,7 +994,7 @@ export default function App() {
               </span>
             </button>
 
-            {(currentUser.role === 'HOD' || currentUser.role === 'ADMIN' || currentUser.role === 'VC') && (
+            {(currentUser.role === 'HOD' || currentUser.role === 'ADMIN') && (
               <>
                 <span className="text-slate-300 dark:text-slate-700">|</span>
                 <button
