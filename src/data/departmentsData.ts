@@ -106,6 +106,7 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'B.Sc. Chemical Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Food Engineering', degreeLevel: 'BS Engineering', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'MS Chemical Engineering', degreeLevel: 'MS', department: 'Department of Chemical Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'PhD Chemical Engineering', degreeLevel: 'PhD', department: 'Department of Chemical Engineering & Technology', session2023: false, supportedShifts: ['Morning', 'Evening'] },
     ],
   },
   {
