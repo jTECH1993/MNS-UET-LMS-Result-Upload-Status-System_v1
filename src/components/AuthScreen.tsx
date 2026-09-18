@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MnsUetLogo } from './MnsUetLogo';
+import { JtechLogo } from './JtechLogo';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { AuthService } from '../services/authService';
 import { SecurityService } from '../services/securityService';
@@ -1526,8 +1527,16 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
         )}
 
         {/* Footer info */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 text-center text-xs text-slate-500">
+        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <span>Official Central Monitoring Portal of MNS-UET Multan &bull; Anti-Hacking &amp; Brute-Force Protected</span>
+          <div className="inline-flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity">
+            <div className="w-3.5 h-3.5 shrink-0">
+              <JtechLogo className="w-full h-full" />
+            </div>
+            <span className="text-[11px] text-slate-500">
+              Created by <span className="font-bold text-slate-700">Jtech Solutions</span>
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -14,6 +14,8 @@ import { UNIVERSITY_DEPARTMENTS } from './data/departmentsData';
 import { SidebarNavigation } from './components/SidebarNavigation';
 import { WorkOnDemandView } from './components/WorkOnDemandView';
 import { Session2023SelectorModal } from './components/Session2023SelectorModal';
+import { SplashScreen } from './components/SplashScreen';
+import { JtechLogo } from './components/JtechLogo';
 import {
   CheckCircle2,
   Database,
@@ -34,6 +36,9 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  // Application initial splash screen state
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+
   // Authenticated user session
   const [currentUser, setCurrentUser] = useState<ActiveUserSession | null>(() =>
     AuthService.getCurrentSession()
@@ -249,6 +254,11 @@ export default function App() {
     setActiveModule('LMS');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // If initial splash screen is active, show the splash screen
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
 
   // If no user is logged in, show the Authentication screen
   if (!currentUser) {
@@ -933,6 +943,15 @@ export default function App() {
                   </button>
                 </>
               )}
+              <span>•</span>
+              <div className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity">
+                <div className="w-3.5 h-3.5 shrink-0">
+                  <JtechLogo className="w-full h-full" />
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Created by <span className="font-bold text-slate-200">Jtech Solutions</span>
+                </span>
+              </div>
             </div>
           </div>
         </footer>

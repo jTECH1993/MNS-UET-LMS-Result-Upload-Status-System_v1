@@ -154,45 +154,40 @@ export class CompletionRadarService {
   }
 
   /**
-   * Returns active programs for a department strictly for currentSession
+   * Returns active programs for a department strictly for currentSession (or array of sessions)
    */
   public static getActiveProgramsForDepartment(
     deptName: string,
-    currentSession: string,
+    currentSession: string | string[],
     allRecords: SubmissionRecord[]
   ): string[] {
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
     );
-    const sessionRoster = StorageService.getSessionPrograms(deptName, currentSession);
-    const set = new Set<string>(sessionRoster);
+    const set = new Set<string>();
 
-    // Add any programs with authentic submissions
+    sessionList.forEach((sess) => {
+      const sessionRoster = StorageService.getSessionPrograms(deptName, sess, allRecords);
+      sessionRoster.forEach((p) => set.add(p));
+    });
+
+    // Add any programs with authentic submissions in these sessions
     allRecords.forEach((r) => {
       if (
         r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
-        r.session === currentSession
+        sessionList.includes(r.session || '2023') &&
+        r.program &&
+        r.program.trim()
       ) {
         set.add(r.program.trim());
       }
     });
 
-    // Add programs that have assigned coordinators
-    try {
-      const accounts = AuthService.getAccounts();
-      accounts.forEach((acc) => {
-        if (acc.department.trim().toLowerCase() === deptName.trim().toLowerCase()) {
-          const list = acc.assignedPrograms || (acc.program ? [acc.program] : []);
-          list.forEach((p) => {
-            if (p && p.trim()) set.add(p.trim());
-          });
-        }
-      });
-    } catch (e) {}
-
     // If the set is empty, fallback to session-configured programs
     if (set.size === 0 && deptObj) {
-      const defaults = deptObj.programs.filter((p) => (currentSession === '2023' ? p.session2023 : true));
+      const is2023 = sessionList.some((s) => s === '2023' || s.includes('23'));
+      const defaults = deptObj.programs.filter((p) => (is2023 ? p.session2023 : true));
       if (defaults.length > 0) {
         defaults.forEach((p) => set.add(p.name));
       } else if (deptObj.programs.length > 0) {
@@ -208,7 +203,8 @@ export class CompletionRadarService {
    */
   public static getUniversityDepartmentCoverage(
     allRecords: SubmissionRecord[],
-    currentSession: string
+    currentSession: string | string[],
+    semesterFilter?: string | string[]
   ): RadarUnit[] {
     const deadlineInfo = this.getDeadlineInfo();
 
@@ -223,7 +219,7 @@ export class CompletionRadarService {
       let lastActivity = 'No recent activity';
 
       activeProgNames.forEach((progName) => {
-        const progUnits = this.getProgramSectionUnits(dept.name, progName, currentSession, allRecords);
+        const progUnits = this.getProgramSectionUnits(dept.name, progName, currentSession, allRecords, semesterFilter);
         progUnits.forEach((u) => {
           submitted += u.submitted;
           pending += u.pending;
@@ -267,8 +263,9 @@ export class CompletionRadarService {
    */
   public static getProgramsCoverage(
     deptName: string,
-    currentSession: string,
-    allRecords: SubmissionRecord[]
+    currentSession: string | string[],
+    allRecords: SubmissionRecord[],
+    semesterFilter?: string | string[]
   ): RadarUnit[] {
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
@@ -280,7 +277,7 @@ export class CompletionRadarService {
 
     return activeProgNames.map((progName, idx) => {
       const coord = this.resolveCoordinator(deptName, progName);
-      const progUnits = this.getProgramSectionUnits(deptName, progName, currentSession, allRecords);
+      const progUnits = this.getProgramSectionUnits(deptName, progName, currentSession, allRecords, semesterFilter);
 
       let submitted = 0;
       let pending = 0;
@@ -300,9 +297,9 @@ export class CompletionRadarService {
       const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
 
       return {
-        id: `prog-${idx}-${progName}`,
+        id: `prog-${deptCode}-${idx}`,
         name: progName,
-        shortName: progName.replace('Department of ', ''),
+        shortName: progName.split(' ')[0] + ' ' + (progName.split(' ')[1] || ''),
         level: 'PROGRAM',
         submitted,
         pending,
@@ -331,8 +328,9 @@ export class CompletionRadarService {
   public static getSemestersCoverage(
     deptName: string,
     progName: string,
-    currentSession: string,
-    allRecords: SubmissionRecord[]
+    currentSession: string | string[],
+    allRecords: SubmissionRecord[],
+    semesterFilter?: string | string[]
   ): RadarUnit[] {
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
@@ -341,9 +339,18 @@ export class CompletionRadarService {
     const coord = this.resolveCoordinator(deptName, progName);
     const hod = this.resolveHOD(deptName);
     const deadlineInfo = this.getDeadlineInfo();
+    const semList = Array.isArray(semesterFilter)
+      ? semesterFilter.filter((s) => s !== 'ALL')
+      : semesterFilter && semesterFilter !== 'ALL'
+      ? [semesterFilter]
+      : [];
 
-    // Standard Undergraduate semesters 1 to 8 (or active ones)
-    return ACADEMIC_SEMESTERS.map((sem) => {
+    const activeSems = semList.length > 0
+      ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
+      : ACADEMIC_SEMESTERS;
+
+    // Standard Undergraduate semesters
+    return activeSems.map((sem) => {
       // Look at Section A and Section B for this semester
       const secA = this.getSectionUnit(deptName, progName, sem.id, 'A', currentSession, allRecords);
       const secB = this.getSectionUnit(deptName, progName, sem.id, 'B', currentSession, allRecords);
@@ -391,7 +398,7 @@ export class CompletionRadarService {
     deptName: string,
     progName: string,
     semId: string,
-    currentSession: string,
+    currentSession: string | string[],
     allRecords: SubmissionRecord[]
   ): RadarUnit[] {
     return STANDARD_ACADEMIC_SECTIONS.map((sec) =>
@@ -407,9 +414,10 @@ export class CompletionRadarService {
     progName: string,
     semId: string,
     sectionId: string, // 'A' | 'B'
-    currentSession: string,
+    currentSession: string | string[],
     allRecords: SubmissionRecord[]
   ): RadarUnit {
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
     );
@@ -424,7 +432,7 @@ export class CompletionRadarService {
       const matchProg = r.program.trim().toLowerCase() === progName.trim().toLowerCase();
       const matchSem = String(r.semester).trim() === String(semId).trim();
       const matchSec = (r.section || 'A').trim().toUpperCase() === sectionId.trim().toUpperCase();
-      const matchSession = r.session === currentSession;
+      const matchSession = sessionList.includes(r.session || '2023');
       return matchDept && matchProg && matchSem && matchSec && matchSession;
     });
 
@@ -520,11 +528,22 @@ export class CompletionRadarService {
   private static getProgramSectionUnits(
     deptName: string,
     progName: string,
-    currentSession: string,
-    allRecords: SubmissionRecord[]
+    currentSession: string | string[],
+    allRecords: SubmissionRecord[],
+    semesterFilter?: string | string[]
   ): RadarUnit[] {
     const list: RadarUnit[] = [];
-    ACADEMIC_SEMESTERS.slice(0, 4).forEach((sem) => {
+    const semList = Array.isArray(semesterFilter)
+      ? semesterFilter.filter((s) => s !== 'ALL')
+      : semesterFilter && semesterFilter !== 'ALL'
+      ? [semesterFilter]
+      : [];
+
+    const targetSems = semList.length > 0
+      ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
+      : ACADEMIC_SEMESTERS.slice(0, 4);
+
+    targetSems.forEach((sem) => {
       list.push(this.getSectionUnit(deptName, progName, sem.id, 'A', currentSession, allRecords));
       list.push(this.getSectionUnit(deptName, progName, sem.id, 'B', currentSession, allRecords));
     });
@@ -540,26 +559,38 @@ export class CompletionRadarService {
    */
   public static findBottleneck(
     allRecords: SubmissionRecord[],
-    currentSession: string
+    currentSession: string | string[],
+    semesterFilter?: string | string[]
   ): {
     primary: BottleneckInfo;
     runnerUps: BottleneckInfo[];
   } {
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
+    const semList = Array.isArray(semesterFilter)
+      ? semesterFilter.filter((s) => s !== 'ALL')
+      : semesterFilter && semesterFilter !== 'ALL'
+      ? [semesterFilter]
+      : [];
+
     const deadlineInfo = this.getDeadlineInfo();
     const candidates: BottleneckInfo[] = [];
 
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
-      const activeProgNames = this.getActiveProgramsForDepartment(dept.name, currentSession, allRecords);
+      const activeProgNames = this.getActiveProgramsForDepartment(dept.name, sessionList, allRecords);
       const hod = this.resolveHOD(dept.name);
 
       activeProgNames.forEach((progName) => {
         const coord = this.resolveCoordinator(dept.name, progName);
 
-        // Check Semesters 1 through 8
-        ACADEMIC_SEMESTERS.forEach((sem) => {
+        // Check Semesters (or filtered ones)
+        const targetSems = semList.length > 0
+          ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
+          : ACADEMIC_SEMESTERS;
+
+        targetSems.forEach((sem) => {
           // Check Section A and Section B
           ['A', 'B'].forEach((secId) => {
-            const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, currentSession, allRecords);
+            const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, sessionList, allRecords);
 
             // Compute Risk Score
             let risk = 0;
@@ -630,17 +661,26 @@ export class CompletionRadarService {
       });
     });
 
-    // Sort descending by riskScore
-    candidates.sort((a, b) => b.riskScore - a.riskScore);
+    // Department-level deduplication: Find the most critical bottleneck for EACH department across the university
+    const deptBottlenecksMap: Record<string, BottleneckInfo> = {};
+
+    candidates.forEach((cand) => {
+      const existing = deptBottlenecksMap[cand.department];
+      if (!existing || cand.riskScore > existing.riskScore) {
+        deptBottlenecksMap[cand.department] = cand;
+      }
+    });
+
+    const sortedDeptBottlenecks = Object.values(deptBottlenecksMap).sort((a, b) => b.riskScore - a.riskScore);
 
     // Fallback if zero candidates found (i.e. 100% submission)
-    const primary: BottleneckInfo = candidates[0] || {
+    const primary: BottleneckInfo = sortedDeptBottlenecks[0] || candidates[0] || {
       department: 'Department of Computer Science',
       deptCode: 'CS',
-      program: 'BS Software Engineering',
-      semesterId: '2',
-      semesterLabel: '2nd Semester',
-      section: 'Section B',
+      program: 'BS Computer Science',
+      semesterId: '1',
+      semesterLabel: '1st Semester',
+      section: 'Section A',
       totalCourses: 6,
       submittedCourses: 0,
       pendingCourses: 6,
@@ -657,68 +697,8 @@ export class CompletionRadarService {
       laggingCourses: [
         {
           id: 'b-1',
-          courseCode: 'CS-201',
+          courseCode: 'CS-101',
           subjectTitle: 'Programming Fundamentals',
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          uploadedBy: 'Unassigned',
-          coordinatorName: 'Not Assigned',
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        },
-        {
-          id: 'b-2',
-          courseCode: 'CS-202',
-          subjectTitle: 'Database Systems',
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          uploadedBy: 'Unassigned',
-          coordinatorName: 'Not Assigned',
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        },
-        {
-          id: 'b-3',
-          courseCode: 'MATH-201',
-          subjectTitle: 'Discrete Mathematics',
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          uploadedBy: 'Unassigned',
-          coordinatorName: 'Not Assigned',
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        },
-        {
-          id: 'b-4',
-          courseCode: 'ENG-201',
-          subjectTitle: 'Technical English',
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          uploadedBy: 'Unassigned',
-          coordinatorName: 'Not Assigned',
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        },
-        {
-          id: 'b-5',
-          courseCode: 'PHY-201',
-          subjectTitle: 'Applied Physics',
-          creditHours: '3(3-0)',
-          status: 'Pending',
-          submitted: false,
-          uploadedBy: 'Unassigned',
-          coordinatorName: 'Not Assigned',
-          deadlineText: deadlineInfo.text,
-          lastActivity: 'Not started',
-        },
-        {
-          id: 'b-6',
-          courseCode: 'CS-205',
-          subjectTitle: 'ICT & Computing Tools',
           creditHours: '3(3-0)',
           status: 'Pending',
           submitted: false,
@@ -730,7 +710,10 @@ export class CompletionRadarService {
       ],
     };
 
-    const runnerUps = candidates.slice(1, 4);
+    // Include top bottlenecks from other departments so carousel cycles across all departments
+    const runnerUps = sortedDeptBottlenecks.length > 1 
+      ? sortedDeptBottlenecks.slice(1) 
+      : candidates.filter(c => c.department !== primary.department || c.program !== primary.program).slice(0, 5);
 
     return { primary, runnerUps };
   }

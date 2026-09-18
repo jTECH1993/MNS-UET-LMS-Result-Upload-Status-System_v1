@@ -106,8 +106,8 @@ export class VCAnalyticsService {
    */
   public static buildAcademicHierarchy(params: {
     allRecords: SubmissionRecord[];
-    currentSession: string;
-    semesterFilter?: string; // 'ALL' or '1'-'8'
+    currentSession: string | string[];
+    semesterFilter?: string | string[]; // 'ALL' or '1'-'8' or array of semester IDs
     shiftFilter?: 'ALL' | AcademicShift;
     sectionFilter?: string; // 'ALL' or 'A'-'D'
   }): {
@@ -124,6 +124,13 @@ export class VCAnalyticsService {
     agingRisk: DeadlineAgingRisk;
   } {
     const { allRecords, currentSession, semesterFilter = 'ALL', shiftFilter = 'ALL', sectionFilter = 'ALL' } = params;
+    const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
+    const semesterList = Array.isArray(semesterFilter)
+      ? semesterFilter.filter((s) => s !== 'ALL')
+      : semesterFilter === 'ALL'
+      ? []
+      : [semesterFilter];
+
     const accounts = AuthService.getAccounts();
     const deadline = StorageService.getSystemDeadline();
     const isDeadlinePassed = StorageService.isSystemDeadlineExpired();
@@ -183,32 +190,27 @@ export class VCAnalyticsService {
         });
       }
 
-      // 2. Resolve Programs Dimension - Strictly for currentSession (e.g. Session 2023)
-      // Only consider programs configured for this session, or registered via submission/coordinator
-      const sessionRoster = StorageService.getSessionPrograms(dept.name, currentSession);
-      const registeredProgramNames = new Set<string>(sessionRoster);
+      // 2. Resolve Programs Dimension - Strictly for selected sessions (e.g. Session 2023, 2024...)
+      // Only consider active programs dynamically configured for these sessions or with active submissions
+      const registeredProgramNames = new Set<string>();
+      sessionList.forEach((sess) => {
+        const sessionRoster = StorageService.getSessionPrograms(dept.name, sess, allRecords);
+        sessionRoster.forEach((p) => registeredProgramNames.add(p));
+      });
 
-      // Dynamically include any program that has submitted LMS records in this department for this session
+      // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
       allRecords.forEach((r) => {
         if (
           r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
-          r.session === currentSession
+          sessionList.includes(r.session || '2023') &&
+          r.program &&
+          r.program.trim()
         ) {
           registeredProgramNames.add(r.program.trim());
         }
       });
 
-      // Dynamically include any program that has a coordinator account assigned
-      accounts.forEach((acc) => {
-        if (acc.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) {
-          const assignedList = acc.assignedPrograms || (acc.program ? [acc.program] : []);
-          assignedList.forEach((p) => {
-            if (p && p.trim()) registeredProgramNames.add(p.trim());
-          });
-        }
-      });
-
-      // Filter dept.programs to only those registered/configured, plus any dynamically added
+      // Filter dept.programs to only those active in the selected sessions
       const activePrograms: ProgramInfo[] = [];
       registeredProgramNames.forEach((progName) => {
         const found = dept.programs.find((p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase());
@@ -219,7 +221,7 @@ export class VCAnalyticsService {
             name: progName,
             degreeLevel: progName.startsWith('MS') || progName.startsWith('M.Sc') ? 'MS' : 'BS',
             department: dept.name,
-            session2023: currentSession === '2023' || currentSession.includes('23'),
+            session2023: sessionList.some((s) => s === '2023' || s.includes('23')),
           });
         }
       });
@@ -273,8 +275,8 @@ export class VCAnalyticsService {
         const matchingRecords = allRecords.filter((r) => {
           if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
           if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
-          if (r.session !== currentSession) return false;
-          if (semesterFilter !== 'ALL' && (r.semester || '1') !== semesterFilter) return false;
+          if (!sessionList.includes(r.session || '2023')) return false;
+          if (semesterList.length > 0 && !semesterList.includes(r.semester || '1')) return false;
           if (shiftFilter !== 'ALL' && (r.shift || 'Morning') !== shiftFilter) return false;
           return true;
         });

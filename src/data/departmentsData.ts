@@ -48,8 +48,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
     name: 'Department of Computer Science',
     code: 'CS',
     programs: [
-      { name: 'BS Computer Science', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Software Engineering Technology (B.Tech)', degreeLevel: 'B.Tech', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
+      { name: 'BS Computer Science', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Software Engineering', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Artificial Intelligence', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Cyber Security', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning', 'Evening'] },

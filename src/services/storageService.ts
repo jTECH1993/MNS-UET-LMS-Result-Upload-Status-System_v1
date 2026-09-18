@@ -265,11 +265,11 @@ export class StorageService {
 
     // 1. If coordinator/HOD configured a roster for this department and session in database:
     const configuredKey = Object.keys(roster).find(k => k.trim().toLowerCase() === departmentName.trim().toLowerCase());
-    if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
+    if (configuredKey && Array.isArray(roster[configuredKey])) {
       activePrograms = [...roster[configuredKey]];
     } else {
       // 2. Default coordinator template:
-      // In Session 2023: only programs configured as session2023 (e.g. BS Computer Science & B.Sc. SET for CS)
+      // In Session 2023: only programs configured as session2023
       if (sessionName === '2023' || sessionName.includes('23')) {
         activePrograms = dept.programs.filter((p) => p.session2023).map((p) => p.name);
       } else {
