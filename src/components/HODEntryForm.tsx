@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   DepartmentGroup,
   UNIVERSITY_DEPARTMENTS,
@@ -14,6 +14,7 @@ import { SubjectRow, SubmissionRecord, LMSStatus, ActiveUserSession, AcademicShi
 import { StorageService } from '../services/storageService';
 import { AuthService } from '../services/authService';
 import { AuditTrailService } from '../services/auditTrailService';
+import { CompletionRadarService } from '../services/completionRadarService';
 import { dispatchSyncEvidence } from './SyncEvidenceToast';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeadlineBanner } from './DeadlineBanner';
@@ -140,6 +141,14 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Lock form if readonly, or if VC, or if deadline expired and NOT VC/ADMIN
   const isReadOnly = Boolean(readOnly || isVC || (isDeadlineExpired && !isVC && !isAdmin));
+
+  // Mode for HOD to toggle between Read-Only Inspection Mode and Write/Update Mode
+  const [isHodReadMode, setIsHodReadMode] = useState<boolean>(false);
+
+  // Effective read-only mode considering HOD read mode preference
+  const effectiveReadOnly = Boolean(
+    isReadOnly || (currentUser?.role === 'HOD' && isHodReadMode)
+  );
 
 
   const userDept = (currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR') && currentUser.department
@@ -613,23 +622,50 @@ export const HODEntryForm: React.FC<Props> = ({
     };
   }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord, storageVersion]);
 
-  // Metadata manual fields - initialized with current user name & designation
-  const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
-    if (currentUser?.name) {
-      return `${currentUser.name} (${currentUser.designation})`;
+  // Helper to resolve Program Coordinator name for current program
+  const resolveProgramCoordinatorName = useCallback((dept: string, prog: string, savedCoord?: string): string => {
+    // 1. If logged-in user is a Coordinator, use their own name
+    if (currentUser?.role === 'COORDINATOR' && currentUser?.name) {
+      return `${currentUser.name} (${currentUser.designation || 'Program Coordinator'})`;
     }
-    return 'Dr. Muhammad Tariq (HOD CS)';
+
+    // 2. Check if savedCoord exists and is NOT an HOD designation
+    if (
+      savedCoord &&
+      !savedCoord.toLowerCase().includes('head of department') &&
+      !savedCoord.toLowerCase().includes('hod') &&
+      !savedCoord.toLowerCase().includes('vice chancellor')
+    ) {
+      return savedCoord;
+    }
+
+    // 3. Resolve assigned coordinator for this program
+    const coordRes = CompletionRadarService.resolveCoordinator(dept, prog);
+    if (coordRes.isAssigned && coordRes.name) {
+      return `${coordRes.name} (${coordRes.designation || 'Program Coordinator'})`;
+    }
+
+    if (savedCoord) return savedCoord;
+
+    return 'Program Coordinator';
+  }, [currentUser]);
+
+  // Metadata manual fields
+  const [hodCoordinator, setHodCoordinator] = useState<string>(() => {
+    const initDept = selectedDepartmentProp || UNIVERSITY_DEPARTMENTS[0].name;
+    const initProg = selectedProgramProp || UNIVERSITY_DEPARTMENTS[0].programs[0].name;
+    return resolveProgramCoordinatorName(initDept, initProg);
   });
   const [submissionDate, setSubmissionDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
 
-  // Update hodCoordinator if currentUser changes and not editing an existing locked record
+  // Update hodCoordinator if currentUser or selection changes and not editing a custom locked value
   useEffect(() => {
-    if (currentUser?.name && !isExistingRecord) {
-      setHodCoordinator(`${currentUser.name} (${currentUser.designation})`);
+    if (!isExistingRecord) {
+      setHodCoordinator(resolveProgramCoordinatorName(department, program));
     }
-  }, [currentUser]);
+  }, [currentUser, department, program, resolveProgramCoordinatorName, isExistingRecord]);
 
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
   const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning', '1', 'A'));
@@ -768,7 +804,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // Existing record exists -> LOAD EXACT SAVED ROWS ONLY
       setIsExistingRecord(true);
       setLastSavedTime(existing.updatedAt);
-      if (existing.hodCoordinator) setHodCoordinator(existing.hodCoordinator);
+      setHodCoordinator(resolveProgramCoordinatorName(department, program, existing.hodCoordinator));
       if (existing.submissionDate) setSubmissionDate(existing.submissionDate);
 
       // Filter to existing non-empty rows, pad up to 8 for fast entry
@@ -791,11 +827,7 @@ export const HODEntryForm: React.FC<Props> = ({
       // No record exists -> Start with 8 clean rows
       setIsExistingRecord(false);
       setLastSavedTime(null);
-      
-      // Reset HOD / Coordinator name to the currently logged-in user
-      if (currentUser?.name) {
-        setHodCoordinator(`${currentUser.name} (${currentUser.designation})`);
-      }
+      setHodCoordinator(resolveProgramCoordinatorName(department, program));
 
       setSubjects(createInitialBlankRows(1, shift, semester, section));
 
@@ -1779,13 +1811,42 @@ export const HODEntryForm: React.FC<Props> = ({
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
             <div>
-              <p className="font-bold text-emerald-900 text-sm">Head of Department Administrative Oversight</p>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-emerald-900 text-sm">Head of Department Administrative Oversight</p>
+                <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  HOD Verified
+                </span>
+              </div>
               <p className="text-emerald-800 text-xs mt-0.5">
-                You have full administrative authorization to view, manage, and update LMS result status for all programs under <strong>{currentUser.department}</strong>.
+                Viewing program records for <strong>{program}</strong>. You have full privilege to inspect in read mode or enable edit/update mode to write changes.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+            {/* Mode Switcher Toggle for HOD */}
+            <button
+              type="button"
+              onClick={() => setIsHodReadMode(!isHodReadMode)}
+              className={`flex items-center gap-1.5 font-bold text-xs px-3 py-1.5 rounded-lg border shadow-xs transition-all cursor-pointer ${
+                isHodReadMode
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700'
+                  : 'bg-slate-800 hover:bg-slate-900 text-white border-slate-900'
+              }`}
+              title={isHodReadMode ? "Switch to Write & Update Mode to make changes" : "Switch to Read-Only Mode for clean inspection"}
+            >
+              {isHodReadMode ? (
+                <>
+                  <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Enable Write &amp; Update Mode</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Read-Only View Active</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setIsCoordinatorAssignModalOpen(true)}
@@ -1793,11 +1854,8 @@ export const HODEntryForm: React.FC<Props> = ({
               title="Manage coordinator program allocations, shift programs, or change role to Regular/Visiting faculty"
             >
               <Users className="w-4 h-4" />
-              <span>Manage Coordinators &amp; Faculty</span>
+              <span>Manage Faculty</span>
             </button>
-            <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
-              HOD Verified
-            </span>
           </div>
         </div>
       )}
@@ -2697,16 +2755,29 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Submission Metadata Row (HOD Coordinator & Submission Date) */}
-        <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Submission Metadata Row (Head of Department, Program Coordinator & Submission Date) */}
+        <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Head of Department (HOD) - Official Designation Display */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              Head of Department (HOD):
+            </label>
+            <div className="w-full bg-emerald-50/80 border border-emerald-200 rounded-lg px-3 py-1.5 text-xs text-emerald-950 font-semibold flex items-center justify-between">
+              <span className="truncate">{CompletionRadarService.resolveHOD(department).name}</span>
+              <span className="text-[9px] bg-emerald-200/90 text-emerald-900 font-bold px-1.5 py-0.5 rounded uppercase">HOD</span>
+            </div>
+          </div>
+
+          {/* Program Coordinator Name - Assigned for Program */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor="input-hod-coordinator"
                 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
               >
-                <User className="w-3.5 h-3.5 text-slate-500" />
-                HOD / Program Coordinator Name:
+                <User className="w-3.5 h-3.5 text-teal-600" />
+                Program Coordinator Name:
               </label>
               {onOpenUserModal && (
                 <button
@@ -2723,11 +2794,13 @@ export const HODEntryForm: React.FC<Props> = ({
               type="text"
               value={hodCoordinator}
               onChange={(e) => setHodCoordinator(e.target.value)}
-              placeholder="e.g. Dr. Muhammad Tariq (HOD CS)"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+              placeholder="e.g. Engr. Muhammad Talha Jahangir"
+              disabled={effectiveReadOnly}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white disabled:opacity-80"
             />
           </div>
 
+          {/* Date of Submission */}
           <div>
             <label
               htmlFor="input-submission-date"
@@ -2741,7 +2814,8 @@ export const HODEntryForm: React.FC<Props> = ({
               type="date"
               value={submissionDate}
               onChange={(e) => setSubmissionDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+              disabled={effectiveReadOnly}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white disabled:opacity-80"
             />
           </div>
         </div>
@@ -2855,8 +2929,8 @@ export const HODEntryForm: React.FC<Props> = ({
               <span>{showAdvancedColumns ? 'Compact View' : 'All Details'}</span>
             </button>
 
-            {/* If Read-Only (VC View): Show Print and Export. If Editable: Show Bulk Paste and Add Course */}
-            {isReadOnly ? (
+            {/* If Read-Only (VC View or HOD Read Mode): Show Print and Export. If Editable: Show Bulk Paste and Add Course */}
+            {effectiveReadOnly ? (
               <>
                 <button
                   type="button"
@@ -3152,7 +3226,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Quick Row Selection controls (Editable Mode Only) */}
-            {!isReadOnly && (
+            {!effectiveReadOnly && (
               <div className="flex items-center gap-1 text-[11px] text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">
                 <span className="font-medium text-slate-600">Select:</span>
                 <button
@@ -3506,7 +3580,7 @@ export const HODEntryForm: React.FC<Props> = ({
             <thead>
               <tr className="bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
                 {/* Master Checkbox Column (Hidden in read-only) */}
-                {!isReadOnly && (
+                {!effectiveReadOnly && (
                   <th className="py-2.5 px-3 text-center w-10">
                     <input
                       id="chk-master-select-all"
@@ -3538,17 +3612,17 @@ export const HODEntryForm: React.FC<Props> = ({
                 <th className="py-2.5 px-3 min-w-[220px]">
                   <div className="flex items-center gap-1">
                     <span>Remarks / Delay Reason</span>
-                    {!isReadOnly && <span className="text-[9px] font-normal text-slate-500 normal-case">(Custom or preset)</span>}
+                    {!effectiveReadOnly && <span className="text-[9px] font-normal text-slate-500 normal-case">(Custom or preset)</span>}
                   </div>
                 </th>
-                {!isReadOnly && <th className="py-2.5 px-2 text-center w-14">Action</th>}
+                {!effectiveReadOnly && <th className="py-2.5 px-2 text-center w-14">Action</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
               {filteredSubjects.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isReadOnly ? (showAdvancedColumns ? 10 : 8) : (showAdvancedColumns ? 12 : 10)}
+                    colSpan={effectiveReadOnly ? (showAdvancedColumns ? 10 : 8) : (showAdvancedColumns ? 12 : 10)}
                     className="py-12 text-center text-slate-400 bg-white"
                   >
                     <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -3860,7 +3934,7 @@ export const HODEntryForm: React.FC<Props> = ({
                       </td>
 
                       {/* Action (Delete row) - Hidden in read-only */}
-                      {!isReadOnly && (
+                      {!effectiveReadOnly && (
                         <td className="py-2 px-2 text-center">
                           <button
                             type="button"
@@ -3882,7 +3956,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
         {/* Card Footer Toolbar */}
         <div className="p-4 bg-slate-50/90 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-          {!isReadOnly ? (
+          {!effectiveReadOnly ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -3926,7 +4000,7 @@ export const HODEntryForm: React.FC<Props> = ({
         id="hod-action-bar"
         className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-wrap items-center justify-between gap-4"
       >
-        {isReadOnly ? (
+        {effectiveReadOnly ? (
           <>
             <div className="flex flex-wrap items-center gap-3">
               {onSwitchToVC && (
