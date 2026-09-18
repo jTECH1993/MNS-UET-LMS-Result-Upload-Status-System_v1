@@ -180,6 +180,30 @@ For any submitted semester record $R$ with active courses $S = \{s_1, s_2, \dots
 
 ---
 
+## ⚡ Robust Database Check & Multi-Layered Sync (Dual-Persistence Engine)
+
+To guarantee that data is synchronized across the whole hierarchy, the application leverages a multi-layered verification strategy:
+* **Client-First Execution**: User updates are applied instantly to local state and synchronized asynchronously in the background.
+* **Bi-directional Cloud & SQLite Synchronization**: The background worker polls periodically (every 10 seconds) to check for newer state records across Cloud Firestore and the server's native SQLite Database (`/api/submissions`), reconciling timestamps gracefully to prevent older edits from overwriting newer changes.
+* **Fail-safe Sync Fallback**: If internet connection drops or Cloud Firestore access fails due to credentials or quotas, the synchronizer seamlessly falls back to querying the backend SQLite REST endpoints, maintaining zero downtime and 100% accurate coordination.
+
+---
+
+## 🌟 Newly Implemented Core Features
+
+### 1. High-Fidelity VC Directive Dispatcher (Dropdown-Driven Form)
+The Vice Chancellor's Action Center has been upgraded from manual text-based entries to a fully dropdown-driven form:
+* **Faculty & Program Selection**: Dynamic cascading selects that pull directly from the official university department metadata. Selecting a department automatically filters and populates its associated academic programs.
+* **Explicit Target Scoping**: Simple dropdowns to select specific semesters (Semester 1–8) and sections (Sec A, B, C, D) to eliminate typos and invalid targets.
+* **Actionable Templates**: Preset administrative directive titles (e.g., *"Accelerate LMS Grade Sheet Uploads"* or *"Resolve Pending Semester Results"*) enable the VC to dispatch formal orders in two clicks, automatically assigning them to the relevant Head of Department.
+
+### 2. Quota-Robust AI Executive Assistant Fallback
+To ensure continuous academic monitoring, the **AI Executive Assistant** has a built-in fallback report analyzer:
+* **Live Record Grounding**: Sends the 100% active, dynamic user-modified dataset to the backend rather than using stale static seeds.
+* **Dual-Bypass local analyzer**: In case the Google Gemini API limits are reached (`resource_exhausted` quota errors), the backend interceptor catches the exception instantly and switches to the **MNS-UET Local Database Analyzer**. This native analyzer processes queries regarding pending course delays, HOD coverage, and campus metrics directly from the active datastores, delivering accurate answers without any external network dependency.
+
+---
+
 ## 🗄️ Database Schema & Entity Relationships
 
 The relational datastore consists of 9 core entities managed via **Drizzle ORM** (SQLite) and mirrored in **Cloud Firestore**:

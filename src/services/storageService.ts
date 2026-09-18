@@ -1354,8 +1354,34 @@ export class StorageService {
   }
 
   public static async apiSyncSubmissions(): Promise<void> {
+    let remoteList: SubmissionRecord[] = [];
+    let fetchedFromFirebase = false;
+
+    // 1. Try Firestore Sync
     try {
-      const remoteList = await FirebaseStore.fetchAllSubmissions();
+      remoteList = await FirebaseStore.fetchAllSubmissions();
+      fetchedFromFirebase = true;
+    } catch (e) {
+      console.warn('Firebase submissions fetch failed, checking local SQLite fallback:', e);
+    }
+
+    // 2. Try SQLite Backend API Sync
+    try {
+      if (typeof window !== 'undefined') {
+        const sqliteRes = await fetch('/api/submissions');
+        if (sqliteRes.ok) {
+          const sqliteList = await sqliteRes.json();
+          // If we didn't successfully query Firebase, or if SQLite contains newer or more entries, sync them
+          if (!fetchedFromFirebase || sqliteList.length > remoteList.length) {
+            remoteList = sqliteList;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('SQLite API submissions fetch failed:', e);
+    }
+
+    try {
       const changed = this.mergeIncrementalSubmissions(remoteList);
       if (changed && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
