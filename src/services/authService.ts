@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { UserAccount, ActiveUserSession, UserRole, AppTheme } from '../types';
+import { UserAccount, ActiveUserSession, UserRole, AppTheme, AcademicShift } from '../types';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SecurityService } from './securityService';
 import { FirebaseStore } from '../lib/firebaseStore';
@@ -142,6 +142,8 @@ export const DEFAULT_ACCOUNTS: UserAccount[] = [
     department: 'Department of Computer Science',
     role: 'COORDINATOR',
     program: 'BS Artificial Intelligence',
+    assignedPrograms: ['BS Artificial Intelligence', 'BS Computer Science'],
+    assignedShifts: ['Morning', 'Evening'],
     createdAt: '2026-09-01T08:00:00.000Z',
   },
 ];
@@ -281,6 +283,7 @@ export class AuthService {
         session.role = account.role;
         session.program = account.program;
         session.assignedPrograms = account.assignedPrograms;
+        session.assignedShifts = account.assignedShifts;
         session.department = account.department;
         session.designation = account.designation;
         session.name = account.name;
@@ -417,6 +420,7 @@ export class AuthService {
       role: account.role,
       program: account.program,
       assignedPrograms: account.assignedPrograms,
+      assignedShifts: account.assignedShifts,
       avatarUrl: account.avatarUrl,
       themePreference: account.themePreference,
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -445,6 +449,7 @@ export class AuthService {
     role?: UserRole;
     program?: string;
     assignedPrograms?: string[];
+    assignedShifts?: AcademicShift[];
   }): { success: boolean; message: string; session?: ActiveUserSession } {
     const cleanUser = SecurityService.sanitizeInput(data.username).trim();
     const cleanEmail = SecurityService.sanitizeInput(data.email || '').trim().toLowerCase();
@@ -481,14 +486,14 @@ export class AuthService {
       };
     }
 
-    // RULE 2: No more than TWO accounts registered under the same institutional email address
-    const sameEmailAccounts = accounts.filter(
+    // RULE 2: Strictly ONE account per institutional email address (Institutional Policy)
+    const existingEmailAccount = accounts.find(
       (a) => a.email && a.email.trim().toLowerCase() === cleanEmail
     );
-    if (sameEmailAccounts.length >= 2) {
+    if (existingEmailAccount) {
       return {
         success: false,
-        message: `Institutional registration limit reached: A maximum of two accounts may be registered under the same institutional email address (${cleanEmail}).`,
+        message: `Institutional policy: Only ONE account is permitted per institutional email address (${cleanEmail}). Each faculty member holds a single account. A single login enables you to coordinate multiple degree programs and oversee both Morning & Evening shifts directly from your portal without needing multiple accounts. Please log in with your existing account.`,
       };
     }
 
@@ -500,34 +505,22 @@ export class AuthService {
 
     const primaryProgram = rawAssigned[0] || (data.program ? SecurityService.sanitizeInput(data.program).trim() : undefined);
 
-    // RULE 3: For coordinators, at most TWO coordinator accounts per degree program (Morning & Evening coordinators)
-    if (assignedRole === 'COORDINATOR' && primaryProgram) {
-      const existingCoordinators = accounts.filter((a) => {
-        if (a.role !== 'COORDINATOR') return false;
-        if (a.program && a.program.trim().toLowerCase() === primaryProgram.toLowerCase()) return true;
-        if (a.assignedPrograms && a.assignedPrograms.some((p) => p.trim().toLowerCase() === primaryProgram.toLowerCase())) return true;
-        return false;
-      });
-      if (existingCoordinators.length >= 2) {
-        return {
-          success: false,
-          message: `Institutional program limit reached: A maximum of two coordinator accounts (Morning and Evening) are permitted for "${primaryProgram}". Two coordinators are already registered.`,
-        };
-      }
-    }
-
-    // RULE 4: No more than TWO accounts for the same faculty member name in the same department
+    // RULE 3: Strictly ONE account for the same faculty member name in the same department
     const samePersonAccounts = accounts.filter(
       (a) =>
         a.name.trim().toLowerCase() === cleanName.toLowerCase() &&
         a.department.trim().toLowerCase() === cleanDept.toLowerCase()
     );
-    if (samePersonAccounts.length >= 2) {
+    if (samePersonAccounts.length >= 1) {
       return {
         success: false,
-        message: `Institutional policy limit: A maximum of two accounts can be created for "${cleanName}" in ${cleanDept}.`,
+        message: `An account already exists for "${cleanName}" in ${cleanDept}. Each faculty member has a single institutional account. Please log in or use password recovery.`,
       };
     }
+
+    const resolvedShifts: AcademicShift[] | undefined = data.assignedShifts && data.assignedShifts.length > 0
+      ? data.assignedShifts
+      : (assignedRole === 'COORDINATOR' ? ['Morning', 'Evening'] : undefined);
 
     const newAccount: UserAccount = {
       id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -540,6 +533,7 @@ export class AuthService {
       role: assignedRole,
       program: assignedRole !== 'HOD' ? primaryProgram : undefined,
       assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
+      assignedShifts: assignedRole !== 'HOD' ? resolvedShifts : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       themePreference: 'emerald',
@@ -569,7 +563,7 @@ export class AuthService {
       severity: 'INFO',
       actor: newAccount.username,
       targetAccount: newAccount.username,
-      details: `New account registered and database synchronized: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
+      details: `New account registered and database synchronized: ${newAccount.username} (${newAccount.email}) [${newAccount.role} - ${newAccount.department}]. Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}. Shifts: ${newAccount.assignedShifts?.join(', ') || 'Default'}.`,
     });
 
     const session: ActiveUserSession = {
@@ -582,6 +576,7 @@ export class AuthService {
       role: newAccount.role,
       program: newAccount.program,
       assignedPrograms: newAccount.assignedPrograms,
+      assignedShifts: newAccount.assignedShifts,
       token: `auth_tok_${Date.now()}`,
     };
 
@@ -786,6 +781,7 @@ export class AuthService {
       department?: string;
       program?: string;
       assignedPrograms?: string[];
+      assignedShifts?: AcademicShift[];
     }
   ): { success: boolean; message: string; session?: ActiveUserSession } {
     const accounts = this.getAccounts();
@@ -823,8 +819,18 @@ export class AuthService {
       account.name = data.name.trim();
     }
 
-    // Update email
+    // Update email (strictly unique per account in accordance with institutional policy)
     if (data.email !== undefined && data.email.trim().length > 0) {
+      const cleanNewEmail = data.email.trim().toLowerCase();
+      const dupEmail = accounts.find(
+        (a) => a.id !== userId && a.email && a.email.trim().toLowerCase() === cleanNewEmail
+      );
+      if (dupEmail) {
+        return {
+          success: false,
+          message: `The institutional email "${data.email.trim()}" is already registered to another account (${dupEmail.name}). In accordance with institutional policy, each account must have a unique email.`,
+        };
+      }
       account.email = data.email.trim();
     }
 
@@ -851,6 +857,11 @@ export class AuthService {
     // Update multiple assigned programs
     if (data.assignedPrograms !== undefined) {
       account.assignedPrograms = data.assignedPrograms.length > 0 ? data.assignedPrograms : undefined;
+    }
+
+    // Update coordinated shifts (e.g. Morning & Evening)
+    if (data.assignedShifts !== undefined) {
+      account.assignedShifts = data.assignedShifts.length > 0 ? data.assignedShifts : undefined;
     }
 
     // Update avatarUrl (can be empty string to remove avatar)
@@ -892,6 +903,7 @@ export class AuthService {
         role: account.role,
         program: account.program,
         assignedPrograms: account.assignedPrograms,
+        assignedShifts: account.assignedShifts,
         avatarUrl: account.avatarUrl,
         themePreference: account.themePreference,
       };

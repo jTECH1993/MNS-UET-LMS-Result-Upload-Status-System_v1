@@ -67,6 +67,7 @@ app.post('/api/users', asyncHandler(async (req, res) => {
       role: data.role || existing[0].role,
       program: data.program !== undefined ? data.program : existing[0].program,
       assignedPrograms: data.assignedPrograms || existing[0].assignedPrograms,
+      assignedShifts: data.assignedShifts || existing[0].assignedShifts,
       avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : existing[0].avatarUrl,
       themePreference: data.themePreference || existing[0].themePreference,
       lastLoginAt: data.lastLoginAt || existing[0].lastLoginAt,
@@ -84,6 +85,7 @@ app.post('/api/users', asyncHandler(async (req, res) => {
       role: data.role || 'LECTURER',
       program: data.program || null,
       assignedPrograms: data.assignedPrograms || null,
+      assignedShifts: data.assignedShifts || null,
       createdAt: data.createdAt || new Date().toISOString(),
       lastLoginAt: data.lastLoginAt || new Date().toISOString(),
       avatarUrl: data.avatarUrl || null,
@@ -112,6 +114,7 @@ app.put('/api/users/:id', asyncHandler(async (req, res) => {
   if (data.role !== undefined) updateFields.role = data.role;
   if (data.program !== undefined) updateFields.program = data.program;
   if (data.assignedPrograms !== undefined) updateFields.assignedPrograms = data.assignedPrograms;
+  if (data.assignedShifts !== undefined) updateFields.assignedShifts = data.assignedShifts;
   if (data.avatarUrl !== undefined) updateFields.avatarUrl = data.avatarUrl;
   if (data.themePreference !== undefined) updateFields.themePreference = data.themePreference;
   if (data.password !== undefined) {

@@ -306,6 +306,22 @@ export const HODEntryForm: React.FC<Props> = ({
     new Date().toISOString().slice(0, 10)
   );
 
+  const programHasSectionB = (progName: string): boolean => {
+    if (!progName) return true;
+    const lower = progName.toLowerCase();
+    if (lower.includes('ms ') || lower.includes('phd') || lower.includes('m.sc') || lower.includes('b.tech')) {
+      return false;
+    }
+    return true;
+  };
+
+  useEffect(() => {
+    if (!programHasSectionB(program) && section === 'B') {
+      setSection('A');
+      if (onSectionChangedProp) onSectionChangedProp('A');
+    }
+  }, [program]);
+
   // Update hodCoordinator if currentUser changes and not editing an existing locked record
   useEffect(() => {
     if (currentUser?.name && !isExistingRecord) {
@@ -1415,6 +1431,27 @@ export const HODEntryForm: React.FC<Props> = ({
                 );
               })()}
             </select>
+            {/* Sections filter indicator badge */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1.5 px-0.5">
+              <span className="flex items-center gap-1 font-medium">
+                <Layers className="w-3.5 h-3.5 text-indigo-700" />
+                Sections Filter:
+              </span>
+              <span
+                className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                  programHasSectionB(program)
+                    ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}
+                title={
+                  programHasSectionB(program)
+                    ? 'Section A & Section B are available for this program'
+                    : 'Section B is not available for this program (Single Section)'
+                }
+              >
+                {programHasSectionB(program) ? 'Sec A & Sec B Active' : 'Sec A Only (Section B N/A)'}
+              </span>
+            </div>
             {/* Quick multi-program switcher chips for coordinators overseeing >1 program */}
             {currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 1 && (
               <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -1542,7 +1579,14 @@ export const HODEntryForm: React.FC<Props> = ({
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer"
             >
               <option value="A">Section A</option>
-              <option value="B">Section B</option>
+              <option
+                value="B"
+                disabled={!programHasSectionB(program)}
+                title={!programHasSectionB(program) ? 'Not available for this program' : undefined}
+                className={!programHasSectionB(program) ? 'text-slate-400 bg-slate-100 italic' : ''}
+              >
+                Section B {!programHasSectionB(program) ? '(Not available for this program)' : ''}
+              </option>
             </select>
           </div>
         </div>
@@ -1565,22 +1609,34 @@ export const HODEntryForm: React.FC<Props> = ({
           <div className="flex flex-wrap items-center gap-2">
             {sectionStatuses.map((sec) => {
               const isSelected = sec.id === section;
+              const isSecBDisabled = sec.id === 'B' && !programHasSectionB(program);
               return (
                 <button
                   key={sec.id}
                   id={`btn-section-tab-${sec.id}`}
                   type="button"
-                  onClick={() => handleSectionChange(sec.id)}
-                  className={`py-2 px-3.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
-                    isSelected
-                      ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30'
+                  disabled={isSecBDisabled}
+                  onClick={() => {
+                    if (isSecBDisabled) return;
+                    handleSectionChange(sec.id);
+                  }}
+                  title={isSecBDisabled ? 'Not available for this program' : undefined}
+                  className={`py-2 px-3.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border ${
+                    isSecBDisabled
+                      ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200 line-through'
+                      : isSelected
+                      ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-500/30 cursor-pointer'
                       : sec.hasRecord
-                      ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100 cursor-pointer'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
                   }`}
                 >
                   <span className="text-sm font-black">{sec.label}</span>
-                  {sec.hasRecord ? (
+                  {isSecBDisabled ? (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded font-normal text-slate-400">
+                      N/A ✕
+                    </span>
+                  ) : sec.hasRecord ? (
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
                         isSelected ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-200 text-indigo-900'

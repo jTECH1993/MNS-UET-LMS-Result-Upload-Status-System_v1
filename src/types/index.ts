@@ -65,6 +65,7 @@ export interface UserAccount {
   role: UserRole;
   program?: string; // Primary program e.g. "BS Artificial Intelligence"
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
+  assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
   createdAt: string;
   lastLoginAt?: string;
   failedLoginAttempts?: number;
@@ -84,6 +85,7 @@ export interface ActiveUserSession {
   role: UserRole;
   program?: string; // Primary program e.g. "BS Artificial Intelligence"
   assignedPrograms?: string[]; // Multiple programs for coordinators/teachers overseeing >1 program
+  assignedShifts?: AcademicShift[]; // Coordinated academic shifts (e.g. ['Morning', 'Evening'] or single shift)
   token?: string;
   avatarUrl?: string;
   themePreference?: AppTheme;

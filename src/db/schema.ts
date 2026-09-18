@@ -12,6 +12,7 @@ export const users = sqliteTable('users', {
   role: text('role').notNull(), // 'ADMIN', 'VC', 'HOD', 'COORDINATOR', 'LECTURER', 'VISITING_LECTURER'
   program: text('program'),
   assignedPrograms: text('assigned_programs', { mode: 'json' }).$type<string[]>(),
+  assignedShifts: text('assigned_shifts', { mode: 'json' }).$type<string[]>(),
   createdAt: text('created_at').notNull(),
   lastLoginAt: text('last_login_at'),
   failedLoginAttempts: integer('failed_login_attempts').default(0),

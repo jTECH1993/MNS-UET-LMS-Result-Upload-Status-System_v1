@@ -3,7 +3,7 @@ import { MnsUetLogo } from './MnsUetLogo';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { AuthService } from '../services/authService';
 import { SecurityService } from '../services/securityService';
-import { ActiveUserSession } from '../types';
+import { ActiveUserSession, AcademicShift } from '../types';
 import {
   Lock,
   User,
@@ -29,6 +29,7 @@ import {
   Check,
   Star,
   X,
+  SunMoon,
 } from 'lucide-react';
 
 interface Props {

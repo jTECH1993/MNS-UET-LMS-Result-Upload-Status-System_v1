@@ -14,6 +14,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
   // Collect top programs across departments to show in matrix
   const matrixRows: {
     deptCode: string;
+    deptName: string;
     program: ProgramDimension;
     sections: { [secName: string]: SectionBreakdown | undefined };
   }[] = [];
@@ -26,6 +27,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
       });
       matrixRows.push({
         deptCode: dept.code,
+        deptName: dept.name,
         program: prog,
         sections: secMap,
       });
@@ -35,7 +37,12 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
   const getCellBadge = (sec?: SectionBreakdown) => {
     if (!sec) {
       return (
-        <span className="text-[10px] text-slate-300 dark:text-slate-700 font-mono">—</span>
+        <span
+          title="This program does not have this section"
+          className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 text-[10px] font-mono line-through cursor-not-allowed select-none border border-slate-200 dark:border-slate-700"
+        >
+          N/A ✕
+        </span>
       );
     }
     const rate = sec.completionRate;
@@ -91,7 +98,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-              <th className="p-2.5">Dept</th>
+              <th className="p-2.5">Department Name</th>
               <th className="p-2.5">Degree Program</th>
               <th className="p-2.5 text-center w-28">Section A</th>
               <th className="p-2.5 text-center w-28">Section B</th>
@@ -104,8 +111,13 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
                 key={`${row.deptCode}-${row.program.program}`}
                 className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
               >
-                <td className="p-2.5 font-mono font-bold text-slate-600 dark:text-slate-400">
-                  {row.deptCode}
+                <td className="p-2.5">
+                  <div className="font-bold text-slate-900 dark:text-white" title={row.deptName}>
+                    {row.deptName}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    Code: {row.deptCode}
+                  </div>
                 </td>
                 <td className="p-2.5 font-semibold text-slate-900 dark:text-white">
                   {row.program.program}

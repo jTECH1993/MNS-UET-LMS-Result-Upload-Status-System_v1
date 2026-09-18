@@ -186,7 +186,7 @@ export default function App() {
     if (sessionPrograms.length > 0 && !sessionPrograms.includes(targetProg)) {
       setTargetProg(sessionPrograms[0]);
     }
-  }, [targetDept, targetSession, targetProg]);
+  }, [targetDept, targetSession]);
 
   const handleAuthenticated = (session: ActiveUserSession) => {
     setCurrentUser(session);
