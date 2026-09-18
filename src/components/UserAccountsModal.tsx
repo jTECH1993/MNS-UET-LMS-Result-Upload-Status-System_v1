@@ -31,6 +31,7 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [showClearAllConfirm, setShowClearAllConfirm] = useState<boolean>(false);
   const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [selectedDeptForAssign, setSelectedDeptForAssign] = useState<string | undefined>(undefined);
+  const [selectedUserIdForAssign, setSelectedUserIdForAssign] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -252,6 +253,7 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             type="button"
             onClick={() => {
               setSelectedDeptForAssign(undefined);
+              setSelectedUserIdForAssign(undefined);
               setIsCoordinatorAssignModalOpen(true);
             }}
             className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
@@ -436,6 +438,7 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 type="button"
                                 onClick={() => {
                                   setSelectedDeptForAssign(acc.department || undefined);
+                                  setSelectedUserIdForAssign(acc.id);
                                   setIsCoordinatorAssignModalOpen(true);
                                 }}
                                 className="p-1.5 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
@@ -523,9 +526,11 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
         onClose={() => {
           setIsCoordinatorAssignModalOpen(false);
           setSelectedDeptForAssign(undefined);
+          setSelectedUserIdForAssign(undefined);
           loadAccounts();
         }}
         defaultDepartment={selectedDeptForAssign}
+        initialUserId={selectedUserIdForAssign}
         onCoordinatorUpdated={() => {
           loadAccounts();
           if (typeof window !== 'undefined') {

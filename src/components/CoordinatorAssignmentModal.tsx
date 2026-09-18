@@ -30,6 +30,7 @@ interface Props {
   defaultDepartment?: string;
   currentUserRole?: UserRole;
   onCoordinatorUpdated?: (updatedAccount: UserAccount) => void;
+  initialUserId?: string;
 }
 
 export const CoordinatorAssignmentModal: React.FC<Props> = ({
@@ -38,6 +39,7 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
   defaultDepartment = 'Department of Computer Science',
   currentUserRole,
   onCoordinatorUpdated,
+  initialUserId,
 }) => {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [selectedDept, setSelectedDept] = useState<string>(defaultDepartment);
@@ -86,15 +88,29 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (isOpen) {
-      reloadAccounts();
-      if (defaultDepartment) {
-        setSelectedDept(defaultDepartment);
+      const allAccs = AuthService.getAccounts();
+      setAccounts(allAccs);
+      
+      let targetDept = defaultDepartment;
+      if (initialUserId) {
+        const foundUser = allAccs.find(a => a.id === initialUserId);
+        if (foundUser && foundUser.department) {
+          targetDept = foundUser.department;
+        }
       }
+      
+      if (targetDept) {
+        setSelectedDept(targetDept);
+      }
+      if (initialUserId) {
+        setSelectedUserId(initialUserId);
+      }
+      
       setSuccessMessage('');
       setErrorMessage('');
       setIsCreatingNew(false);
     }
-  }, [isOpen, defaultDepartment]);
+  }, [isOpen, defaultDepartment, initialUserId]);
 
   // Filter department coordinators & faculty (exclude root Admin & VC)
   const deptAccounts = useMemo(() => {
@@ -178,16 +194,20 @@ export const CoordinatorAssignmentModal: React.FC<Props> = ({
     if (!isOpen) return;
 
     if (deptAccounts.length > 0) {
-      // Keep existing selection if valid, otherwise pick first coordinator or first faculty
-      const found = deptAccounts.find((a) => a.id === selectedUserId);
-      if (!found) {
+      // Keep existing selection if valid, otherwise check for initialUserId, then pick first coordinator or first faculty
+      const found = deptAccounts.find((a) => a.id === selectedUserId || a.id === initialUserId);
+      if (found) {
+        if (selectedUserId !== found.id) {
+          setSelectedUserId(found.id);
+        }
+      } else {
         const firstCoord = deptAccounts.find((a) => a.role === 'COORDINATOR') || deptAccounts[0];
         setSelectedUserId(firstCoord.id);
       }
     } else {
       setSelectedUserId('');
     }
-  }, [deptAccounts, isOpen]);
+  }, [deptAccounts, isOpen, initialUserId]);
 
   // Populate editor form whenever selected user changes
   useEffect(() => {
