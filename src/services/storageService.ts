@@ -531,11 +531,60 @@ export class StorageService {
     return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
-  public static _isMatch(a: string, b: string): boolean {
+  public static _isDeptMatch(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    const trimA = a.trim().toLowerCase();
+    const trimB = b.trim().toLowerCase();
+    if (trimA === trimB) return true;
+
     const na = this._normalizeStr(a);
     const nb = this._normalizeStr(b);
     if (!na || !nb) return false;
-    return na === nb || (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
+    if (na === nb) return true;
+
+    return (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
+  }
+
+  public static _isProgMatch(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    const trimA = a.trim().toLowerCase();
+    const trimB = b.trim().toLowerCase();
+    if (trimA === trimB) return true;
+
+    const na = this._normalizeStr(a);
+    const nb = this._normalizeStr(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+
+    // 1. Engineering vs Engineering Technology distinction
+    const aHasTech = na.includes('tech') || na.includes('technology');
+    const bHasTech = nb.includes('tech') || nb.includes('technology');
+    if (aHasTech !== bHasTech) return false;
+
+    // 2. Degree level distinction (MS/PhD vs BS)
+    const aIsMS = na.startsWith('ms') || na.startsWith('msc') || na.startsWith('mphil');
+    const bIsMS = nb.startsWith('ms') || nb.startsWith('msc') || nb.startsWith('mphil');
+    if (aIsMS !== bIsMS) return false;
+
+    const aIsPhD = na.startsWith('phd') || na.startsWith('doctor');
+    const bIsPhD = nb.startsWith('phd') || nb.startsWith('doctor');
+    if (aIsPhD !== bIsPhD) return false;
+
+    // 3. Discipline keywords check
+    const disciplines = [
+      'civil', 'mechanical', 'electrical', 'chemical', 'software',
+      'artificial', 'cyber', 'data', 'information', 'marketing',
+      'analytics', 'fintech', 'entrepreneurship', 'project', 'computer'
+    ];
+    for (const d of disciplines) {
+      if (na.includes(d) !== nb.includes(d)) return false;
+    }
+
+    return (na.length >= 4 && nb.includes(na)) || (nb.length >= 4 && na.includes(nb));
+  }
+
+  public static _isMatch(a: string, b: string): boolean {
+    return this._isDeptMatch(a, b) || this._isProgMatch(a, b);
   }
 
   public static getSubmission(
@@ -571,8 +620,8 @@ export class StorageService {
     const records = Object.values(store);
     for (const rec of records) {
       if (!rec) continue;
-      const matchDept = this._isMatch(department, rec.department);
-      const matchProg = this._isMatch(program, rec.program);
+      const matchDept = this._isDeptMatch(department, rec.department);
+      const matchProg = this._isProgMatch(program, rec.program);
       const rShift = (rec.shift || 'Morning').trim().toLowerCase();
       const matchShift = !cleanShift || rShift === cleanShift;
       const rSem = String(rec.semester || '1').trim();
@@ -818,8 +867,8 @@ export class StorageService {
     // 2. Discover from stored non-empty submissions strictly for this cohort
     Object.values(store).forEach((rec) => {
       if (!rec) return;
-      const matchDept = this._isMatch(department, rec.department);
-      const matchProg = this._isMatch(program, rec.program);
+      const matchDept = this._isDeptMatch(department, rec.department);
+      const matchProg = this._isProgMatch(program, rec.program);
       const matchSem = !cleanSem || String(rec.semester || '').trim() === cleanSem;
       const matchShift = !shift || (rec.shift || 'Morning').trim().toLowerCase() === cleanShift;
       const rSess = (rec.session || '').trim();
@@ -921,8 +970,8 @@ export class StorageService {
     Object.keys(store).forEach((k) => {
       const rec = store[k];
       if (!rec) return;
-      const matchDept = this._isMatch(department, rec.department);
-      const matchProg = this._isMatch(program, rec.program);
+      const matchDept = this._isDeptMatch(department, rec.department);
+      const matchProg = this._isProgMatch(program, rec.program);
       const matchSem = !cleanSem || String(rec.semester || '').trim() === cleanSem;
       const matchSec = (rec.section || '').trim().toUpperCase() === cleanSec;
 

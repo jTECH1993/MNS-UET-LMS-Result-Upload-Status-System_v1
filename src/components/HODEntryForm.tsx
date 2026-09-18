@@ -174,9 +174,9 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Auto-derived default degree level, with user override capability
   const autoDegreeLevel = useMemo(() => {
-    const progInfo = currentDeptPrograms.find((p) => p.name === program);
+    const progInfo = allDeptPrograms.find((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
     return progInfo?.degreeLevel || 'BS (4 Years)';
-  }, [currentDeptPrograms, program]);
+  }, [allDeptPrograms, program]);
 
   const [degreeLevel, setDegreeLevel] = useState<string>(autoDegreeLevel);
 
@@ -437,70 +437,55 @@ export const HODEntryForm: React.FC<Props> = ({
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
   const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning', '1', 'A'));
 
-  // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record")
+  // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record" or parent)
   useEffect(() => {
     if (selectedDepartmentProp && selectedDepartmentProp !== department) {
       setDepartment(selectedDepartmentProp);
     }
-  }, [selectedDepartmentProp]);
-
-  useEffect(() => {
     if (selectedProgramProp && selectedProgramProp !== program) {
       setProgram(selectedProgramProp);
     }
-  }, [selectedProgramProp]);
-
-  useEffect(() => {
     if (selectedShiftProp && selectedShiftProp !== shift) {
       setShift(selectedShiftProp);
     }
-  }, [selectedShiftProp]);
-
-  useEffect(() => {
     if (selectedSessionProp && selectedSessionProp !== session) {
       setSession(selectedSessionProp);
     }
-  }, [selectedSessionProp]);
-
-  useEffect(() => {
     if (selectedSemesterProp && selectedSemesterProp !== semester) {
       setSemester(selectedSemesterProp);
     }
-  }, [selectedSemesterProp]);
-
-  useEffect(() => {
-    if (selectedSectionProp && selectedSectionProp !== section) {
+    if (selectedSectionProp && selectedSectionProp.trim().toUpperCase() !== section) {
       setSection(selectedSectionProp.trim().toUpperCase());
     }
-  }, [selectedSectionProp]);
+  }, [selectedDepartmentProp, selectedProgramProp, selectedShiftProp, selectedSessionProp, selectedSemesterProp, selectedSectionProp]);
 
-  // Strict Department & Program Isolation for HOD & Coordinator roles
+  // Strict Department Isolation for HOD & Coordinator roles (Only when NOT in VC or Admin or readOnly inspection mode)
   useEffect(() => {
+    if (currentUser?.role === 'VC' || currentUser?.role === 'ADMIN' || isReadOnly || readOnly) {
+      return;
+    }
     const isRestricted = currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR';
     if (isRestricted && currentUser.department) {
       if (department !== currentUser.department) {
         handleDepartmentChange(currentUser.department);
       }
     }
-    // If user is a Coordinator with an assigned program, auto-select it if not already set
-    if (currentUser?.role === 'COORDINATOR' && currentUser.program) {
+    // If user is a Coordinator with an assigned single program, auto-select it if not already set
+    if (currentUser?.role === 'COORDINATOR' && currentUser.program && !currentUser.assignedPrograms) {
       if (program !== currentUser.program) {
         setProgram(currentUser.program);
         if (onProgramChangedProp) onProgramChangedProp(currentUser.program);
       }
     }
-  }, [currentUser, department, program]);
+  }, [currentUser, department, isReadOnly, readOnly]);
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
     setDepartment(newDept);
     if (onDepartmentChangedProp) onDepartmentChangedProp(newDept);
-    const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDept);
+    const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === newDept.trim().toLowerCase());
     if (targetDept && targetDept.programs.length > 0) {
-      const activeNames = StorageService.getSessionPrograms(newDept, session);
-      const enrolled = targetDept.programs.filter((p) => activeNames.includes(p.name));
-      const pick = enrolled[0] || targetDept.programs[0];
-      const progName = pick ? pick.name : '';
+      const progName = targetDept.programs[0].name;
       setProgram(progName);
       if (onProgramChangedProp) onProgramChangedProp(progName);
     } else {
@@ -510,24 +495,23 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   const handleProgramChange = (newProg: string) => {
-    const activeNames = StorageService.getSessionPrograms(department, session);
-    if (activeNames.length > 0 && !activeNames.includes(newProg)) {
-      return;
-    }
     setProgram(newProg);
     if (onProgramChangedProp) onProgramChangedProp(newProg);
   };
 
-  // Guard against off-cycle program selection when session or department changes
+  // Validate that program belongs to selected department; if not, fallback to first program
   useEffect(() => {
-    if (!department || !session) return;
-    const activeNames = StorageService.getSessionPrograms(department, session);
-    if (activeNames.length > 0 && !activeNames.includes(program)) {
-      const validProg = activeNames[0];
-      setProgram(validProg);
-      if (onProgramChangedProp) onProgramChangedProp(validProg);
+    if (!department) return;
+    const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === department.trim().toLowerCase());
+    if (targetDept && targetDept.programs.length > 0) {
+      const isValid = targetDept.programs.some((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
+      if (!isValid) {
+        const fallback = targetDept.programs[0].name;
+        setProgram(fallback);
+        if (onProgramChangedProp) onProgramChangedProp(fallback);
+      }
     }
-  }, [department, session]);
+  }, [department]);
 
   const handleShiftChange = (newShift: AcademicShift) => {
     setShift(newShift);
@@ -1496,21 +1480,21 @@ export const HODEntryForm: React.FC<Props> = ({
                 return (
                   <>
                     {enrolled.length > 0 && (
-                      <optgroup label={`Session ${session} Enrolled Offerings (${enrolled.length})`}>
+                      <optgroup label={`Department Degree Offerings (${enrolled.length})`}>
                         {enrolled.map((p) => {
                           const isCoordinated = currentUser?.assignedPrograms
                             ? currentUser.assignedPrograms.includes(p.name)
                             : currentUser?.program === p.name;
                           return (
                             <option key={p.name} value={p.name} className="font-bold text-slate-900">
-                              {p.name} {isCoordinated ? '★ (My Program)' : ''}
+                              {p.name} {isCoordinated ? '★ (Coordinated)' : ''}
                             </option>
                           );
                         })}
                       </optgroup>
                     )}
                     {other.length > 0 && (
-                      <optgroup label={`Other Offerings (Not Enrolled in Session ${session})`}>
+                      <optgroup label={`Additional Department Offerings (${other.length})`}>
                         {other.map((p) => {
                           const isCoordinated = currentUser?.assignedPrograms
                             ? currentUser.assignedPrograms.includes(p.name)
@@ -1519,11 +1503,9 @@ export const HODEntryForm: React.FC<Props> = ({
                             <option
                               key={p.name}
                               value={p.name}
-                              disabled
-                              title={`Not applicable in selected session: Session ${session}`}
-                              className="text-slate-400 dark:text-slate-500 italic bg-slate-100 dark:bg-slate-800"
+                              className="font-medium text-slate-800"
                             >
-                              {p.name} — [Not applicable in Session {session}] {isCoordinated ? '★' : ''}
+                              {p.name} {isCoordinated ? '★ (Coordinated)' : ''}
                             </option>
                           );
                         })}
@@ -1533,6 +1515,37 @@ export const HODEntryForm: React.FC<Props> = ({
                 );
               })()}
             </select>
+            {/* Quick program switcher buttons for HOD & Department Leadership */}
+            {allDeptPrograms.length > 1 && (
+              <div className="mt-2 pt-1.5 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                    <GraduationCap className="w-3 h-3 text-emerald-600" />
+                    Department Programs ({allDeptPrograms.length}):
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {allDeptPrograms.map((p) => {
+                    const isSelected = program === p.name;
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => handleProgramChange(p.name)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer border flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-emerald-700 text-white border-emerald-800 shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                        title={`Switch to ${p.name}`}
+                      >
+                        <span>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Sections filter indicator badge */}
             <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1.5 px-0.5">
               <span className="flex items-center gap-1 font-medium">

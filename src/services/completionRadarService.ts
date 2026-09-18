@@ -470,8 +470,8 @@ export class CompletionRadarService {
     // Find authentic record if exists
     const rec = allRecords.find((r) => {
       if (!r) return false;
-      const matchDept = StorageService._isMatch(r.department || '', deptName);
-      const matchProg = StorageService._isMatch(r.program || '', progName);
+      const matchDept = StorageService._isDeptMatch(r.department || '', deptName);
+      const matchProg = StorageService._isProgMatch(r.program || '', progName);
       const matchSem = String(r.semester || '').trim() === String(semId).trim();
       const matchSec = (r.section || 'A').trim().toUpperCase() === sectionId.trim().toUpperCase();
       const rSess = (r.session || '2023').trim();

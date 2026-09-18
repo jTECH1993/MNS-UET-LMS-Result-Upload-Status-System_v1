@@ -193,14 +193,17 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Guard against off-cycle targetProg selection: dynamically select enrolled program for the active session
+  // Validate that targetProg belongs to targetDept; if not, select the first valid program of targetDept
   useEffect(() => {
     if (!targetDept) return;
-    const sessionPrograms = StorageService.getSessionPrograms(targetDept, targetSession);
-    if (sessionPrograms.length > 0 && !sessionPrograms.includes(targetProg)) {
-      setTargetProg(sessionPrograms[0]);
+    const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === targetDept.trim().toLowerCase());
+    if (deptObj && deptObj.programs.length > 0) {
+      const isValid = deptObj.programs.some((p) => p.name.trim().toLowerCase() === (targetProg || '').trim().toLowerCase());
+      if (!isValid) {
+        setTargetProg(deptObj.programs[0].name);
+      }
     }
-  }, [targetDept, targetSession]);
+  }, [targetDept]);
 
   const handleAuthenticated = (session: ActiveUserSession) => {
     setCurrentUser(session);
