@@ -24,6 +24,8 @@ import { AcademicSessionModal } from './AcademicSessionModal';
 import { BulkCourseImportModal } from './BulkCourseImportModal';
 import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
 import { RequestAdditionalProgramModal } from './RequestAdditionalProgramModal';
+import { HODDirectivePanel } from './HODDirectivePanel';
+import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import {
   Save,
   Trash2,
@@ -1754,6 +1756,22 @@ export const HODEntryForm: React.FC<Props> = ({
             </button>
           )}
         </div>
+      )}
+
+      {/* INSTITUTIONAL DIRECTIVES & MESSAGING PANELS (VC -> HOD -> COORDINATOR) */}
+      {(currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') && (
+        <HODDirectivePanel
+          departmentName={department}
+          currentUser={currentUser}
+        />
+      )}
+
+      {(currentUser?.role === 'COORDINATOR' || currentUser?.role === 'LECTURER' || currentUser?.role === 'VISITING_LECTURER') && (
+        <CoordinatorDirectivePanel
+          departmentName={department}
+          programName={program}
+          currentUser={currentUser}
+        />
       )}
 
       {/* CARD 1: TOP BANNER (Matching Screenshot 1) */}
