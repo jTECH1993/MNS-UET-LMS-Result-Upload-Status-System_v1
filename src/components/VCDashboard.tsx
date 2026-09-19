@@ -731,7 +731,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           : ['Morning'];
 
         shiftsToInspect.forEach((shName) => {
-          const shift = prog.shifts[shName];
+          const shift = prog.shifts[shName as 'Morning' | 'Evening'];
           if (!shift) return;
 
           if (selectedSemesterFilter === 'ALL') {
