@@ -119,19 +119,163 @@ export const ExecutiveReportModal: React.FC<Props> = ({
     return allPrograms.filter((p) => p.sessionActive);
   }, [allPrograms]);
 
+  // Calculate dynamic metrics per active program for the selected semester / supported shifts
+  const programMetrics = useMemo(() => {
+    return activePrograms.map((prog) => {
+      const supportedShifts = prog.supportedShifts && prog.supportedShifts.length > 0
+        ? prog.supportedShifts
+        : ['Morning'];
+
+      // Find active sections for this program from allRecords
+      const matchingRecords = allRecords.filter((r) =>
+        StorageService._isDeptMatch(prog.department, r.department) &&
+        StorageService._isProgMatch(prog.program, r.program) &&
+        (selectedSemester === 'ALL' || String(r.semester || '1').replace(/\D/g, '') === selectedSemester)
+      );
+
+      const sectionSet = new Set<string>();
+      matchingRecords.forEach((r) => {
+        const sec = (r.section || 'A').trim().toUpperCase();
+        sectionSet.add(sec);
+      });
+      if (sectionSet.size === 0) sectionSet.add('A');
+      const sectionsList = Array.from(sectionSet).sort();
+
+      const getShiftDetail = (shiftName: 'Morning' | 'Evening') => {
+        if (!supportedShifts.includes(shiftName)) {
+          return {
+            isOffered: false,
+            displayText: 'N/A (Not Offered)',
+            uploaded: 0,
+            total: 0,
+            isPending: false,
+            hasSubmission: false,
+          };
+        }
+
+        const shiftData = prog.shifts[shiftName];
+        if (!shiftData) {
+          return {
+            isOffered: true,
+            displayText: 'No Entry',
+            uploaded: 0,
+            total: 5,
+            isPending: true,
+            hasSubmission: false,
+          };
+        }
+
+        if (selectedSemester === 'ALL') {
+          const uploaded = shiftData.totalUploaded;
+          const total = shiftData.totalSubjects;
+          const hasSubmission = shiftData.hasSubmission;
+          const isPending = !hasSubmission || shiftData.totalPending > 0;
+          return {
+            isOffered: true,
+            displayText: hasSubmission ? `${uploaded}/${total} Uploaded` : 'No Entry',
+            uploaded,
+            total,
+            isPending,
+            hasSubmission,
+          };
+        } else {
+          const secMap = shiftData.semesterSectionRecords[selectedSemester] || {};
+          const secRecords = Object.values(secMap);
+          if (secRecords.length > 0) {
+            let sumUploaded = 0;
+            let sumTotal = 0;
+            secRecords.forEach((rec) => {
+              const summary = StorageService.calculateSummary(rec.subjects);
+              sumUploaded += summary.uploaded;
+              sumTotal += summary.totalSubjects;
+            });
+            const isPending = sumUploaded < sumTotal;
+            return {
+              isOffered: true,
+              displayText: `${sumUploaded}/${sumTotal} Uploaded`,
+              uploaded: sumUploaded,
+              total: sumTotal,
+              isPending,
+              hasSubmission: true,
+            };
+          } else {
+            return {
+              isOffered: true,
+              displayText: 'No Entry',
+              uploaded: 0,
+              total: 5,
+              isPending: true,
+              hasSubmission: false,
+            };
+          }
+        }
+      };
+
+      const morningDetail = getShiftDetail('Morning');
+      const eveningDetail = getShiftDetail('Evening');
+
+      let totalUploaded = 0;
+      let totalSubjects = 0;
+      let isPending = false;
+
+      if (morningDetail.isOffered) {
+        totalUploaded += morningDetail.uploaded;
+        totalSubjects += morningDetail.total;
+        if (morningDetail.isPending) isPending = true;
+      }
+
+      if (eveningDetail.isOffered) {
+        totalUploaded += eveningDetail.uploaded;
+        totalSubjects += eveningDetail.total;
+        if (eveningDetail.isPending) isPending = true;
+      }
+
+      let pct = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
+      if (totalUploaded > 0 && totalUploaded < totalSubjects && pct === 100) {
+        pct = 99;
+      }
+      const isComplete = totalSubjects > 0 && totalUploaded === totalSubjects && !isPending;
+
+      return {
+        prog,
+        sectionsList,
+        morningDetail,
+        eveningDetail,
+        totalUploaded,
+        totalSubjects,
+        pct,
+        isComplete,
+        isPending,
+      };
+    });
+  }, [activePrograms, allRecords, selectedSemester]);
+
   // Extract non-compliant / pending programs for the notice
   const pendingPrograms = useMemo(() => {
-    return activePrograms.filter((p) => {
-      // If semester is specific, check that shift cohort
-      const mCohort = p.shifts.Morning;
-      const eCohort = p.shifts.Evening;
-      const mSubmitted = mCohort.hasSubmission && mCohort.totalUploaded > 0;
-      const eSubmitted = eCohort.hasSubmission && eCohort.totalUploaded > 0;
+    return programMetrics.filter((m) => m.isPending).map((m) => m.prog);
+  }, [programMetrics]);
 
-      // Incomplete if either active shift has pending subjects or hasn't submitted
-      return !mSubmitted || mCohort.totalPending > 0 || (p.hasEveningSubmission && eCohort.totalPending > 0);
+  // Aggregate high-level summary KPIs directly from the filtered program metrics
+  const summaryKPIs = useMemo(() => {
+    let totalUploaded = 0;
+    let totalSubjects = 0;
+
+    programMetrics.forEach((m) => {
+      totalUploaded += m.totalUploaded;
+      totalSubjects += m.totalSubjects;
     });
-  }, [activePrograms]);
+
+    const pendingSubjects = Math.max(0, totalSubjects - totalUploaded);
+    const uploadPercentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
+
+    return {
+      totalDegreePrograms: activePrograms.length,
+      totalUploadedSubjects: totalUploaded,
+      totalActiveSubjects: totalSubjects,
+      totalPendingSubjects: pendingSubjects,
+      uploadPercentage,
+    };
+  }, [programMetrics, activePrograms]);
 
   if (!isOpen) return null;
 
@@ -302,22 +446,22 @@ Director, Academic Affairs & Examination Directorate`;
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                 <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
                   <span className="text-[10px] font-bold uppercase text-slate-500 block">Total Degree Programs</span>
-                  <span className="text-2xl font-black text-slate-900 mt-1 block">{stats.totalDegreePrograms}</span>
+                  <span className="text-2xl font-black text-slate-900 mt-1 block">{summaryKPIs.totalDegreePrograms}</span>
                   <span className="text-[10px] text-slate-500">Accredited Programs</span>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
                   <span className="text-[10px] font-bold uppercase text-emerald-800 block">University Upload %</span>
-                  <span className="text-2xl font-black text-emerald-800 mt-1 block">{stats.uploadPercentage}%</span>
+                  <span className="text-2xl font-black text-emerald-800 mt-1 block">{summaryKPIs.uploadPercentage}%</span>
                   <span className="text-[10px] text-emerald-700">LMS Verified</span>
                 </div>
                 <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl">
                   <span className="text-[10px] font-bold uppercase text-blue-800 block">Uploaded Courses</span>
-                  <span className="text-2xl font-black text-blue-800 mt-1 block">{stats.totalUploadedSubjects}</span>
-                  <span className="text-[10px] text-blue-700">of {stats.totalActiveSubjects} Active</span>
+                  <span className="text-2xl font-black text-blue-800 mt-1 block">{summaryKPIs.totalUploadedSubjects}</span>
+                  <span className="text-[10px] text-blue-700">of {summaryKPIs.totalActiveSubjects} Active</span>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl">
                   <span className="text-[10px] font-bold uppercase text-amber-800 block">Pending Courses</span>
-                  <span className="text-2xl font-black text-amber-800 mt-1 block">{stats.totalPendingSubjects}</span>
+                  <span className="text-2xl font-black text-amber-800 mt-1 block">{summaryKPIs.totalPendingSubjects}</span>
                   <span className="text-[10px] text-amber-700">Action Required</span>
                 </div>
               </div>
@@ -325,14 +469,14 @@ Director, Academic Affairs & Examination Directorate`;
               {/* Program Breakdown Table */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  Academic Department & Program Compliance Breakdown
+                  Academic Department &amp; Program Compliance Breakdown
                 </h3>
                 <div className="border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-300">
                       <tr>
                         <th className="py-2.5 px-3">#</th>
-                        <th className="py-2.5 px-3">Department & Program</th>
+                        <th className="py-2.5 px-3">Department &amp; Program</th>
                         <th className="py-2.5 px-3 text-center">Level</th>
                         <th className="py-2.5 px-3 text-center">Sections</th>
                         <th className="py-2.5 px-3 text-center">Morning Shift</th>
@@ -341,13 +485,8 @@ Director, Academic Affairs & Examination Directorate`;
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {activePrograms.map((prog, idx) => {
-                        const m = prog.shifts.Morning;
-                        const e = prog.shifts.Evening;
-                        const totalSubjects = m.totalSubjects + e.totalSubjects;
-                        const totalUploaded = m.totalUploaded + e.totalUploaded;
-                        const pct = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
-                        const isComplete = totalSubjects > 0 && totalUploaded === totalSubjects;
+                      {programMetrics.map((item, idx) => {
+                        const { prog, sectionsList, morningDetail, eveningDetail, pct, isComplete } = item;
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50/70">
@@ -362,28 +501,34 @@ Director, Academic Affairs & Examination Directorate`;
                               </span>
                             </td>
                             <td className="py-2 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                  Sec A
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                                  Sec B
-                                </span>
+                              <div className="flex items-center justify-center gap-1 flex-wrap">
+                                {sectionsList.map((sec) => (
+                                  <span
+                                    key={sec}
+                                    className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                  >
+                                    Sec {sec}
+                                  </span>
+                                ))}
                               </div>
                             </td>
                             <td className="py-2 px-3 text-center">
-                              {m.hasSubmission ? (
+                              {!morningDetail.isOffered ? (
+                                <span className="text-slate-400 text-[10px] italic">N/A (Not Offered)</span>
+                              ) : morningDetail.hasSubmission ? (
                                 <span className="font-semibold text-emerald-800 text-[11px]">
-                                  {m.totalUploaded}/{m.totalSubjects} Uploaded
+                                  {morningDetail.displayText}
                                 </span>
                               ) : (
                                 <span className="text-slate-400 text-[11px]">No Entry</span>
                               )}
                             </td>
                             <td className="py-2 px-3 text-center">
-                              {e.hasSubmission ? (
+                              {!eveningDetail.isOffered ? (
+                                <span className="text-slate-400 text-[10px] italic">N/A (Not Offered)</span>
+                              ) : eveningDetail.hasSubmission ? (
                                 <span className="font-semibold text-emerald-800 text-[11px]">
-                                  {e.totalUploaded}/{e.totalSubjects} Uploaded
+                                  {eveningDetail.displayText}
                                 </span>
                               ) : (
                                 <span className="text-slate-400 text-[11px]">No Entry</span>
