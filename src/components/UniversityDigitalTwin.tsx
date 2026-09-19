@@ -162,7 +162,8 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
                 r.department.trim().toLowerCase() === deptNode.name.trim().toLowerCase() &&
                 r.program.trim().toLowerCase() === progNode.name.trim().toLowerCase() &&
                 (r.session || '2023') === sessId &&
-                (r.semester || '1').trim() === semId
+                (r.semester || '1').trim() === semId &&
+                (selectedShiftFilter === 'ALL' || (r.shift || 'Morning') === selectedShiftFilter)
             );
 
             // Collect sections ('A' by default, plus 'B' if data exists)

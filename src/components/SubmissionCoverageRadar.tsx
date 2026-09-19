@@ -5,7 +5,7 @@ import {
   CourseItem,
   RadarDrillPath,
 } from '../services/completionRadarService';
-import { SubmissionRecord } from '../types';
+import { SubmissionRecord, AcademicShift } from '../types';
 import {
   Building2,
   GraduationCap,
@@ -33,6 +33,7 @@ interface Props {
   onSelectUnitForInspector?: (unit: RadarUnit | null) => void;
   highlightedBottleneckSection?: string | null;
   semesterFilter?: string | string[];
+  shiftFilter?: 'ALL' | any;
 }
 
 export const SubmissionCoverageRadar: React.FC<Props> = ({
@@ -43,6 +44,7 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
   onSelectUnitForInspector,
   highlightedBottleneckSection,
   semesterFilter,
+  shiftFilter = 'ALL',
 }) => {
   const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
 
@@ -69,7 +71,13 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
       return CompletionRadarService.getUniversityDepartmentCoverage(allRecords, currentSession, semesterFilter);
     }
     if (currentLevel === 'DEPARTMENT' && drillPath.deptName) {
-      return CompletionRadarService.getProgramsCoverage(drillPath.deptName, currentSession, allRecords, semesterFilter);
+      return CompletionRadarService.getProgramsCoverage(
+        drillPath.deptName,
+        currentSession,
+        allRecords,
+        semesterFilter,
+        shiftFilter
+      );
     }
     if (currentLevel === 'PROGRAM' && drillPath.deptName && drillPath.progName) {
       return CompletionRadarService.getSemestersCoverage(
@@ -77,7 +85,8 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
         drillPath.progName,
         currentSession,
         allRecords,
-        semesterFilter
+        semesterFilter,
+        drillPath.shift || 'Morning'
       );
     }
     if (currentLevel === 'SEMESTER' && drillPath.deptName && drillPath.progName && drillPath.semId) {
@@ -86,11 +95,12 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
         drillPath.progName,
         drillPath.semId,
         currentSession,
-        allRecords
+        allRecords,
+        drillPath.shift || 'Morning'
       );
     }
     return [];
-  }, [currentLevel, drillPath, allRecords, currentSession, semesterFilter]);
+  }, [currentLevel, drillPath, allRecords, currentSession, semesterFilter, shiftFilter]);
 
   // If in COURSES view, retrieve the course items for the selected section
   const sectionCourseUnit = useMemo<RadarUnit | null>(() => {
@@ -101,7 +111,8 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
         drillPath.semId,
         drillPath.sectionId,
         currentSession,
-        allRecords
+        allRecords,
+        drillPath.shift || 'Morning'
       );
     }
     return null;
@@ -121,20 +132,24 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
       onSelectUnitForInspector(unit);
     }
 
+    const activeShift = (unit.shift === 'Evening' ? 'Evening' : 'Morning') as AcademicShift;
+
     if (unit.level === 'DEPARTMENT') {
       onDrillPathChange({ deptName: unit.deptName });
     } else if (unit.level === 'PROGRAM') {
-      onDrillPathChange({ deptName: unit.deptName, progName: unit.progName });
+      onDrillPathChange({ deptName: unit.deptName, progName: unit.progName, shift: activeShift });
     } else if (unit.level === 'SEMESTER') {
       onDrillPathChange({
         deptName: unit.deptName,
         progName: unit.progName,
+        shift: activeShift,
         semId: unit.semId,
       });
     } else if (unit.level === 'SECTION') {
       onDrillPathChange({
         deptName: unit.deptName,
         progName: unit.progName,
+        shift: activeShift,
         semId: unit.semId,
         sectionId: unit.sectionId,
       });
@@ -147,12 +162,14 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
       onDrillPathChange({
         deptName: drillPath.deptName,
         progName: drillPath.progName,
+        shift: drillPath.shift,
         semId: drillPath.semId,
       });
     } else if (currentLevel === 'SEMESTER') {
       onDrillPathChange({
         deptName: drillPath.deptName,
         progName: drillPath.progName,
+        shift: drillPath.shift,
       });
     } else if (currentLevel === 'PROGRAM') {
       onDrillPathChange({

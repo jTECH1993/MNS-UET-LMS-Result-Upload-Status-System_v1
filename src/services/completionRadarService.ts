@@ -76,6 +76,7 @@ export interface BottleneckInfo {
 export interface RadarDrillPath {
   deptName?: string;
   progName?: string;
+  shift?: AcademicShift;
   semId?: string;
   sectionId?: string;
 }
@@ -348,7 +349,8 @@ export class CompletionRadarService {
     deptName: string,
     currentSession: string | string[],
     allRecords: SubmissionRecord[],
-    semesterFilter?: string | string[]
+    semesterFilter?: string | string[],
+    shiftFilter: 'ALL' | AcademicShift = 'ALL'
   ): RadarUnit[] {
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
@@ -357,52 +359,78 @@ export class CompletionRadarService {
     const activeProgNames = this.getActiveProgramsForDepartment(deptName, currentSession, allRecords);
     const hod = this.resolveHOD(deptName);
     const deadlineInfo = this.getDeadlineInfo();
+    const resultUnits: RadarUnit[] = [];
 
-    return activeProgNames.map((progName, idx) => {
-      const coord = this.resolveCoordinator(deptName, progName);
-      const progUnits = this.getProgramSectionUnits(deptName, progName, currentSession, allRecords, semesterFilter);
+    activeProgNames.forEach((progName, idx) => {
+      const progObj = deptObj?.programs.find(
+        (p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase()
+      );
 
-      let submitted = 0;
-      let pending = 0;
-      let inProgress = 0;
-      let lastActivity = 'No recent activity';
-
-      progUnits.forEach((u) => {
-        submitted += u.submitted;
-        pending += u.pending;
-        inProgress += u.inProgress;
-        if (u.lastActivity && u.lastActivity !== 'No recent activity' && u.lastActivity !== 'Awaiting coordinator grade entry') {
-          lastActivity = u.lastActivity;
+      let targetShifts: AcademicShift[] = progObj?.supportedShifts || ['Morning'];
+      if (shiftFilter !== 'ALL') {
+        targetShifts = targetShifts.includes(shiftFilter) ? [shiftFilter] : targetShifts;
+      } else {
+        const hasEveningRecs = allRecords.some(
+          (r) =>
+            r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
+            r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
+            r.shift === 'Evening'
+        );
+        if (!targetShifts.includes('Evening') && hasEveningRecs) {
+          targetShifts = [...targetShifts, 'Evening'];
         }
+      }
+
+      targetShifts.forEach((shift) => {
+        const coord = this.resolveCoordinator(deptName, progName, shift);
+        const progUnits = this.getProgramSectionUnits(deptName, progName, currentSession, allRecords, semesterFilter, shift);
+
+        let submitted = 0;
+        let pending = 0;
+        let inProgress = 0;
+        let lastActivity = 'No recent activity';
+
+        progUnits.forEach((u) => {
+          submitted += u.submitted;
+          pending += u.pending;
+          inProgress += u.inProgress;
+          if (u.lastActivity && u.lastActivity !== 'No recent activity' && u.lastActivity !== 'Awaiting coordinator grade entry') {
+            lastActivity = u.lastActivity;
+          }
+        });
+
+        const total = submitted + pending + inProgress;
+        const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
+        const displayName = targetShifts.length > 1 ? `${progName} (${shift})` : progName;
+
+        resultUnits.push({
+          id: `prog-${deptCode}-${idx}-${shift.toLowerCase()}`,
+          name: displayName,
+          shortName: `${progName.split(' ')[0]} (${shift[0]})`,
+          level: 'PROGRAM',
+          submitted,
+          pending,
+          inProgress,
+          total,
+          completionRate,
+          coordinatorStatus: coord.isAssigned ? 'Assigned' : 'Not Assigned',
+          coordinatorName: coord.name,
+          coordinatorDesignation: coord.designation,
+          hodStatus: hod.isRegistered ? 'Registered' : 'Not Registered',
+          hodName: hod.name,
+          deadlineText: deadlineInfo.text,
+          deadlineDays: deadlineInfo.days,
+          isOverdue: deadlineInfo.isOverdue,
+          lastActivity,
+          deptName,
+          deptCode,
+          progName,
+          shift,
+        });
       });
-
-      const total = submitted + pending + inProgress;
-      const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
-
-      return {
-        id: `prog-${deptCode}-${idx}`,
-        name: progName,
-        shortName: progName.split(' ')[0] + ' ' + (progName.split(' ')[1] || ''),
-        level: 'PROGRAM',
-        submitted,
-        pending,
-        inProgress,
-        total,
-        completionRate,
-        coordinatorStatus: coord.isAssigned ? 'Assigned' : 'Not Assigned',
-        coordinatorName: coord.name,
-        coordinatorDesignation: coord.designation,
-        hodStatus: hod.isRegistered ? 'Registered' : 'Not Registered',
-        hodName: hod.name,
-        deadlineText: deadlineInfo.text,
-        deadlineDays: deadlineInfo.days,
-        isOverdue: deadlineInfo.isOverdue,
-        lastActivity,
-        deptName,
-        deptCode,
-        progName,
-      };
     });
+
+    return resultUnits;
   }
 
   /**
@@ -413,13 +441,14 @@ export class CompletionRadarService {
     progName: string,
     currentSession: string | string[],
     allRecords: SubmissionRecord[],
-    semesterFilter?: string | string[]
+    semesterFilter?: string | string[],
+    shift: AcademicShift = 'Morning'
   ): RadarUnit[] {
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
     );
     const deptCode = deptObj?.code || 'DEPT';
-    const coord = this.resolveCoordinator(deptName, progName);
+    const coord = this.resolveCoordinator(deptName, progName, shift);
     const hod = this.resolveHOD(deptName);
     const deadlineInfo = this.getDeadlineInfo();
     const semList = Array.isArray(semesterFilter)
@@ -432,18 +461,17 @@ export class CompletionRadarService {
       ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
       : ACADEMIC_SEMESTERS;
 
-    // Standard Undergraduate semesters
     return activeSems.map((sem) => {
       const activeSections = StorageService.getAvailableSectionsForCohort(
         deptName,
         progName,
         Array.isArray(currentSession) ? currentSession[0] : (currentSession || '2023'),
         sem.id,
-        'Morning'
+        shift
       );
 
       const secUnits = activeSections.map((secId) =>
-        this.getSectionUnit(deptName, progName, sem.id, secId, currentSession, allRecords)
+        this.getSectionUnit(deptName, progName, sem.id, secId, currentSession, allRecords, shift)
       );
 
       const submitted = secUnits.reduce((sum, u) => sum + u.submitted, 0);
@@ -456,7 +484,7 @@ export class CompletionRadarService {
       const lastActivity = activeUnitWithActivity ? activeUnitWithActivity.lastActivity : (secUnits[0]?.lastActivity || 'Not started');
 
       return {
-        id: `sem-${sem.id}`,
+        id: `sem-${sem.id}-${shift.toLowerCase()}`,
         name: `Semester ${sem.id}`,
         shortName: sem.shortLabel,
         level: 'SEMESTER',
@@ -479,6 +507,7 @@ export class CompletionRadarService {
         progName,
         semId: sem.id,
         semLabel: sem.label,
+        shift,
       };
     });
   }
@@ -491,7 +520,8 @@ export class CompletionRadarService {
     progName: string,
     semId: string,
     currentSession: string | string[],
-    allRecords: SubmissionRecord[]
+    allRecords: SubmissionRecord[],
+    shift: AcademicShift = 'Morning'
   ): RadarUnit[] {
     const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const activeSections = StorageService.getAvailableSectionsForCohort(
@@ -499,10 +529,10 @@ export class CompletionRadarService {
       progName,
       sessionList[0] || '2023',
       semId,
-      'Morning'
+      shift
     );
     return activeSections.map((secId) =>
-      this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords)
+      this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords, shift)
     );
   }
 
@@ -515,14 +545,15 @@ export class CompletionRadarService {
     semId: string,
     sectionId: string, // 'A' | 'B' | custom
     currentSession: string | string[],
-    allRecords: SubmissionRecord[]
+    allRecords: SubmissionRecord[],
+    shift: AcademicShift = 'Morning'
   ): RadarUnit {
     const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const deptObj = UNIVERSITY_DEPARTMENTS.find(
       (d) => d.name.trim().toLowerCase() === deptName.trim().toLowerCase()
     );
     const deptCode = deptObj?.code || 'DEPT';
-    const coord = this.resolveCoordinator(deptName, progName);
+    const coord = this.resolveCoordinator(deptName, progName, shift);
     const hod = this.resolveHOD(deptName);
     const deadlineInfo = this.getDeadlineInfo();
 
@@ -533,9 +564,10 @@ export class CompletionRadarService {
       const matchProg = StorageService._isProgMatch(r.program || '', progName);
       const matchSem = String(r.semester || '').trim() === String(semId).trim();
       const matchSec = (r.section || 'A').trim().toUpperCase() === sectionId.trim().toUpperCase();
+      const matchShift = !shift || (r.shift || 'Morning') === shift;
       const rSess = (r.session || '2023').trim();
       const matchSession = sessionList.some((s) => rSess.startsWith(s) || s.startsWith(rSess));
-      return matchDept && matchProg && matchSem && matchSec && matchSession;
+      return matchDept && matchProg && matchSem && matchSec && matchShift && matchSession;
     });
 
     const courses: CourseItem[] = [];
@@ -569,11 +601,10 @@ export class CompletionRadarService {
           coordinatorName: coord.name,
           deadlineText: deadlineInfo.text,
           lastActivity: subj.dateUploaded || rec.updatedAt || 'Synced',
-          shift: rec?.shift || 'Morning',
+          shift: rec?.shift || shift || 'Morning',
         });
       });
     } else {
-      // No course records uploaded yet for this cohort - indicate awaiting state without inflating pending counts
       pending = 0;
     }
 
@@ -581,7 +612,7 @@ export class CompletionRadarService {
     const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
 
     return {
-      id: `sec-${semId}-${sectionId}`,
+      id: `sec-${semId}-${sectionId}-${shift.toLowerCase()}`,
       name: `Section ${sectionId}`,
       shortName: `Sec ${sectionId}`,
       level: 'SECTION',
@@ -604,7 +635,7 @@ export class CompletionRadarService {
       progName,
       semId,
       sectionId,
-      shift: rec?.shift || 'Morning',
+      shift: rec?.shift || shift || 'Morning',
       courses,
     };
   }
@@ -617,7 +648,8 @@ export class CompletionRadarService {
     progName: string,
     currentSession: string | string[],
     allRecords: SubmissionRecord[],
-    semesterFilter?: string | string[]
+    semesterFilter?: string | string[],
+    shift: AcademicShift = 'Morning'
   ): RadarUnit[] {
     const list: RadarUnit[] = [];
     const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
@@ -631,9 +663,10 @@ export class CompletionRadarService {
       if (!r) return false;
       const matchDept = StorageService._isMatch(r.department || '', deptName);
       const matchProg = StorageService._isMatch(r.program || '', progName);
+      const matchShift = !shift || (r.shift || 'Morning') === shift;
       const rSess = (r.session || '2023').trim();
       const matchSession = sessionList.some((s) => rSess.startsWith(s) || s.startsWith(rSess));
-      return matchDept && matchProg && matchSession;
+      return matchDept && matchProg && matchShift && matchSession;
     });
 
     // Find all semesters with actual records, or fallback to Semester 1
@@ -654,10 +687,10 @@ export class CompletionRadarService {
         progName,
         sessionList[0] || '2023',
         semId,
-        'Morning'
+        shift
       );
       activeSections.forEach((secId) => {
-        list.push(this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords));
+        list.push(this.getSectionUnit(deptName, progName, semId, secId, currentSession, allRecords, shift));
       });
     });
     return list;

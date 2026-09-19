@@ -1903,6 +1903,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 onSelectUnitForInspector={setRadarInspectorUnit}
                 highlightedBottleneckSection={highlightedBottleneckSection}
                 semesterFilter={selectedSemesterFilter}
+                shiftFilter={selectedShiftFilter}
               />
             </div>
 
