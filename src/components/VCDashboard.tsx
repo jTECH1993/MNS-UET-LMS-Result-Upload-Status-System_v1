@@ -2715,11 +2715,19 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                 </tr>
               ) : (
                 filteredPrograms.map((progItem) => {
-                  // Determine active shift for this row
-                  const effectiveShift: AcademicShift =
-                    selectedShiftFilter !== 'ALL'
+                  const supported = progItem.supportedShifts || ['Morning', 'Evening'];
+
+                  // Determine active shift for this row strictly respecting supportedShifts
+                  let effectiveShift: AcademicShift =
+                    selectedShiftFilter !== 'ALL' && supported.includes(selectedShiftFilter)
                       ? selectedShiftFilter
-                      : rowShiftOverrides[progItem.program] || progItem.recommendedShift;
+                      : rowShiftOverrides[progItem.program] && supported.includes(rowShiftOverrides[progItem.program])
+                      ? rowShiftOverrides[progItem.program]
+                      : progItem.recommendedShift;
+
+                  if (!supported.includes(effectiveShift)) {
+                    effectiveShift = supported[0] || 'Evening';
+                  }
 
                   const shiftData = progItem.shifts[effectiveShift];
                   const isSpecificSem = selectedSemesterFilter !== 'ALL';
@@ -2799,58 +2807,62 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                         <div className="flex flex-col items-center gap-1">
                           <div className="inline-flex p-0.5 bg-slate-100 rounded-md border border-slate-300">
                             {/* Morning Shift Pill */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setRowShiftOverrides((prev) => ({
-                                  ...prev,
-                                  [progItem.program]: 'Morning',
-                                }))
-                              }
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                effectiveShift === 'Morning'
-                                  ? 'bg-amber-500 text-white shadow-2xs'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                              title={
-                                progItem.hasMorningSubmission
-                                  ? 'Morning Shift has submitted LMS results'
-                                  : 'Morning Shift - Click to view'
-                              }
-                            >
-                              <Sun className="w-2.5 h-2.5" />
-                              <span>Morning</span>
-                              {progItem.hasMorningSubmission && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white"></span>
-                              )}
-                            </button>
+                            {supported.includes('Morning') && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRowShiftOverrides((prev) => ({
+                                    ...prev,
+                                    [progItem.program]: 'Morning',
+                                  }))
+                                }
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                  effectiveShift === 'Morning'
+                                    ? 'bg-amber-500 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title={
+                                  progItem.hasMorningSubmission
+                                    ? 'Morning Shift has submitted LMS results'
+                                    : 'Morning Shift - Click to view'
+                                }
+                              >
+                                <Sun className="w-2.5 h-2.5" />
+                                <span>Morning</span>
+                                {progItem.hasMorningSubmission && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white"></span>
+                                )}
+                              </button>
+                            )}
 
                             {/* Evening Shift Pill */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setRowShiftOverrides((prev) => ({
-                                  ...prev,
-                                  [progItem.program]: 'Evening',
-                                }))
-                              }
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                effectiveShift === 'Evening'
-                                  ? 'bg-indigo-700 text-white shadow-2xs'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                              title={
-                                progItem.hasEveningSubmission
-                                  ? 'Evening Shift has submitted LMS results'
-                                  : 'Evening Shift - Click to view'
-                              }
-                            >
-                              <Moon className="w-2.5 h-2.5" />
-                              <span>Evening</span>
-                              {progItem.hasEveningSubmission && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white"></span>
-                              )}
-                            </button>
+                            {supported.includes('Evening') && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRowShiftOverrides((prev) => ({
+                                    ...prev,
+                                    [progItem.program]: 'Evening',
+                                  }))
+                                }
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                  effectiveShift === 'Evening'
+                                    ? 'bg-indigo-700 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title={
+                                  progItem.hasEveningSubmission
+                                    ? 'Evening Shift has submitted LMS results'
+                                    : 'Evening Shift - Click to view'
+                                }
+                              >
+                                <Moon className="w-2.5 h-2.5" />
+                                <span>Evening</span>
+                                {progItem.hasEveningSubmission && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white"></span>
+                                )}
+                              </button>
+                            )}
                           </div>
 
                           {/* Quick Shift Status Tag */}

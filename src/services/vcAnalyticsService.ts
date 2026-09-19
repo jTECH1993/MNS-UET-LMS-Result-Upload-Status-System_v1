@@ -248,12 +248,18 @@ export class VCAnalyticsService {
           return allProgs.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
         });
 
-        // Determine target shifts for this program
+        // Determine target shifts for this program strictly matching supportedShifts
+        const progSupported = prog.supportedShifts || ['Morning', 'Evening'];
         let targetShifts: AcademicShift[] = [];
+
         if (shiftFilter !== 'ALL') {
-          targetShifts = [shiftFilter as AcademicShift];
+          targetShifts = progSupported.includes(shiftFilter as AcademicShift)
+            ? [shiftFilter as AcademicShift]
+            : [progSupported[0]];
+        } else if (progSupported.length === 1) {
+          targetShifts = [progSupported[0]];
         } else {
-          // Check if both Morning and Evening records or coordinators exist in DB
+          // Both Morning and Evening supported by program definition
           const hasMorningRecs = allRecords.some(
             (r) =>
               r &&
@@ -282,14 +288,10 @@ export class VCAnalyticsService {
             return shs.includes('Evening');
           });
 
-          // If B.Tech, default to Evening
-          if (prog.name.toLowerCase().includes('b.tech') || prog.name.toLowerCase().includes('technology')) {
-            targetShifts = ['Evening'];
-          } else if ((hasMorningRecs || hasMorningCoord) && (hasEveningRecs || hasEveningCoord)) {
-            // Distinct Morning and Evening shifts
+          if ((hasMorningRecs || hasMorningCoord) && (hasEveningRecs || hasEveningCoord)) {
             targetShifts = ['Morning', 'Evening'];
           } else if (hasEveningRecs || hasEveningCoord) {
-            targetShifts = ['Morning', 'Evening'];
+            targetShifts = hasMorningRecs || hasMorningCoord ? ['Morning', 'Evening'] : ['Evening'];
           } else {
             targetShifts = ['Morning'];
           }
