@@ -28,16 +28,21 @@ import { VCExecutiveSummaryPanel } from './VCExecutiveSummaryPanel';
 
 interface Props {
   allRecords: any[];
+  currentSession?: string;
+  selectedSemesterFilter?: string;
+  selectedDeptFilter?: string;
+  selectedShiftFilter?: string;
 }
 
-export function ActionCenterPanel({ allRecords }: Props) {
+export function ActionCenterPanel({
+  allRecords,
+  currentSession = '2023',
+  selectedSemesterFilter = '1',
+  selectedDeptFilter = 'ALL',
+  selectedShiftFilter = 'ALL',
+}: Props) {
   // Sub-tab view mode inside Action Center
   const [activeSubTab, setActiveSubTab] = useState<'DASHBOARD' | 'EXECUTIVE_SUMMARY'>('DASHBOARD');
-
-  // Filters
-  const [selectedSession, setSelectedSession] = useState<string>('Fall 2025');
-  const [selectedExamStage, setSelectedExamStage] = useState<string>('Mid Exams');
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
 
   // Directives State
   const [directives, setDirectives] = useState<InstitutionalDirective[]>([]);
@@ -69,28 +74,51 @@ export function ActionCenterPanel({ allRecords }: Props) {
     };
   }, []);
 
-  // Calculate dynamic stats across departments from authentic database records
+  // Calculate dynamic stats across departments from authentic database records for active session & semester
   const departmentStats = useMemo(() => {
     return UNIVERSITY_DEPARTMENTS.map((dept, index) => {
-      const deptCode = dept.code;
-      const deptRecords = allRecords.filter(r => 
-        r.department === dept.name || 
-        StorageService._isDeptMatch(dept.name, r.department) ||
-        r.department?.toLowerCase().includes(dept.code.toLowerCase())
+      if (selectedDeptFilter !== 'ALL' && dept.name !== selectedDeptFilter && dept.code !== selectedDeptFilter) {
+        return null;
+      }
+
+      const activeProgNames = Array.from(
+        new Set(StorageService.getSessionPrograms(dept.name, currentSession, allRecords))
       );
+
+      const targetPrograms = dept.programs.filter((prog) => {
+        const hasSub = allRecords.some(
+          (r) =>
+            r &&
+            r.department &&
+            StorageService._isDeptMatch(dept.name, r.department) &&
+            StorageService._isProgMatch(prog.name, r.program) &&
+            (r.session || '2023').includes(currentSession)
+        );
+        return activeProgNames.includes(prog.name) || hasSub;
+      });
+
+      if (targetPrograms.length === 0) return null;
+
+      const deptRecords = allRecords.filter((r) => {
+        const matchDept = StorageService._isDeptMatch(dept.name, r.department);
+        const matchSess = (r.session || '2023').includes(currentSession);
+        const matchSem = selectedSemesterFilter === 'ALL' || String(r.semester || '1') === String(selectedSemesterFilter);
+        const matchShift = selectedShiftFilter === 'ALL' || (r.shift || 'Morning').toLowerCase() === selectedShiftFilter.toLowerCase();
+        return matchDept && matchSess && matchSem && matchShift;
+      });
 
       let totalSubjectsFromRecords = 0;
       let uploadedCount = 0;
 
-      deptRecords.forEach(r => {
+      deptRecords.forEach((r) => {
         if (r.subjects && Array.isArray(r.subjects)) {
           totalSubjectsFromRecords += r.subjects.length;
           uploadedCount += r.subjects.filter((s: any) => s.status === 'Uploaded').length;
         }
       });
 
-      // If database has submission records, use exact course count; else compute expected curriculum courses for official programs
-      const totalSubjects = totalSubjectsFromRecords > 0 ? totalSubjectsFromRecords : dept.programs.length * 5;
+      // Expected curriculum course count for active programs in session
+      const totalSubjects = totalSubjectsFromRecords > 0 ? totalSubjectsFromRecords : targetPrograms.length * 5;
 
       const pendingCount = Math.max(0, totalSubjects - uploadedCount);
       const progressPct = totalSubjects > 0 ? Math.round((uploadedCount / totalSubjects) * 100) : 0;
@@ -106,15 +134,15 @@ export function ActionCenterPanel({ allRecords }: Props) {
         code: dept.code,
         name: dept.name.replace('Department of ', ''),
         fullName: dept.name,
-        programsCount: dept.programs.length,
+        programsCount: targetPrograms.length,
         totalSubjects,
         uploadedCount,
         pendingCount,
         progressPct,
         status
       };
-    });
-  }, [allRecords]);
+    }).filter(Boolean) as any[];
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter]);
 
   // Aggregate Top Bar Metrics from dynamic database calculations
   const aggregatedMetrics = useMemo(() => {
@@ -167,8 +195,8 @@ export function ActionCenterPanel({ allRecords }: Props) {
         senderName: 'Vice Chancellor Office',
         targetDepartment: dept.fullName,
         targetRole: 'HOD',
-        title: `URGENT: ${selectedExamStage} LMS Result Submissions Pending`,
-        message: `Your department has ${dept.pendingCount} course result sheet(s) pending for ${selectedExamStage} (${selectedSession}). Kindly ensure immediate upload today.`,
+        title: `URGENT: LMS Result Submissions Pending`,
+        message: `Your department has ${dept.pendingCount} course result sheet(s) pending for Session ${currentSession} (Semester ${selectedSemesterFilter}). Kindly ensure immediate upload today.`,
         priority: 'CRITICAL',
         deadline: 'Today 5:00 PM'
       });
@@ -228,48 +256,24 @@ export function ActionCenterPanel({ allRecords }: Props) {
           </div>
         </div>
 
-        {/* Header Right Filters */}
+        {/* Header Right Synchronized Scope Badge */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold">
-            <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-            <select
-              value={selectedSession}
-              onChange={e => setSelectedSession(e.target.value)}
-              className="bg-transparent text-white font-bold focus:outline-hidden cursor-pointer"
-            >
-              <option value="Fall 2025" className="bg-slate-900 text-white">Fall 2025</option>
-              <option value="Session 2023" className="bg-slate-900 text-white">Session 2023</option>
-              <option value="Spring 2026" className="bg-slate-900 text-white">Spring 2026</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold">
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <select
-              value={selectedExamStage}
-              onChange={e => setSelectedExamStage(e.target.value)}
-              className="bg-transparent text-white font-bold focus:outline-hidden cursor-pointer"
-            >
-              <option value="Mid Exams" className="bg-slate-900 text-white">Mid Exams</option>
-              <option value="Final Exams" className="bg-slate-900 text-white">Final Exams</option>
-              <option value="Sessional" className="bg-slate-900 text-white">Sessional</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold">
-            <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-            <select
-              value={selectedDeptFilter}
-              onChange={e => setSelectedDeptFilter(e.target.value)}
-              className="bg-transparent text-white font-bold focus:outline-hidden cursor-pointer"
-            >
-              <option value="ALL" className="bg-slate-900 text-white">All Departments</option>
-              {UNIVERSITY_DEPARTMENTS.map(d => (
-                <option key={d.code} value={d.name} className="bg-slate-900 text-white">
-                  {d.name.replace('Department of ', '')}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 border border-emerald-500/40 rounded-xl px-3.5 py-2 text-xs font-bold shadow-xs">
+            <span className="text-emerald-400 font-black uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              VC Dashboard Scope:
+            </span>
+            <span className="bg-emerald-950 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-800/80 font-mono">
+              Session {currentSession}
+            </span>
+            <span className="bg-indigo-950 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-800/80 font-mono">
+              {selectedSemesterFilter === 'ALL' ? 'All Semesters' : `Semester ${selectedSemesterFilter}`}
+            </span>
+            {selectedDeptFilter !== 'ALL' && (
+              <span className="bg-sky-950 text-sky-300 px-2.5 py-1 rounded-lg border border-sky-800/80">
+                {selectedDeptFilter.replace('Department of ', '')}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -316,7 +320,13 @@ export function ActionCenterPanel({ allRecords }: Props) {
       </div>
 
       {activeSubTab === 'EXECUTIVE_SUMMARY' ? (
-        <VCExecutiveSummaryPanel allRecords={allRecords} />
+        <VCExecutiveSummaryPanel
+          allRecords={allRecords}
+          currentSession={currentSession}
+          selectedSemesterFilter={selectedSemesterFilter}
+          selectedDeptFilter={selectedDeptFilter}
+          selectedShiftFilter={selectedShiftFilter}
+        />
       ) : (
         <>
           {/* 2. TOP EXECUTIVE METRIC CARDS (4 CARDS) */}

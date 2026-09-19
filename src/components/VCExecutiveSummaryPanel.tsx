@@ -18,17 +18,34 @@ import { StorageService } from '../services/storageService';
 
 interface Props {
   allRecords: any[];
+  currentSession?: string;
+  selectedSemesterFilter?: string;
+  selectedDeptFilter?: string;
+  selectedShiftFilter?: string;
 }
 
 export type SummaryStyle = 'DETAILED' | 'EXECUTIVE' | 'PENDING_ONLY';
 export type SummaryView = 'TEXT' | 'DASHBOARD';
 
-export function VCExecutiveSummaryPanel({ allRecords }: Props) {
-  // Filters
-  const [sessionFilter, setSessionFilter] = useState<string>('All');
-  const [semesterFilter, setSemesterFilter] = useState<string>('All');
-  const [deptFilter, setDeptFilter] = useState<string>('ALL');
+export function VCExecutiveSummaryPanel({
+  allRecords,
+  currentSession = '2023',
+  selectedSemesterFilter = '1',
+  selectedDeptFilter = 'ALL',
+  selectedShiftFilter = 'ALL',
+}: Props) {
+  // Filters synchronized with VC Dashboard
+  const [sessionFilter, setSessionFilter] = useState<string>(currentSession);
+  const [semesterFilter, setSemesterFilter] = useState<string>(selectedSemesterFilter);
+  const [deptFilter, setDeptFilter] = useState<string>(selectedDeptFilter);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Keep local filter state synced if parent props update from VC Dashboard controller
+  useEffect(() => {
+    if (currentSession) setSessionFilter(currentSession);
+    if (selectedSemesterFilter) setSemesterFilter(selectedSemesterFilter);
+    if (selectedDeptFilter) setDeptFilter(selectedDeptFilter);
+  }, [currentSession, selectedSemesterFilter, selectedDeptFilter]);
 
   // Display Mode & Style
   const [viewMode, setViewMode] = useState<SummaryView>('TEXT');
@@ -53,25 +70,50 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
     updateTimestamp();
   }, []);
 
-  // Compute dynamic department/program status matrix from live DB
+  // Compute dynamic department/program status matrix strictly for programs part of selected session & semester
   const summaryData = useMemo(() => {
-    return UNIVERSITY_DEPARTMENTS.map((dept, deptIdx) => {
-      const filteredPrograms = dept.programs;
+    const activeSess = sessionFilter || currentSession || '2023';
+    const activeSem = semesterFilter || selectedSemesterFilter || '1';
+    const activeDept = deptFilter || selectedDeptFilter || 'ALL';
 
-      if (deptFilter !== 'ALL' && dept.code !== deptFilter && dept.name !== deptFilter) {
+    return UNIVERSITY_DEPARTMENTS.map((dept, deptIdx) => {
+      if (activeDept !== 'ALL' && dept.code !== activeDept && dept.name !== activeDept) {
         return null;
       }
 
-      const programSummaries = filteredPrograms.map((prog) => {
+      // 1. Retrieve programs enrolled/active in this specific academic session
+      const activeProgNames = Array.from(
+        new Set(StorageService.getSessionPrograms(dept.name, activeSess, allRecords))
+      );
+
+      // 2. Filter programs so ONLY programs part of activeSess or with active submissions in activeSess are included
+      const targetPrograms = dept.programs.filter((prog) => {
+        const hasSub = allRecords.some(
+          (r) =>
+            r &&
+            r.department &&
+            StorageService._isDeptMatch(dept.name, r.department) &&
+            StorageService._isProgMatch(prog.name, r.program) &&
+            (r.session || '2023').includes(activeSess)
+        );
+        return activeProgNames.includes(prog.name) || hasSub;
+      });
+
+      if (targetPrograms.length === 0) {
+        return null;
+      }
+
+      const programSummaries = targetPrograms.map((prog) => {
         // Find matching records in allRecords
         const progRecords = allRecords.filter((r) => {
           const matchDept = r.department === dept.name || StorageService._isDeptMatch(dept.name, r.department);
           const matchProg = r.program === prog.name || StorageService._isProgMatch(prog.name, r.program);
-          const matchSess = sessionFilter === 'All' || (r.session || '2023').includes(sessionFilter) || sessionFilter.includes(r.session || '2023');
-          return matchDept && matchProg && matchSess;
+          const matchSess = activeSess === 'All' || (r.session || '2023').includes(activeSess) || activeSess.includes(r.session || '2023');
+          const matchShift = selectedShiftFilter === 'ALL' || (r.shift || 'Morning').toLowerCase() === selectedShiftFilter.toLowerCase();
+          return matchDept && matchProg && matchSess && matchShift;
         });
 
-        // Compute uploaded courses & pending courses across shifts / semesters
+        // Compute uploaded courses & pending courses
         let uploadedCount = 0;
         let totalExpected = 0;
         let hasLabMissing = false;
@@ -81,7 +123,7 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
           const shift = r.shift || 'Morning';
           const sem = r.semester || '1';
 
-          if (semesterFilter !== 'All' && String(sem) !== String(semesterFilter)) {
+          if (activeSem !== 'ALL' && activeSem !== 'All' && String(sem) !== String(activeSem)) {
             return;
           }
 
@@ -97,7 +139,6 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
             shiftsDetail[shift].uploaded += uploaded;
             shiftsDetail[shift].total += total;
 
-            // Check for lab missing condition (e.g., 17/18 uploaded or specific remark)
             if (total > 0 && uploaded < total && total - uploaded === 1) {
               shiftsDetail[shift].missingLab = true;
               hasLabMissing = true;
@@ -127,7 +168,8 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
         };
       }).filter(Boolean);
 
-      // Aggregate department level status
+      if (programSummaries.length === 0) return null;
+
       const deptUploaded = programSummaries.reduce((acc, p) => acc + (p?.uploadedCount || 0), 0);
       const deptTotal = programSummaries.reduce((acc, p) => acc + (p?.totalExpected || 0), 0);
 
@@ -140,7 +182,6 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
         deptStatus = 'NOT_SUBMITTED';
       }
 
-      // Filter by status if set
       if (statusFilter !== 'ALL' && deptStatus !== statusFilter) {
         return null;
       }
@@ -155,8 +196,8 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
         deptTotal,
         deptStatus
       };
-    }).filter(Boolean);
-  }, [allRecords, sessionFilter, semesterFilter, deptFilter, statusFilter]);
+    }).filter(Boolean) as any[];
+  }, [allRecords, sessionFilter, semesterFilter, deptFilter, statusFilter, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter]);
 
   // Generate Full Summary Text
   const fullSummaryText = useMemo(() => {
@@ -180,7 +221,7 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
         if (!dept) return;
         text += `${idx + 1}. ${dept.shortName}\n`;
 
-        dept.programs.forEach((prog, pIdx) => {
+        dept.programs.forEach((prog: any, pIdx: number) => {
           if (!prog) return;
           const isLastProg = pIdx === dept.programs.length - 1;
           const branch = isLastProg ? '   └─ ' : '   ├─ ';
@@ -268,7 +309,7 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
           if (!dept) return;
           text += `${idx + 1}. ${dept.shortName}\n`;
 
-          dept.programs.forEach((prog) => {
+          dept.programs.forEach((prog: any) => {
             if (!prog || prog.status === 'COMPLETE') return;
             if (prog.status === 'NOT_SUBMITTED') {
               text += `   └─ ${prog.programName}: No results submitted yet 🔴\n`;
@@ -304,7 +345,7 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
         if (!dept) return;
         text += `${idx + 1}. ${dept.shortName}\n`;
 
-        dept.programs.forEach((prog) => {
+        dept.programs.forEach((prog: any) => {
           if (!prog || prog.status === 'COMPLETE') return;
           if (prog.status === 'NOT_SUBMITTED') {
             text += `   └─ ${prog.programName}: No results submitted yet 🔴\n`;
@@ -413,49 +454,75 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
       </div>
 
       {/* 2. FILTERS & STYLE SELECTION ROW */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
-        
-        {/* Filter 1: Session */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-indigo-400" />
-            Session
-          </label>
-          <select
-            value={sessionFilter}
-            onChange={(e) => setSessionFilter(e.target.value)}
-            className="w-full p-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-          >
-            <option value="All">All Sessions (Fall 2023 / Spring 2024)</option>
-            <option value="2023">Session 2023</option>
-            <option value="Fall 2023">Fall 2023</option>
-            <option value="Spring 2024">Spring 2024</option>
-            <option value="Fall 2025">Fall 2025</option>
-          </select>
+      <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-extrabold text-slate-300 uppercase tracking-wide text-[11px]">
+              VC Dashboard Scope Synchronized:
+            </span>
+            <span className="bg-emerald-950 text-emerald-300 px-2.5 py-0.5 rounded font-mono font-bold border border-emerald-800/80">
+              Session {currentSession}
+            </span>
+            <span className="bg-indigo-950 text-indigo-300 px-2.5 py-0.5 rounded font-mono font-bold border border-indigo-800/80">
+              Semester {selectedSemesterFilter === 'ALL' ? 'All' : selectedSemesterFilter}
+            </span>
+            {selectedDeptFilter !== 'ALL' && (
+              <span className="bg-sky-950 text-sky-300 px-2.5 py-0.5 rounded font-bold border border-sky-800/80">
+                {selectedDeptFilter.replace('Department of ', '')}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            * Automatically showing active programs and DB submissions for Session {currentSession} / Semester {selectedSemesterFilter}
+          </span>
         </div>
 
-        {/* Filter 2: Semester */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
-            <Layers className="w-3 h-3 text-indigo-400" />
-            Semester
-          </label>
-          <select
-            value={semesterFilter}
-            onChange={(e) => setSemesterFilter(e.target.value)}
-            className="w-full p-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-          >
-            <option value="All">All Semesters</option>
-            <option value="1">1st Semester</option>
-            <option value="2">2nd Semester</option>
-            <option value="3">3rd Semester</option>
-            <option value="4">4th Semester</option>
-            <option value="5">5th Semester</option>
-            <option value="6">6th Semester</option>
-            <option value="7">7th Semester</option>
-            <option value="8">8th Semester</option>
-          </select>
-        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Filter 1: Session */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-indigo-400" />
+              Session
+            </label>
+            <select
+              value={sessionFilter}
+              onChange={(e) => setSessionFilter(e.target.value)}
+              className="w-full p-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value={currentSession}>Session {currentSession} (Active)</option>
+              {StorageService.getAvailableSessions().map((s) => (
+                <option key={s} value={s}>
+                  Session {s}
+                </option>
+              ))}
+              <option value="All">All Sessions</option>
+            </select>
+          </div>
+
+          {/* Filter 2: Semester */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
+              <Layers className="w-3 h-3 text-indigo-400" />
+              Semester
+            </label>
+            <select
+              value={semesterFilter}
+              onChange={(e) => setSemesterFilter(e.target.value)}
+              className="w-full p-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value={selectedSemesterFilter}>Semester {selectedSemesterFilter === 'ALL' ? 'All' : selectedSemesterFilter} (Active)</option>
+              <option value="ALL">All Semesters</option>
+              <option value="1">1st Semester</option>
+              <option value="2">2nd Semester</option>
+              <option value="3">3rd Semester</option>
+              <option value="4">4th Semester</option>
+              <option value="5">5th Semester</option>
+              <option value="6">6th Semester</option>
+              <option value="7">7th Semester</option>
+              <option value="8">8th Semester</option>
+            </select>
+          </div>
 
         {/* Filter 3: Department */}
         <div className="space-y-1">
@@ -511,8 +578,8 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
             <option value="PENDING_ONLY">Pending Action Items Only</option>
           </select>
         </div>
-
       </div>
+    </div>
 
       {/* 3. VIEW MODE SWITCHER & TIMESTAMP */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">

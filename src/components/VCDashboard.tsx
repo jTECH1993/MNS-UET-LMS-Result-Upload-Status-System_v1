@@ -2097,7 +2097,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       {/* VC Action Center Tab */}
       {dashboardViewMode === 'ACTION_CENTER' && (
         <div className="mt-2">
-          <ActionCenterPanel allRecords={allRecords} />
+          <ActionCenterPanel
+            allRecords={allRecords}
+            currentSession={currentSession}
+            selectedSemesterFilter={selectedSemesterFilter}
+            selectedDeptFilter={selectedDeptFilter}
+            selectedShiftFilter={selectedShiftFilter}
+          />
         </div>
       )}
 
