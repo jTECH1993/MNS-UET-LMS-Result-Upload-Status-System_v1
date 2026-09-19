@@ -206,23 +206,83 @@ export function ActionCenterPanel({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Critical Action Items
-  const criticalActionsList = [
-    { id: 'ca-1', dept: 'Mechanical Engineering', detail: '0 / 12 subjects uploaded', status: 'Overdue', color: 'rose', urgency: 'CRITICAL' },
-    { id: 'ca-2', dept: 'Chemical Engineering', detail: '3 subjects pending', status: 'Pending', color: 'amber', urgency: 'HIGH' },
-    { id: 'ca-3', dept: 'Civil Engineering', detail: '1 subject not uploaded', status: 'Pending', color: 'amber', urgency: 'HIGH' },
-    { id: 'ca-4', dept: 'IT Department', detail: 'Verification required', status: 'Review', color: 'indigo', urgency: 'MEDIUM' },
-    { id: 'ca-5', dept: 'Electrical Engineering', detail: 'Mismatch in uploaded data', status: 'Review', color: 'indigo', urgency: 'MEDIUM' }
-  ];
+  // Dynamic percentages for Top 4 Metric Cards
+  const departmentBreakdownPct = useMemo(() => {
+    const totalDepts = departmentStats.length;
+    if (totalDepts === 0) return { completedPct: 0, inProgressPct: 0, atRiskPct: 0 };
+    return {
+      completedPct: Math.round((aggregatedMetrics.completedDepts / totalDepts) * 100),
+      inProgressPct: Math.round((aggregatedMetrics.inProgressDepts / totalDepts) * 100),
+      atRiskPct: Math.round((aggregatedMetrics.atRiskDepts / totalDepts) * 100)
+    };
+  }, [departmentStats, aggregatedMetrics]);
 
-  // Recent Activities Stream
-  const recentActivitiesList = [
-    { id: 'act-1', text: 'Result uploaded - ME-301', by: 'Dr. Ali Raza (Mechanical)', time: '10:12 AM', type: 'success' },
-    { id: 'act-2', text: 'Submission reminder sent', by: 'to HOD Chemical Engineering', time: '09:45 AM', type: 'info' },
-    { id: 'act-3', text: 'Data verified - CS Department', by: 'by Exam Cell', time: '09:20 AM', type: 'success' },
-    { id: 'act-4', text: 'Mismatch detected - EE-204', by: 'by System', time: '08:50 AM', type: 'alert' },
-    { id: 'act-5', text: 'Department marked complete', by: 'Mathematics', time: '08:15 AM', type: 'success' }
-  ];
+  // Critical Action Items computed dynamically from database departmentStats
+  const criticalActionsList = useMemo(() => {
+    return departmentStats
+      .filter(d => d.pendingCount > 0)
+      .map(d => ({
+        id: `ca-${d.code}`,
+        dept: d.name,
+        fullName: d.fullName,
+        detail: `${d.pendingCount} pending subject(s) (${d.uploadedCount}/${d.totalSubjects} uploaded)`,
+        status: d.uploadedCount === 0 ? 'Overdue' : 'Pending',
+        color: d.uploadedCount === 0 ? 'rose' : 'amber',
+        urgency: d.uploadedCount === 0 ? 'CRITICAL' : 'HIGH'
+      }));
+  }, [departmentStats]);
+
+  // Recent Activities Stream computed dynamically from database allRecords
+  const recentActivitiesList = useMemo(() => {
+    const activeRecords = allRecords.filter(r => {
+      const matchSess = (r.session || '2023').includes(currentSession);
+      const matchSem = selectedSemesterFilter === 'ALL' || String(r.semester || '1') === String(selectedSemesterFilter);
+      const matchDept = selectedDeptFilter === 'ALL' || StorageService._isDeptMatch(selectedDeptFilter, r.department);
+      return matchSess && matchSem && matchDept;
+    });
+
+    if (activeRecords.length === 0) {
+      return [
+        {
+          id: 'act-init',
+          text: `Compliance System Active for Session ${currentSession}`,
+          by: 'Database Sync',
+          time: 'Active',
+          type: 'info'
+        }
+      ];
+    }
+
+    const sorted = [...activeRecords].sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return sorted.slice(0, 5).map((r, i) => {
+      const uploadedSubjects = r.subjects ? r.subjects.filter((s: any) => s.status === 'Uploaded').length : 0;
+      const totalSubjects = r.subjects ? r.subjects.length : 0;
+      const formattedTime = r.updatedAt ? new Date(r.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recorded';
+
+      return {
+        id: `act-${r.id || i}`,
+        text: `${r.program} (${r.shift || 'Morning'}, Sem ${r.semester || '1'}): ${uploadedSubjects}/${totalSubjects} uploaded`,
+        by: `by ${r.submittedBy || 'HOD'} (${(r.department || '').replace('Department of ', '')})`,
+        time: formattedTime,
+        type: uploadedSubjects === totalSubjects && totalSubjects > 0 ? 'success' : uploadedSubjects > 0 ? 'info' : 'alert'
+      };
+    });
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter]);
+
+  // Active database upload activity count for scope
+  const todayUploadedCount = useMemo(() => {
+    return departmentStats.reduce((acc, d) => acc + d.uploadedCount, 0);
+  }, [departmentStats]);
+
+  // System Deadline from storage
+  const systemDeadline = useMemo(() => {
+    return StorageService.getSystemDeadline() || 'Active Schedule';
+  }, []);
 
   return (
     <div className="space-y-6 bg-slate-950 text-slate-100 p-4 sm:p-6 rounded-2xl border border-slate-800/80 shadow-2xl font-sans">
@@ -373,12 +433,12 @@ export function ActionCenterPanel({
           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `73.7%` }}
+              style={{ width: `${departmentBreakdownPct.completedPct}%` }}
             />
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1.5 font-mono">
             <span>Overall Clearance</span>
-            <span className="text-emerald-400 font-bold">73.7%</span>
+            <span className="text-emerald-400 font-bold">{departmentBreakdownPct.completedPct}%</span>
           </div>
         </div>
 
@@ -398,12 +458,12 @@ export function ActionCenterPanel({
           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
               className="bg-amber-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `21.1%` }}
+              style={{ width: `${departmentBreakdownPct.inProgressPct}%` }}
             />
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1.5 font-mono">
             <span>Active Uploading</span>
-            <span className="text-amber-400 font-bold">21.1%</span>
+            <span className="text-amber-400 font-bold">{departmentBreakdownPct.inProgressPct}%</span>
           </div>
         </div>
 
@@ -423,12 +483,12 @@ export function ActionCenterPanel({
           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
               className="bg-rose-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `5.3%` }}
+              style={{ width: `${departmentBreakdownPct.atRiskPct}%` }}
             />
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1.5 font-mono">
             <span>High Lag Risk</span>
-            <span className="text-rose-400 font-bold">5.3%</span>
+            <span className="text-rose-400 font-bold">{departmentBreakdownPct.atRiskPct}%</span>
           </div>
         </div>
 
@@ -437,50 +497,37 @@ export function ActionCenterPanel({
       {/* 3. MIDDLE ROW: TREND CHART & CRITICAL ACTIONS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         
-        {/* Left: Submission Progress Trend (8 cols) */}
+        {/* Left: Department Upload Progress Breakdown (8 cols) */}
         <div className="lg:col-span-8 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-xl">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                Submission Progress Trend
+                Department Upload Progress Breakdown
               </h3>
             </div>
-            <select className="bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 font-semibold px-2.5 py-1">
-              <option value="ALL">All Departments</option>
-            </select>
+            <span className="text-xs font-bold text-indigo-300 bg-indigo-950 px-2.5 py-1 rounded-lg border border-indigo-800">
+              Session {currentSession} Active
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center my-2">
             
-            {/* SVG Visual Progress Bar Chart */}
+            {/* Dynamic Visual Progress Bar Chart */}
             <div className="md:col-span-8 h-48 flex flex-col justify-end px-2 pt-4">
               <div className="flex items-end justify-between gap-2 h-36 border-b border-slate-800 pb-2">
-                {[
-                  { date: '12 Sep', val: 160, target: 180 },
-                  { date: '13 Sep', val: 190, target: 210 },
-                  { date: '14 Sep', val: 215, target: 240 },
-                  { date: '15 Sep', val: 240, target: 270 },
-                  { date: '16 Sep', val: 265, target: 300 },
-                  { date: '17 Sep', val: 290, target: 330 },
-                  { date: '18 Sep', val: 320, target: 360 }
-                ].map((item, idx) => {
-                  const barHeightPct = Math.round((item.val / 400) * 100);
+                {departmentStats.slice(0, 7).map((dept, idx) => {
+                  const barHeightPct = Math.max(6, dept.progressPct);
                   return (
-                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
+                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer" title={`${dept.name}: ${dept.progressPct}%`}>
                       <div className="relative w-full bg-slate-800/40 rounded-t-lg h-32 flex items-end justify-center">
-                        {/* Target Dashed Line Indicator */}
-                        <div
-                          className="absolute w-full border-t-2 border-dashed border-indigo-400/60 z-10"
-                          style={{ bottom: `${Math.round((item.target / 400) * 100)}%` }}
-                        />
                         {/* Bar */}
                         <div
                           className="w-full bg-gradient-to-t from-blue-600 to-indigo-500 rounded-t group-hover:from-blue-500 group-hover:to-indigo-400 transition-all"
                           style={{ height: `${barHeightPct}%` }}
                         />
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono font-bold">{item.date}</span>
+                      <span className="text-[10px] text-slate-400 font-mono font-bold truncate max-w-[50px]">{dept.code}</span>
                     </div>
                   );
                 })}
@@ -489,29 +536,25 @@ export function ActionCenterPanel({
               {/* Chart Legend */}
               <div className="flex items-center justify-center gap-6 mt-3 text-[11px]">
                 <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 bg-blue-500 rounded-sm" />
-                  <span className="text-slate-300 font-semibold">Uploaded</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-4 border-t-2 border-dashed border-indigo-400" />
-                  <span className="text-slate-300 font-semibold">Target</span>
+                  <span className="w-3 h-3 bg-indigo-500 rounded-sm" />
+                  <span className="text-slate-300 font-semibold">Active Department Progress %</span>
                 </div>
               </div>
             </div>
 
-            {/* Today's Activity Callout Box */}
+            {/* Database Upload Activity Callout Box */}
             <div className="md:col-span-4 bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 flex flex-col items-center justify-center text-center space-y-2">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">
-                Today's Activity
+                Database Uploaded
               </span>
               <span className="text-4xl font-black text-emerald-400 tracking-tight">
-                +46
+                {todayUploadedCount}
               </span>
               <span className="text-xs font-bold text-slate-300">
-                New Submissions
+                Subjects Uploaded
               </span>
               <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                ↑ 18% vs yesterday
+                Session {currentSession} Factual Data
               </span>
             </div>
 
@@ -528,49 +571,51 @@ export function ActionCenterPanel({
                   Critical Actions Required
                 </h3>
               </div>
-              <button
-                onClick={() => setIsNewDirectiveModalOpen(true)}
-                className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
-              >
-                View All (5)
-              </button>
+              <span className="text-[10px] font-bold text-indigo-400">
+                ({criticalActionsList.length} Pending)
+              </span>
             </div>
 
-            <div className="space-y-3">
-              {criticalActionsList.map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    setSelectedDepartmentForDirective(`Department of ${item.dept}`);
-                    setDirectiveForm(prev => ({
-                      ...prev,
-                      department: `Department of ${item.dept}`,
-                      title: `Urgent Action Required for ${item.dept}`,
-                      message: `Your department has critical upload status: ${item.detail}. Please expedite immediately.`
-                    }));
-                    setIsNewDirectiveModalOpen(true);
-                  }}
-                  className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-2 cursor-pointer group"
-                >
-                  <div className="min-w-0">
-                    <h4 className="text-xs font-bold text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
-                      {item.dept}
-                    </h4>
-                    <p className="text-[10px] text-slate-400">{item.detail}</p>
+            {criticalActionsList.length === 0 ? (
+              <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs font-bold text-center">
+                ✓ All departments have completed 100% of result uploads for Session {currentSession}!
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {criticalActionsList.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedDepartmentForDirective(item.fullName);
+                      setDirectiveForm(prev => ({
+                        ...prev,
+                        department: item.fullName,
+                        title: `Urgent Action Required for ${item.dept}`,
+                        message: `Your department has critical upload status: ${item.detail}. Please expedite immediately.`
+                      }));
+                      setIsNewDirectiveModalOpen(true);
+                    }}
+                    className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-2 cursor-pointer group"
+                  >
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
+                        {item.dept}
+                      </h4>
+                      <p className="text-[10px] text-slate-400">{item.detail}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase ${
+                        item.color === 'rose' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                        'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        {item.status}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase ${
-                      item.color === 'rose' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
-                      item.color === 'amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                    }`}>
-                      {item.status}
-                    </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-colors" />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
@@ -717,11 +762,11 @@ export function ActionCenterPanel({
 
       {/* 5. FOOTER STICKY ACTION BAR */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-2 bg-rose-950/60 border border-rose-800/60 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-200">
-          <Calendar className="w-4 h-4 text-rose-400" />
-          <span>Mid Exams Deadline: <strong className="text-white">10 November 2025</strong></span>
-          <span className="text-slate-400 font-normal">|</span>
-          <span className="text-rose-400 font-extrabold">21 days remaining</span>
+        <div className="flex items-center gap-2 bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-200">
+          <Calendar className="w-4 h-4 text-indigo-400" />
+          <span>Active Scope: <strong className="text-white">Session {currentSession} ({selectedSemesterFilter === 'ALL' ? 'All Semesters' : `Semester ${selectedSemesterFilter}`})</strong></span>
+          <span className="text-slate-500 font-normal">|</span>
+          <span className="text-indigo-300 font-extrabold">Schedule: {systemDeadline}</span>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">

@@ -201,7 +201,7 @@ export function VCExecutiveSummaryPanel({
 
   // Generate Full Summary Text
   const fullSummaryText = useMemo(() => {
-    let headerSession = sessionFilter === 'All' ? 'Fall 2023 / Spring 2024' : sessionFilter;
+    let headerSession = sessionFilter === 'All' ? `Session ${currentSession}` : sessionFilter;
     if (semesterFilter !== 'All') {
       headerSession += ` (Semester ${semesterFilter})`;
     }
@@ -330,7 +330,7 @@ export function VCExecutiveSummaryPanel({
 
   // Generate Pending Only Text (For "Copy Pending Summary" button)
   const pendingSummaryText = useMemo(() => {
-    const headerSession = sessionFilter === 'All' ? 'Fall 2023 / Spring 2024' : sessionFilter;
+    const headerSession = sessionFilter === 'All' ? `Session ${currentSession}` : sessionFilter;
     let text = `PENDING EXAMINATION RESULTS SUMMARY\n`;
     text += `Session: ${headerSession}\n`;
     text += `Last updated: ${lastUpdated || 'Recently'}\n`;
