@@ -136,9 +136,13 @@ export const DepartmentCompletionHeatmap: React.FC<Props> = ({
                   <span className="text-rose-600 dark:text-rose-400 font-medium">
                     {dept.pendingCourses} pending
                   </span>
-                ) : (
+                ) : dept.totalCourses > 0 && dept.uploadedCourses === dept.totalCourses ? (
                   <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
                     <CheckCircle2 className="w-3 h-3" /> All uploaded
+                  </span>
+                ) : (
+                  <span className="text-slate-400 dark:text-slate-500 font-medium">
+                    Pending setup
                   </span>
                 )}
               </div>

@@ -282,12 +282,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   }, [hierarchy.exceptions]);
 
   const { longitudinalData, currentBarKey, prevBarKey } = useMemo(() => {
-    const activeSess = activeSessions || '2023-24';
+    const activeSessLabel = Array.isArray(activeSessions)
+      ? activeSessions.join(', ')
+      : activeSessions || '2023';
 
-    // Determine previous session key (e.g. if active is '2024-25', prev is '2023-24'; if active is '2023-24', prev is '2022-23')
-    let prevSess = '2022-23';
-    if (activeSess.includes('2024')) prevSess = '2023-24';
-    else if (activeSess.includes('2023')) prevSess = '2022-23';
+    let prevSess = '2022';
+    if (activeSessLabel.includes('2025')) prevSess = '2024';
+    else if (activeSessLabel.includes('2024')) prevSess = '2023';
+    else if (activeSessLabel.includes('2023')) prevSess = '2022';
 
     // Check if there are authentic previous session records in DB
     const hasPrevRecords = allRecords.some(
@@ -296,8 +298,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         (r.session === prevSess || r.session === prevSess.substring(0, 4) || r.session.includes(prevSess))
     );
 
-    const currKey = `Active Session (${activeSess})`;
-    const prevKey = `Previous Session (${prevSess})`;
+    const currKey = `Session ${activeSessLabel}`;
+    const prevKey = `Session ${prevSess}`;
 
     const data = hierarchy.departments.map((dept) => {
       const currentRate = Math.round(dept.completionRate);
@@ -1896,12 +1898,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                     dataKey={currentBarKey}
                     fill="#10B981"
                     radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
+                    maxBarSize={32}
+                    minPointSize={6}
                   >
                     <LabelList
                       dataKey={currentBarKey}
                       position="top"
-                      formatter={(v: any) => `${v}%`}
+                      formatter={(v: any) => `${v ?? 0}%`}
                       style={{ fontSize: '10px', fontWeight: 'bold', fill: '#10B981' }}
                     />
                   </Bar>
@@ -1910,7 +1913,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       dataKey={prevBarKey}
                       fill="#6366F1"
                       radius={[4, 4, 0, 0]}
-                      maxBarSize={30}
+                      maxBarSize={32}
+                      minPointSize={6}
                     />
                   )}
                 </BarChart>

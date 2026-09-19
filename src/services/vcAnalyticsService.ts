@@ -513,8 +513,8 @@ export class VCAnalyticsService {
                   });
                 });
                 secTotal += validSubjects.length;
-              } else if (coordinatorDim.isAssigned) {
-                // Active assigned coordinator awaiting upload
+              } else {
+                // Program section awaiting LMS upload
                 const defaultCoursesCount = 5;
                 for (let idx = 0; idx < defaultCoursesCount; idx++) {
                   secPending++;
@@ -525,8 +525,8 @@ export class VCAnalyticsService {
                     creditHours: '3(3-0)',
                     status: 'Pending',
                     dateUploaded: '',
-                    uploadedBy: coordinatorDim.name,
-                    remarks: 'Awaiting coordinator upload in LMS',
+                    uploadedBy: coordinatorDim.isAssigned ? coordinatorDim.name : 'Unassigned Coordinator',
+                    remarks: coordinatorDim.isAssigned ? 'Awaiting coordinator upload in LMS' : 'Awaiting coordinator assignment & result upload',
                     expected: true,
                     submitted: false,
                     coordinatorName: coordinatorDim.name,
