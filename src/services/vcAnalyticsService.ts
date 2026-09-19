@@ -236,8 +236,6 @@ export class VCAnalyticsService {
       let deptPending = 0;
 
       activePrograms.forEach((prog) => {
-        totalUniversityPrograms++;
-
         // Coordinator Dimension: dynamic lookup from accounts and stored database records
         const matchingCoordAccounts = accounts.filter((acc) => {
           if (acc.role !== 'COORDINATOR' && acc.role !== 'LECTURER') return false;
@@ -248,350 +246,390 @@ export class VCAnalyticsService {
           return allProgs.some((p) => p.trim().toLowerCase() === prog.name.trim().toLowerCase());
         });
 
-        let coordinatorAccount = matchingCoordAccounts[0];
-        if (shiftFilter !== 'ALL' && matchingCoordAccounts.length > 1) {
-          const shiftSpecific = matchingCoordAccounts.find((acc) => {
-            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning', 'Evening'];
-            return shs.includes(shiftFilter as AcademicShift);
-          });
-          if (shiftSpecific) coordinatorAccount = shiftSpecific;
-        }
-
-        let coordShifts: AcademicShift[] | undefined = undefined;
-        let coordShiftLabel: string | undefined = undefined;
-        let coordDisplayName: string | undefined = undefined;
-
-        if (matchingCoordAccounts.length > 1 && shiftFilter === 'ALL') {
-          // If multiple coordinators oversee different shifts of this program
-          const namesWithShifts = matchingCoordAccounts.map((acc) => {
-            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning', 'Evening'];
-            const label = shs.includes('Morning') && shs.includes('Evening') ? 'M&E' : shs.includes('Morning') ? 'Morning' : 'Evening';
-            return `${acc.name} (${label})`;
-          });
-          coordDisplayName = namesWithShifts.join(' • ');
-          coordShiftLabel = 'Morning & Evening (Coordinated)';
-          coordShifts = ['Morning', 'Evening'];
-        } else if (coordinatorAccount) {
-          coordDisplayName = coordinatorAccount.name;
-          coordShifts = (coordinatorAccount.programShiftAssignments && coordinatorAccount.programShiftAssignments[prog.name]) ||
-            coordinatorAccount.assignedShifts || ['Morning', 'Evening'];
-          if (coordShifts.includes('Morning') && coordShifts.includes('Evening')) {
-            coordShiftLabel = 'Morning & Evening';
-          } else if (coordShifts.includes('Morning')) {
-            coordShiftLabel = 'Morning Only';
-          } else if (coordShifts.includes('Evening')) {
-            coordShiftLabel = 'Evening Only';
-          }
-        }
-
-        // Check if any database submission for this program records a coordinator
-        let dbCoordName = '';
-        if (!coordinatorAccount && matchingCoordAccounts.length === 0) {
-          const recWithCoord = allRecords.find((r) => {
-            if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
-            if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
-            return !!(r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator'));
-          });
-          if (recWithCoord && recWithCoord.hodCoordinator) {
-            dbCoordName = recWithCoord.hodCoordinator.trim();
-          }
-        }
-
-        const coordinatorDim: CoordinatorDimension = (coordinatorAccount || matchingCoordAccounts.length > 0)
-          ? {
-              name: coordDisplayName || coordinatorAccount.name,
-              username: coordinatorAccount?.username || matchingCoordAccounts[0]?.username,
-              email: coordinatorAccount?.email || matchingCoordAccounts[0]?.email,
-              isAssigned: true,
-              accountStatus: 'Active',
-              lastLoginAt: coordinatorAccount?.lastLoginAt || matchingCoordAccounts[0]?.lastLoginAt,
-              shifts: coordShifts,
-              shiftLabel: coordShiftLabel,
-            }
-          : dbCoordName
-          ? {
-              name: dbCoordName,
-              isAssigned: true,
-              accountStatus: 'Active',
-              shiftLabel: 'Morning & Evening',
-            }
-          : {
-              name: 'Not Assigned',
-              isAssigned: false,
-              accountStatus: 'Not Created',
-            };
-
-        if (!coordinatorDim.isAssigned) {
-          exceptions.push({
-            id: `no-coord-${dept.code}-${prog.name.replace(/\s+/g, '-')}`,
-            category: 'NO_COORDINATOR',
-            badge: 'No Coordinator Assigned',
-            severity: 'gray',
-            department: dept.name,
-            deptCode: dept.code,
-            program: prog.name,
-            message: `${prog.name} has no coordinator assigned`,
-            detail: 'Account not created; academic oversight unassigned',
-          });
-        }
-
-        // Multiple Sections Dimension: Dynamically resolve active sections for this program
-        const matchingRecords = allRecords.filter((r) => {
-          if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
-          if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
-          if (!sessionList.includes(r.session || '2023')) return false;
-          if (semesterList.length > 0 && !semesterList.includes(r.semester || '1')) return false;
-          if (shiftFilter !== 'ALL' && (r.shift || 'Morning') !== shiftFilter) return false;
-          return true;
-        });
-
-        // Determine active sections for this specific program:
-        // Always starts with baseline Section A. Extra sections (like B) only exist if registered or if valid submitted records exist.
-        const cleanDeptName = dept.name.trim().toLowerCase();
-        const cleanProgName = prog.name.trim().toLowerCase();
-        const progActiveSections = new Set<string>(['A']);
-
-        matchingRecords.forEach((r) => {
-          if (r.subjects && r.subjects.some((s) => s && (s.subjectTitle?.trim() || s.courseCode?.trim()))) {
-            const sec = (r.section || 'A').trim().toUpperCase();
-            if (sec) progActiveSections.add(sec);
-          }
-        });
-
-        const cohortMap = StorageService.getCohortSectionsMap();
-        const activeSemId = semesterList.length === 1 ? semesterList[0] : (typeof semesterFilter === 'string' && semesterFilter !== 'ALL' ? semesterFilter : '');
-        Object.keys(cohortMap).forEach((key) => {
-          const lowerKey = key.toLowerCase();
-          if (
-            lowerKey.includes(cleanDeptName) &&
-            lowerKey.includes(cleanProgName) &&
-            (!activeSemId || lowerKey.includes(`__${activeSemId}__`) || lowerKey.endsWith(`__${activeSemId}`))
-          ) {
-            const list = cohortMap[key];
-            if (Array.isArray(list)) {
-              list.forEach((s) => {
-                const clean = (s || '').trim().toUpperCase();
-                if (clean) progActiveSections.add(clean);
-              });
-            }
-          }
-        });
-
-        let targetSections: string[] = [];
-        if (sectionFilter === 'ALL') {
-          targetSections = Array.from(progActiveSections).sort((a, b) => {
-            if (a === 'A') return -1;
-            if (b === 'A') return 1;
-            return a.localeCompare(b);
-          });
+        // Determine target shifts for this program
+        let targetShifts: AcademicShift[] = [];
+        if (shiftFilter !== 'ALL') {
+          targetShifts = [shiftFilter as AcademicShift];
         } else {
-          targetSections = progActiveSections.has(sectionFilter) ? [sectionFilter] : ['A'];
+          // Check if both Morning and Evening records or coordinators exist in DB
+          const hasMorningRecs = allRecords.some(
+            (r) =>
+              r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+              r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
+              (r.shift || 'Morning') === 'Morning' &&
+              sessionList.includes(r.session || '2023')
+          );
+          const hasEveningRecs = allRecords.some(
+            (r) =>
+              r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+              r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
+              r.shift === 'Evening' &&
+              sessionList.includes(r.session || '2023')
+          );
+
+          const hasMorningCoord = matchingCoordAccounts.some((acc) => {
+            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning'];
+            return shs.includes('Morning');
+          });
+          const hasEveningCoord = matchingCoordAccounts.some((acc) => {
+            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || [];
+            return shs.includes('Evening');
+          });
+
+          // If B.Tech, default to Evening
+          if (prog.name.toLowerCase().includes('b.tech') || prog.name.toLowerCase().includes('technology')) {
+            targetShifts = ['Evening'];
+          } else if ((hasMorningRecs || hasMorningCoord) && (hasEveningRecs || hasEveningCoord)) {
+            // Distinct Morning and Evening shifts
+            targetShifts = ['Morning', 'Evening'];
+          } else if (hasEveningRecs || hasEveningCoord) {
+            targetShifts = ['Morning', 'Evening'];
+          } else {
+            targetShifts = ['Morning'];
+          }
         }
 
-        if (targetSections.length === 0) {
-          targetSections = ['A'];
-        }
+        targetShifts.forEach((activeShift) => {
+          totalUniversityPrograms++;
 
-        // If semesterFilter is 'ALL' or empty, account for all active semesters (1 to 8) to calculate realistic program expected courses
-        const semestersToEvaluate: string[] =
-          semesterList.length > 0
-            ? semesterList
-            : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+          // Resolve Coordinator specific to this active shift
+          let coordinatorAccount = matchingCoordAccounts.find((acc) => {
+            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning', 'Evening'];
+            return shs.includes(activeShift);
+          }) || matchingCoordAccounts[0];
 
-        const sectionBreakdowns: SectionBreakdown[] = [];
-        let progCourses = 0;
-        let progUploaded = 0;
-        let progPending = 0;
-        let progInProgress = 0;
-        let latestSubmission: string | undefined = undefined;
+          let coordShifts: AcademicShift[] = [activeShift];
+          let coordShiftLabel = activeShift === 'Morning' ? 'Morning Shift' : 'Evening Shift';
+          let coordDisplayName = coordinatorAccount?.name;
 
-        targetSections.forEach((secName) => {
-          let secUploaded = 0;
-          let secPending = 0;
-          let secInProgress = 0;
-          let secTotal = 0;
-          const courseDetails: CourseDetail[] = [];
-          let secRec: SubmissionRecord | null = null;
+          // Check if any database submission for this program and shift records a coordinator
+          let dbCoordName = '';
+          if (!coordinatorAccount && matchingCoordAccounts.length === 0) {
+            const recWithCoord = allRecords.find((r) => {
+              if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
+              if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
+              if ((r.shift || 'Morning') !== activeShift) return false;
+              return !!(r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator'));
+            });
+            if (recWithCoord && recWithCoord.hodCoordinator) {
+              dbCoordName = recWithCoord.hodCoordinator.trim();
+            }
+          }
 
-          semestersToEvaluate.forEach((semId: string) => {
-            const rec = matchingRecords.find(
-              (r) =>
-                (r.section || 'A').trim().toUpperCase() === secName &&
-                (r.semester || '1').trim() === semId
-            );
-
-            if (rec && rec.updatedAt) {
-              if (!latestSubmission || new Date(rec.updatedAt) > new Date(latestSubmission)) {
-                latestSubmission = rec.updatedAt;
+          const coordinatorDim: CoordinatorDimension = coordinatorAccount
+            ? {
+                name: coordDisplayName || coordinatorAccount.name,
+                username: coordinatorAccount.username,
+                email: coordinatorAccount.email,
+                isAssigned: true,
+                accountStatus: 'Active',
+                lastLoginAt: coordinatorAccount.lastLoginAt,
+                shifts: coordShifts,
+                shiftLabel: coordShiftLabel,
               }
-            }
-            if (rec && !secRec) {
-              secRec = rec;
-            }
+            : dbCoordName
+            ? {
+                name: dbCoordName,
+                isAssigned: true,
+                accountStatus: 'Active',
+                shifts: coordShifts,
+                shiftLabel: coordShiftLabel,
+              }
+            : {
+                name: 'Not Assigned',
+                isAssigned: false,
+                accountStatus: 'Not Created',
+                shifts: coordShifts,
+                shiftLabel: coordShiftLabel,
+              };
 
-            const rawSubjects: SubjectRow[] = rec?.subjects && rec.subjects.length > 0 ? rec.subjects : [];
-            const validSubjects = rawSubjects.filter(
-              (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
-            );
-
-            if (validSubjects.length > 0) {
-              validSubjects.forEach((s, idx) => {
-                const status = (s.status === 'Uploaded' ? 'Uploaded' : s.status === 'In Progress' ? 'In Progress' : 'Pending');
-                if (status === 'Uploaded') secUploaded++;
-                else if (status === 'In Progress') secInProgress++;
-                else secPending++;
-
-                courseDetails.push({
-                  id: s.id || `course-${semId}-${secName}-${idx}`,
-                  courseCode: s.courseCode || `COURSE-${100 + idx}`,
-                  subjectTitle: s.subjectTitle || `Curricular Subject ${idx + 1}`,
-                  creditHours: s.creditHours || '3(3-0)',
-                  status,
-                  dateUploaded: s.dateUploaded || rec?.submissionDate || '',
-                  uploadedBy: s.uploadedBy || rec?.accessedBy || coordinatorDim.name,
-                  remarks: s.remarks || '',
-                  expected: true,
-                  submitted: status === 'Uploaded',
-                  coordinatorName: coordinatorDim.name,
-                  deadline,
-                  lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
-                });
-              });
-              secTotal += validSubjects.length;
-            }
-          });
-
-          const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
-          const secStatus = secPct === 100 ? 'Completed' : secPct > 0 ? 'Partial' : 'Not Started';
-
-          sectionBreakdowns.push({
-            section: secName,
-            totalCourses: secTotal,
-            uploadedCourses: secUploaded,
-            pendingCourses: secPending,
-            inProgressCourses: secInProgress,
-            completionRate: secPct,
-            status: secStatus,
-            submissionRecord: secRec,
-            courses: courseDetails,
-          });
-
-          progCourses += secTotal;
-          progUploaded += secUploaded;
-          progPending += secPending;
-          progInProgress += secInProgress;
-        });
-
-        // If no records have been submitted for this program yet, show clean unsubmitted status without inflating pending counts
-        if (progCourses === 0) {
-          if (sectionBreakdowns.length === 0) {
-            sectionBreakdowns.push({
-              section: 'A',
-              totalCourses: 0,
-              uploadedCourses: 0,
-              pendingCourses: 0,
-              inProgressCourses: 0,
-              completionRate: 0,
-              status: 'Not Started',
-              submissionRecord: null,
-              courses: [],
+          if (!coordinatorDim.isAssigned) {
+            exceptions.push({
+              id: `no-coord-${dept.code}-${prog.name.replace(/\s+/g, '-')}-${activeShift}`,
+              category: 'NO_COORDINATOR',
+              badge: 'No Coordinator Assigned',
+              severity: 'gray',
+              department: dept.name,
+              deptCode: dept.code,
+              program: `${prog.name} (${activeShift})`,
+              message: `${prog.name} (${activeShift}) has no coordinator assigned`,
+              detail: 'Account not created; academic oversight unassigned',
             });
           }
-          progCourses = 0;
-          progPending = 0;
-          progUploaded = 0;
-          progInProgress = 0;
-        }
 
-        const progCompletion = progCourses > 0 ? Math.round((progUploaded / progCourses) * 100) : 0;
-        let progStatus: 'Verified' | 'Partial' | 'Not Started' | 'Overdue' | 'Attention Required';
-
-        if (progCompletion === 100 && progPending === 0 && progCourses > 0) {
-          progStatus = 'Verified';
-        } else if (isDeadlinePassed && progPending > 0) {
-          progStatus = 'Overdue';
-          overdueCount++;
-        } else if (progUploaded > 0 || progInProgress > 0) {
-          progStatus = 'Partial';
-        } else {
-          progStatus = !coordinatorDim.isAssigned ? 'Attention Required' : 'Not Started';
-        }
-
-        if (progUploaded > 0 || progInProgress > 0) {
-          totalUniversityActivePrograms++;
-        }
-
-        // Exception tracking
-        if (progStatus === 'Overdue') {
-          exceptions.push({
-            id: `overdue-${dept.code}-${prog.name}`,
-            category: 'OVERDUE',
-            badge: 'Submission Overdue',
-            severity: 'red',
-            department: dept.name,
-            deptCode: dept.code,
-            program: prog.name,
-            message: `${prog.name} is past deadline with ${progPending} pending courses`,
-            detail: `Deadline was ${deadline ? new Date(deadline).toLocaleDateString() : 'recently'}`,
+          // Filter submission records strictly matching department, program, session, semester, section, AND activeShift
+          const matchingRecords = allRecords.filter((r) => {
+            if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
+            if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
+            if (!sessionList.includes(r.session || '2023')) return false;
+            if (semesterList.length > 0 && !semesterList.includes(r.semester || '1')) return false;
+            const rShift = r.shift || 'Morning';
+            if (rShift !== activeShift) return false;
+            return true;
           });
-        } else if (progCompletion > 0 && progCompletion < 50) {
-          exceptions.push({
-            id: `low-${dept.code}-${prog.name}`,
-            category: 'CRITICAL_LOW',
-            badge: '< 50% Completion',
-            severity: 'orange',
-            department: dept.name,
-            deptCode: dept.code,
-            program: prog.name,
-            message: `${prog.name} has only ${progCompletion}% courses submitted`,
-            detail: `${progUploaded} of ${progCourses} courses uploaded`,
-          });
-        } else if (progStatus === 'Partial') {
-          exceptions.push({
-            id: `partial-${dept.code}-${prog.name}`,
-            category: 'PARTIAL',
-            badge: 'Partially Submitted',
-            severity: 'yellow',
-            department: dept.name,
-            deptCode: dept.code,
-            program: prog.name,
-            message: `${prog.name} is in progress (${progCompletion}%)`,
-            detail: `${progPending} remaining to verify`,
-          });
-        }
 
-        // Deadline aging tracking
-        if (progPending > 0) {
-          if (isDeadlinePassed) {
-            // Already counted in overdueCount
-          } else if (daysToDeadline <= 0) {
-            dueTodayCount++;
-          } else if (daysToDeadline <= 3) {
-            dueWithin3DaysCount++;
+          // Determine active sections for this specific program and shift
+          const cleanDeptName = dept.name.trim().toLowerCase();
+          const cleanProgName = prog.name.trim().toLowerCase();
+          const progActiveSections = new Set<string>(['A']);
+
+          matchingRecords.forEach((r) => {
+            if (r.subjects && r.subjects.some((s) => s && (s.subjectTitle?.trim() || s.courseCode?.trim()))) {
+              const sec = (r.section || 'A').trim().toUpperCase();
+              if (sec) progActiveSections.add(sec);
+            }
+          });
+
+          const cohortMap = StorageService.getCohortSectionsMap();
+          const activeSemId =
+            semesterList.length === 1
+              ? semesterList[0]
+              : typeof semesterFilter === 'string' && semesterFilter !== 'ALL'
+              ? semesterFilter
+              : '';
+
+          Object.keys(cohortMap).forEach((key) => {
+            const lowerKey = key.toLowerCase();
+            if (
+              lowerKey.includes(cleanDeptName) &&
+              lowerKey.includes(cleanProgName) &&
+              (!activeSemId || lowerKey.includes(`__${activeSemId}__`) || lowerKey.endsWith(`__${activeSemId}`))
+            ) {
+              const list = cohortMap[key];
+              if (Array.isArray(list)) {
+                list.forEach((s) => {
+                  const clean = (s || '').trim().toUpperCase();
+                  if (clean) progActiveSections.add(clean);
+                });
+              }
+            }
+          });
+
+          let targetSections: string[] = [];
+          if (sectionFilter === 'ALL') {
+            targetSections = Array.from(progActiveSections).sort((a, b) => {
+              if (a === 'A') return -1;
+              if (b === 'A') return 1;
+              return a.localeCompare(b);
+            });
           } else {
-            dueLaterCount++;
+            targetSections = progActiveSections.has(sectionFilter) ? [sectionFilter] : ['A'];
           }
-        }
 
-        programDims.push({
-          department: dept.name,
-          deptCode: dept.code,
-          program: prog.name,
-          degreeLevel: prog.degreeLevel,
-          coordinator: coordinatorDim,
-          sectionsCount: sectionBreakdowns.length,
-          totalCourses: progCourses,
-          uploadedCourses: progUploaded,
-          pendingCourses: progPending,
-          completionRate: progCompletion,
-          status: progStatus,
-          lastSubmissionDate: latestSubmission,
-          sections: sectionBreakdowns,
+          if (targetSections.length === 0) {
+            targetSections = ['A'];
+          }
+
+          const semestersToEvaluate: string[] =
+            semesterList.length > 0
+              ? semesterList
+              : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+
+          const sectionBreakdowns: SectionBreakdown[] = [];
+          let progCourses = 0;
+          let progUploaded = 0;
+          let progPending = 0;
+          let progInProgress = 0;
+          let latestSubmission: string | undefined = undefined;
+
+          targetSections.forEach((secName) => {
+            let secUploaded = 0;
+            let secPending = 0;
+            let secInProgress = 0;
+            let secTotal = 0;
+            const courseDetails: CourseDetail[] = [];
+            let secRec: SubmissionRecord | null = null;
+
+            semestersToEvaluate.forEach((semId: string) => {
+              const rec = matchingRecords.find(
+                (r) =>
+                  (r.section || 'A').trim().toUpperCase() === secName &&
+                  (r.semester || '1').trim() === semId
+              );
+
+              if (rec && rec.updatedAt) {
+                if (!latestSubmission || new Date(rec.updatedAt) > new Date(latestSubmission)) {
+                  latestSubmission = rec.updatedAt;
+                }
+              }
+              if (rec && !secRec) {
+                secRec = rec;
+              }
+
+              const rawSubjects: SubjectRow[] = rec?.subjects && rec.subjects.length > 0 ? rec.subjects : [];
+              const validSubjects = rawSubjects.filter(
+                (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+              );
+
+              if (validSubjects.length > 0) {
+                validSubjects.forEach((s, idx) => {
+                  const status =
+                    s.status === 'Uploaded' ? 'Uploaded' : s.status === 'In Progress' ? 'In Progress' : 'Pending';
+                  if (status === 'Uploaded') secUploaded++;
+                  else if (status === 'In Progress') secInProgress++;
+                  else secPending++;
+
+                  courseDetails.push({
+                    id: s.id || `course-${semId}-${secName}-${idx}`,
+                    courseCode: s.courseCode || `COURSE-${100 + idx}`,
+                    subjectTitle: s.subjectTitle || `Curricular Subject ${idx + 1}`,
+                    creditHours: s.creditHours || '3(3-0)',
+                    status,
+                    dateUploaded: s.dateUploaded || rec?.submissionDate || '',
+                    uploadedBy: s.uploadedBy || rec?.accessedBy || coordinatorDim.name,
+                    remarks: s.remarks || '',
+                    expected: true,
+                    submitted: status === 'Uploaded',
+                    coordinatorName: coordinatorDim.name,
+                    deadline,
+                    lastActivity: s.dateUploaded || rec?.updatedAt || 'Updated in LMS',
+                  });
+                });
+                secTotal += validSubjects.length;
+              }
+            });
+
+            const secPct = secTotal > 0 ? Math.round((secUploaded / secTotal) * 100) : 0;
+            const secStatus = secPct === 100 ? 'Completed' : secPct > 0 ? 'Partial' : 'Not Started';
+
+            sectionBreakdowns.push({
+              section: secName,
+              totalCourses: secTotal,
+              uploadedCourses: secUploaded,
+              pendingCourses: secPending,
+              inProgressCourses: secInProgress,
+              completionRate: secPct,
+              status: secStatus,
+              submissionRecord: secRec,
+              courses: courseDetails,
+            });
+
+            progCourses += secTotal;
+            progUploaded += secUploaded;
+            progPending += secPending;
+            progInProgress += secInProgress;
+          });
+
+          // CRITICAL FIX: If no LMS records have been uploaded yet for this program shift,
+          // account for expected curricular courses so unassigned/pending programs accurately pull down completion rate
+          if (progCourses === 0) {
+            const expectedDefaultCourses = 6 * targetSections.length; // standard 6 courses per section
+            progCourses = expectedDefaultCourses;
+            progUploaded = 0;
+            progPending = expectedDefaultCourses;
+            progInProgress = 0;
+
+            if (sectionBreakdowns.length === 0) {
+              sectionBreakdowns.push({
+                section: 'A',
+                totalCourses: expectedDefaultCourses,
+                uploadedCourses: 0,
+                pendingCourses: expectedDefaultCourses,
+                inProgressCourses: 0,
+                completionRate: 0,
+                status: 'Not Started',
+                submissionRecord: null,
+                courses: [],
+              });
+            }
+          }
+
+          const progCompletion = progCourses > 0 ? Math.round((progUploaded / progCourses) * 100) : 0;
+          let progStatus: 'Verified' | 'Partial' | 'Not Started' | 'Overdue' | 'Attention Required';
+
+          if (progCompletion === 100 && progPending === 0 && progCourses > 0) {
+            progStatus = 'Verified';
+          } else if (isDeadlinePassed && progPending > 0) {
+            progStatus = 'Overdue';
+            overdueCount++;
+          } else if (progUploaded > 0 || progInProgress > 0) {
+            progStatus = 'Partial';
+          } else {
+            progStatus = !coordinatorDim.isAssigned ? 'Attention Required' : 'Not Started';
+          }
+
+          if (progUploaded > 0 || progInProgress > 0) {
+            totalUniversityActivePrograms++;
+          }
+
+          // Display program name with shift label if multiple shifts exist or if explicitly requested
+          const programDisplayName =
+            targetShifts.length > 1
+              ? `${prog.name} (${activeShift})`
+              : prog.name;
+
+          // Exception tracking
+          if (progStatus === 'Overdue') {
+            exceptions.push({
+              id: `overdue-${dept.code}-${prog.name}-${activeShift}`,
+              category: 'OVERDUE',
+              badge: 'Submission Overdue',
+              severity: 'red',
+              department: dept.name,
+              deptCode: dept.code,
+              program: programDisplayName,
+              message: `${programDisplayName} is past deadline with ${progPending} pending courses`,
+              detail: `Deadline was ${deadline ? new Date(deadline).toLocaleDateString() : 'recently'}`,
+            });
+          } else if (progCompletion > 0 && progCompletion < 50) {
+            exceptions.push({
+              id: `low-${dept.code}-${prog.name}-${activeShift}`,
+              category: 'CRITICAL_LOW',
+              badge: '< 50% Completion',
+              severity: 'orange',
+              department: dept.name,
+              deptCode: dept.code,
+              program: programDisplayName,
+              message: `${programDisplayName} has only ${progCompletion}% courses submitted`,
+              detail: `${progUploaded} of ${progCourses} courses uploaded`,
+            });
+          } else if (progStatus === 'Partial') {
+            exceptions.push({
+              id: `partial-${dept.code}-${prog.name}-${activeShift}`,
+              category: 'PARTIAL',
+              badge: 'Partially Submitted',
+              severity: 'yellow',
+              department: dept.name,
+              deptCode: dept.code,
+              program: programDisplayName,
+              message: `${programDisplayName} is in progress (${progCompletion}%)`,
+              detail: `${progPending} remaining to verify`,
+            });
+          }
+
+          // Deadline aging tracking
+          if (progPending > 0) {
+            if (isDeadlinePassed) {
+              // Already counted in overdueCount
+            } else if (daysToDeadline <= 0) {
+              dueTodayCount++;
+            } else if (daysToDeadline <= 3) {
+              dueWithin3DaysCount++;
+            } else {
+              dueLaterCount++;
+            }
+          }
+
+          programDims.push({
+            department: dept.name,
+            deptCode: dept.code,
+            program: programDisplayName,
+            degreeLevel: prog.degreeLevel,
+            coordinator: coordinatorDim,
+            sectionsCount: sectionBreakdowns.length,
+            totalCourses: progCourses,
+            uploadedCourses: progUploaded,
+            pendingCourses: progPending,
+            completionRate: progCompletion,
+            status: progStatus,
+            lastSubmissionDate: latestSubmission,
+            sections: sectionBreakdowns,
+          });
+
+          deptCourses += progCourses;
+          deptUploaded += progUploaded;
+          deptPending += progPending;
         });
-
-        deptCourses += progCourses;
-        deptUploaded += progUploaded;
-        deptPending += progPending;
       });
 
       let deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;

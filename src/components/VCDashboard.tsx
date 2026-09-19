@@ -286,19 +286,61 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return (hierarchy.exceptions || []).filter((exc) => exc.category === 'OVERDUE');
   }, [hierarchy.exceptions]);
 
-  const longitudinalData = useMemo(() => {
-    return hierarchy.departments.map((dept) => {
+  const { longitudinalData, currentBarKey, prevBarKey } = useMemo(() => {
+    const activeSess = activeSessions || '2023-24';
+
+    // Determine previous session key (e.g. if active is '2024-25', prev is '2023-24'; if active is '2023-24', prev is '2022-23')
+    let prevSess = '2022-23';
+    if (activeSess.includes('2024')) prevSess = '2023-24';
+    else if (activeSess.includes('2023')) prevSess = '2022-23';
+
+    // Check if there are authentic previous session records in DB
+    const hasPrevRecords = allRecords.some(
+      (r) =>
+        r.session &&
+        (r.session === prevSess || r.session === prevSess.substring(0, 4) || r.session.includes(prevSess))
+    );
+
+    const currKey = `Active Session (${activeSess})`;
+    const prevKey = `Previous Session (${prevSess})`;
+
+    const data = hierarchy.departments.map((dept) => {
       const currentRate = Math.round(dept.completionRate);
-      const hash = dept.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const prevRate = Math.min(100, Math.max(50, 75 + (hash % 21))); // deterministic value between 75% and 96%
-      return {
+      const row: Record<string, any> = {
         name: dept.code || dept.name.split(' ').map((w) => w[0]).join(''),
         fullName: dept.name,
-        'Current Session (2023-24)': currentRate,
-        'Previous Session (2022-23)': prevRate,
+        [currKey]: currentRate,
       };
+
+      if (hasPrevRecords) {
+        // Calculate real historical completion for prevSess from allRecords
+        const prevRecs = allRecords.filter(
+          (r) =>
+            r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+            r.session &&
+            (r.session.includes(prevSess) || r.session.includes(prevSess.substring(0, 4)))
+        );
+        let prevUploaded = 0;
+        let prevTotal = 0;
+        prevRecs.forEach((r) => {
+          (r.subjects || []).forEach((s) => {
+            prevTotal++;
+            if (s.status === 'Uploaded') prevUploaded++;
+          });
+        });
+        const realPrevRate = prevTotal > 0 ? Math.round((prevUploaded / prevTotal) * 100) : 0;
+        row[prevKey] = realPrevRate;
+      }
+
+      return row;
     });
-  }, [hierarchy.departments]);
+
+    return {
+      longitudinalData: data,
+      currentBarKey: currKey,
+      prevBarKey: hasPrevRecords ? prevKey : null,
+    };
+  }, [hierarchy.departments, activeSessions, allRecords]);
 
   const handleSelectException = (exc: ActionRequiredException) => {
     const dept = hierarchy.departments.find(
@@ -1712,13 +1754,34 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                   </div>
                 </div>
 
-                {/* Inline critical alert notice */}
-                <div className="mt-4 bg-rose-950/20 border border-rose-900/50 p-2.5 px-3.5 rounded-lg flex items-start gap-2.5 text-xs">
-                  <span className="text-rose-400 font-bold">⚠️ EXECUTIVE ACTION REQUIRED:</span>
-                  <p className="text-rose-200 leading-tight">
-                    <strong>Mechanical Engineering</strong> currently stands at <strong>66% completion (19/29 uploads)</strong> with multiple pending cohorts. <strong>Computer Science</strong> requires verification for Section B semesters to clear unassigned course bottlenecks.
-                  </p>
-                </div>
+                {/* Inline critical alert notice dynamically calculated from database */}
+                {(() => {
+                  const pendingDepts = hierarchy.departments.filter(
+                    (d) => d.completionRate < 100 || d.pendingCourses > 0
+                  );
+                  if (pendingDepts.length === 0) {
+                    return (
+                      <div className="mt-4 bg-emerald-950/20 border border-emerald-900/50 p-2.5 px-3.5 rounded-lg flex items-start gap-2.5 text-xs">
+                        <span className="text-emerald-400 font-bold">✅ ALL DEPARTMENTS VERIFIED:</span>
+                        <p className="text-emerald-200 leading-tight">
+                          All academic departments have achieved 100% verified course submissions for the active session.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="mt-4 bg-rose-950/20 border border-rose-900/50 p-2.5 px-3.5 rounded-lg flex items-start gap-2.5 text-xs">
+                      <span className="text-rose-400 font-bold">⚠️ EXECUTIVE ACTION REQUIRED:</span>
+                      <p className="text-rose-200 leading-tight">
+                        {pendingDepts.map((d, i) => (
+                          <span key={d.code} className="mr-2">
+                            <strong>{d.name}</strong> stands at <strong>{d.completionRate}% completion ({d.uploadedCourses}/{d.totalCourses} uploads)</strong> with {d.pendingCourses} pending courses.
+                          </span>
+                        ))}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -1839,17 +1902,19 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                   />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
                   <Bar
-                    dataKey="Current Session (2023-24)"
+                    dataKey={currentBarKey}
                     fill="#10B981"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={30}
                   />
-                  <Bar
-                    dataKey="Previous Session (2022-23)"
-                    fill="#6366F1"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
+                  {prevBarKey && (
+                    <Bar
+                      dataKey={prevBarKey}
+                      fill="#6366F1"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={30}
+                    />
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
