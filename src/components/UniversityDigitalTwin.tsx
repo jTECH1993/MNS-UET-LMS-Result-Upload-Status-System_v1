@@ -7,218 +7,307 @@ interface Props {
   allRecords: SubmissionRecord[];
   activeSessions: string[];
   selectedSemesterFilter: string;
+  selectedShiftFilter?: string;
 }
 
-// Map department to its respective Faculty
-function getFacultyForDept(deptName: string): string {
-  const name = deptName.toLowerCase();
-  if (name.includes('computer science') || name.includes('information technology')) {
-    return 'Faculty of Computing & Information Technology';
-  }
-  if (name.includes('mechanical') || name.includes('electrical') || name.includes('chemical') || name.includes('civil') || name.includes('engineering')) {
-    return 'Faculty of Engineering & Technology';
-  }
-  if (name.includes('humanities') || name.includes('management') || name.includes('social')) {
-    return 'Faculty of Social Sciences & Humanities';
-  }
-  return 'Faculty of Basic Sciences & Applied Sciences';
+interface CourseLeaf {
+  id: string;
+  code: string;
+  title: string;
+  status: 'Uploaded' | 'In Progress' | 'Pending';
+  uploadedBy: string;
+  uploadedAt: string;
 }
 
-export const UniversityDigitalTwin: React.FC<Props> = ({ allRecords, activeSessions, selectedSemesterFilter }) => {
+interface SectionNode {
+  id: string;
+  name: string;
+  sectionName: string;
+  shift: string;
+  coordinator: string;
+  courses: CourseLeaf[];
+  totalCourses: number;
+  uploadedCourses: number;
+}
+
+interface SemesterNode {
+  id: string;
+  name: string;
+  semId: string;
+  sections: Record<string, SectionNode>;
+  totalCourses: number;
+  uploadedCourses: number;
+}
+
+interface SessionNode {
+  id: string;
+  name: string;
+  sessionId: string;
+  semesters: Record<string, SemesterNode>;
+  totalCourses: number;
+  uploadedCourses: number;
+}
+
+interface ProgramNode {
+  id: string;
+  name: string;
+  degreeLevel: string;
+  supportedShifts: AcademicShift[];
+  sessions: Record<string, SessionNode>;
+  totalCourses: number;
+  uploadedCourses: number;
+}
+
+interface DepartmentNode {
+  id: string;
+  name: string;
+  code: string;
+  programs: Record<string, ProgramNode>;
+  totalCourses: number;
+  uploadedCourses: number;
+}
+
+export const UniversityDigitalTwin: React.FC<Props> = ({
+  allRecords,
+  activeSessions,
+  selectedSemesterFilter,
+  selectedShiftFilter = 'ALL',
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
-    'uni': true, // Root expanded by default
+    uni: true, // Root expanded by default
   });
 
   const toggleNode = (id: string) => {
-    setExpandedNodes(prev => ({
+    setExpandedNodes((prev) => ({
       ...prev,
-      [id]: !prev[id]
+      [id]: !prev[id],
     }));
   };
 
-  // Build the nested digital twin structure
-  const digitalTwinData = useMemo(() => {
-    // 1. Group records by unique path: Faculty -> Dept -> Program -> Session -> Semester -> Section -> Course
-    const faculties: Record<string, any> = {};
+  // Build the clean digital twin hierarchy directly starting from real MNS-UET Departments & Programs
+  const digitalTwinDepartments = useMemo(() => {
+    const departmentsMap: Record<string, DepartmentNode> = {};
 
-    // Standard list of active faculties
-    const activeFacultiesList = [
-      'Faculty of Computing & Information Technology',
-      'Faculty of Engineering & Technology',
-      'Faculty of Social Sciences & Humanities',
-      'Faculty of Basic Sciences & Applied Sciences'
-    ];
-
-    activeFacultiesList.forEach(fac => {
-      faculties[fac] = {
-        name: fac,
-        id: `fac_${fac}`,
-        departments: {},
-        totalCourses: 0,
-        uploadedCourses: 0,
-      };
-    });
-
-    // Seed departments from data definition
-    UNIVERSITY_DEPARTMENTS.forEach(dept => {
-      const facName = getFacultyForDept(dept.name);
-      if (!faculties[facName]) {
-        faculties[facName] = { name: facName, id: `fac_${facName}`, departments: {}, totalCourses: 0, uploadedCourses: 0 };
-      }
-      faculties[facName].departments[dept.name] = {
+    // 1. Seed all real official departments from data definitions
+    UNIVERSITY_DEPARTMENTS.forEach((dept) => {
+      const deptKey = dept.name;
+      const deptNode: DepartmentNode = {
+        id: `dept_${dept.code}`,
         name: dept.name,
         code: dept.code,
-        id: `dept_${dept.name}`,
         programs: {},
         totalCourses: 0,
         uploadedCourses: 0,
       };
-    });
 
-    // Populate with real database records
-    allRecords.forEach(record => {
-      // Apply filters if applicable
-      if (selectedSemesterFilter !== 'ALL' && record.semester !== selectedSemesterFilter) return;
-      if (!activeSessions.includes(record.session || '2023')) return;
-
-      const facName = getFacultyForDept(record.department);
-      const dept = faculties[facName]?.departments[record.department];
-      if (!dept) return;
-
-      const progName = record.program;
-      if (!dept.programs[progName]) {
-        dept.programs[progName] = {
-          name: progName,
-          id: `prog_${dept.name}_${progName}`,
+      // 2. Seed all official programs registered in this department
+      dept.programs.forEach((prog) => {
+        const progNode: ProgramNode = {
+          id: `prog_${dept.code}_${prog.name.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: prog.name,
+          degreeLevel: prog.degreeLevel,
+          supportedShifts: prog.supportedShifts || ['Morning', 'Evening'],
           sessions: {},
           totalCourses: 0,
           uploadedCourses: 0,
         };
-      }
+        deptNode.programs[prog.name] = progNode;
+      });
 
-      const sessionName = record.session || '2023';
-      const prog = dept.programs[progName];
-      if (!prog.sessions[sessionName]) {
-        prog.sessions[sessionName] = {
-          name: `Session ${sessionName}`,
-          id: `sess_${prog.id}_${sessionName}`,
-          semesters: {},
-          totalCourses: 0,
-          uploadedCourses: 0,
-        };
-      }
+      departmentsMap[deptKey] = deptNode;
+    });
 
-      const semesterName = `Semester ${record.semester || '1'}`;
-      const sess = prog.sessions[sessionName];
-      if (!sess.semesters[semesterName]) {
-        sess.semesters[semesterName] = {
-          name: semesterName,
-          id: `sem_${sess.id}_${record.semester}`,
-          sections: {},
-          totalCourses: 0,
-          uploadedCourses: 0,
-        };
-      }
+    // Sessions to evaluate
+    const targetSessions = activeSessions.length > 0 ? activeSessions : ['2023'];
 
-      const sectionName = `Section ${record.section || 'A'}`;
-      const sem = sess.semesters[semesterName];
-      if (!sem.sections[sectionName]) {
-        sem.sections[sectionName] = {
-          name: sectionName,
-          id: `sec_${sem.id}_${record.section}`,
-          shift: record.shift || 'Morning',
-          coordinator: record.hodCoordinator || 'Not Assigned',
-          courses: [],
-          totalCourses: 0,
-          uploadedCourses: 0,
-        };
-      }
+    // Semesters to evaluate
+    const allSemesterIds = ACADEMIC_SEMESTERS.map((s) => s.id);
+    const targetSemesters =
+      selectedSemesterFilter !== 'ALL' ? [selectedSemesterFilter] : allSemesterIds;
 
-      const sec = sem.sections[sectionName];
-      const subjectsList = record.subjects || [];
+    // Build nested tree structure for every department and program
+    Object.values(departmentsMap).forEach((deptNode) => {
+      Object.values(deptNode.programs).forEach((progNode) => {
+        targetSessions.forEach((sessId) => {
+          const sessKey = `Session ${sessId}`;
+          const sessNode: SessionNode = {
+            id: `sess_${progNode.id}_${sessId}`,
+            name: sessKey,
+            sessionId: sessId,
+            semesters: {},
+            totalCourses: 0,
+            uploadedCourses: 0,
+          };
 
-      subjectsList.forEach(sub => {
-        const isUploaded = sub.status === 'Uploaded';
-        sec.courses.push({
-          id: `course_${sec.id}_${sub.courseCode || Math.random().toString()}`,
-          code: sub.courseCode || 'N/A',
-          title: sub.subjectTitle || 'Untitled Course',
-          status: sub.status || 'Pending',
-          uploadedBy: sub.uploadedBy || 'Unassigned',
-          uploadedAt: sub.dateUploaded || record.updatedAt || 'N/A'
+          const isMasterOrPhd = progNode.degreeLevel === 'MS' || progNode.degreeLevel === 'PhD';
+          const progSemesters = isMasterOrPhd
+            ? targetSemesters.filter((s) => ['1', '2', '3', '4'].includes(s))
+            : targetSemesters;
+
+          progSemesters.forEach((semId) => {
+            const semKey = `Semester ${semId}`;
+            const semNode: SemesterNode = {
+              id: `sem_${sessNode.id}_${semId}`,
+              name: semKey,
+              semId,
+              sections: {},
+              totalCourses: 0,
+              uploadedCourses: 0,
+            };
+
+            // Find matching database records for this exact department, program, session, and semester
+            const matchingRecords = allRecords.filter(
+              (r) =>
+                r.department.trim().toLowerCase() === deptNode.name.trim().toLowerCase() &&
+                r.program.trim().toLowerCase() === progNode.name.trim().toLowerCase() &&
+                (r.session || '2023') === sessId &&
+                (r.semester || '1').trim() === semId
+            );
+
+            // Collect sections ('A' by default, plus 'B' if data exists)
+            const sectionsSet = new Set<string>(['A']);
+            matchingRecords.forEach((r) => {
+              const sec = (r.section || 'A').trim().toUpperCase();
+              if (sec) sectionsSet.add(sec);
+            });
+
+            Array.from(sectionsSet)
+              .sort()
+              .forEach((secName) => {
+                const secKey = `Section ${secName}`;
+
+                const secRecords = matchingRecords.filter(
+                  (r) => (r.section || 'A').trim().toUpperCase() === secName
+                );
+
+                let secUploaded = 0;
+                let secTotal = 0;
+                const coursesList: CourseLeaf[] = [];
+                let coordinatorName = 'Not Assigned';
+                let shiftName = 'Morning';
+
+                if (secRecords.length > 0) {
+                  secRecords.forEach((r) => {
+                    if (r.hodCoordinator) coordinatorName = r.hodCoordinator;
+                    if (r.shift) shiftName = r.shift;
+
+                    const subs = r.subjects || [];
+                    const validSubs = subs.filter(
+                      (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+                    );
+
+                    if (validSubs.length > 0) {
+                      validSubs.forEach((sub, idx) => {
+                        const isUploaded = sub.status === 'Uploaded';
+                        if (isUploaded) secUploaded++;
+                        secTotal++;
+
+                        coursesList.push({
+                          id: `course_${semNode.id}_${secName}_${sub.id || idx}`,
+                          code: sub.courseCode || `SEM${semId}-CRS${idx + 1}`,
+                          title: sub.subjectTitle || `Curricular Subject ${idx + 1}`,
+                          status: isUploaded
+                            ? 'Uploaded'
+                            : sub.status === 'In Progress'
+                            ? 'In Progress'
+                            : 'Pending',
+                          uploadedBy: sub.uploadedBy || r.accessedBy || coordinatorName,
+                          uploadedAt: sub.dateUploaded || r.updatedAt || 'Updated in LMS',
+                        });
+                      });
+                    }
+                  });
+                }
+
+                // If no LMS course rows exist yet in DB for this semester & section, add 5 expected pending courses
+                if (coursesList.length === 0) {
+                  const defaultCoursesCount = 5;
+                  for (let idx = 0; idx < defaultCoursesCount; idx++) {
+                    secTotal++;
+                    coursesList.push({
+                      id: `expected_${semNode.id}_${secName}_${idx}`,
+                      code: `SEM${semId}-CRS${idx + 1}`,
+                      title: `Semester ${semId} Curricular Subject ${idx + 1}`,
+                      status: 'Pending',
+                      uploadedBy: 'Awaiting Coordinator Upload',
+                      uploadedAt: 'Not Started',
+                    });
+                  }
+                }
+
+                const secNode: SectionNode = {
+                  id: `sec_${semNode.id}_${secName}`,
+                  name: secKey,
+                  sectionName: secName,
+                  shift: shiftName,
+                  coordinator: coordinatorName,
+                  courses: coursesList,
+                  totalCourses: secTotal,
+                  uploadedCourses: secUploaded,
+                };
+
+                semNode.sections[secKey] = secNode;
+                semNode.totalCourses += secTotal;
+                semNode.uploadedCourses += secUploaded;
+              });
+
+            sessNode.semesters[semKey] = semNode;
+            sessNode.totalCourses += semNode.totalCourses;
+            sessNode.uploadedCourses += semNode.uploadedCourses;
+          });
+
+          progNode.sessions[sessKey] = sessNode;
+          progNode.totalCourses += sessNode.totalCourses;
+          progNode.uploadedCourses += sessNode.uploadedCourses;
         });
 
-        sec.totalCourses++;
-        if (isUploaded) sec.uploadedCourses++;
-        
-        sem.totalCourses++;
-        if (isUploaded) sem.uploadedCourses++;
-
-        sess.totalCourses++;
-        if (isUploaded) sess.uploadedCourses++;
-
-        prog.totalCourses++;
-        if (isUploaded) prog.uploadedCourses++;
-
-        dept.totalCourses++;
-        if (isUploaded) dept.uploadedCourses++;
-
-        faculties[facName].totalCourses++;
-        if (isUploaded) faculties[facName].uploadedCourses++;
+        deptNode.totalCourses += progNode.totalCourses;
+        deptNode.uploadedCourses += progNode.uploadedCourses;
       });
     });
 
-    return faculties;
-  }, [allRecords, activeSessions, selectedSemesterFilter]);
+    return departmentsMap;
+  }, [allRecords, activeSessions, selectedSemesterFilter, selectedShiftFilter]);
 
-  // Aggregate stats at University level
+  // Aggregate global university compliance stats across all real departments
   const universityStats = useMemo(() => {
     let total = 0;
     let uploaded = 0;
-    Object.values(digitalTwinData).forEach((fac: any) => {
-      total += fac.totalCourses;
-      uploaded += fac.uploadedCourses;
+    Object.values(digitalTwinDepartments).forEach((dept) => {
+      total += dept.totalCourses;
+      uploaded += dept.uploadedCourses;
     });
-    const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 100;
+    const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
     return { total, uploaded, percentage };
-  }, [digitalTwinData]);
+  }, [digitalTwinDepartments]);
 
-  // Recursively check if tree nodes match query
+  // Search filter helper
   const matchesSearch = (node: any, query: string): boolean => {
-    if (!query) return true;
+    if (!query.trim()) return true;
     const q = query.toLowerCase();
-    
-    // Check node name
-    if (node.name.toLowerCase().includes(q)) return true;
+
+    if (node.name && node.name.toLowerCase().includes(q)) return true;
     if (node.code && node.code.toLowerCase().includes(q)) return true;
 
-    // If node has departments
-    if (node.departments) {
-      return Object.values(node.departments).some(d => matchesSearch(d, query));
-    }
-    // If node has programs
     if (node.programs) {
-      return Object.values(node.programs).some(p => matchesSearch(p, query));
+      return Object.values(node.programs).some((p) => matchesSearch(p, query));
     }
-    // If node has sessions
     if (node.sessions) {
-      return Object.values(node.sessions).some(s => matchesSearch(s, query));
+      return Object.values(node.sessions).some((s) => matchesSearch(s, query));
     }
-    // If node has semesters
     if (node.semesters) {
-      return Object.values(node.semesters).some(s => matchesSearch(s, query));
+      return Object.values(node.semesters).some((s) => matchesSearch(s, query));
     }
-    // If node has sections
     if (node.sections) {
-      return Object.values(node.sections).some(s => matchesSearch(s, query));
+      return Object.values(node.sections).some((sec) => matchesSearch(sec, query));
     }
-    // If node has courses
     if (node.courses) {
-      return node.courses.some((c: any) => 
-        c.title.toLowerCase().includes(q) || 
-        c.code.toLowerCase().includes(q) || 
-        c.uploadedBy.toLowerCase().includes(q)
+      return node.courses.some(
+        (c: CourseLeaf) =>
+          c.title.toLowerCase().includes(q) ||
+          c.code.toLowerCase().includes(q) ||
+          c.uploadedBy.toLowerCase().includes(q)
       );
     }
 
@@ -226,19 +315,20 @@ export const UniversityDigitalTwin: React.FC<Props> = ({ allRecords, activeSessi
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 text-slate-100 shadow-xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 text-slate-100 shadow-xl">
+      {/* Header & Dynamic Search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-800">
         <div>
           <h3 className="text-sm sm:text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
             <Building2 className="w-5 h-5 text-emerald-400" />
-            University Digital Twin Interactive Explorer
+            MNS-UET Digital Twin Interactive Explorer
           </h3>
-          <p className="text-xs text-slate-400">
-            Fully interactive digital model of MNS-UET Multan. Zoom into any tier down to individual courses to see verified real-time compliance statistics.
+          <p className="text-xs text-slate-400 mt-0.5">
+            Real-time digital model of MNS-UET Multan structure. Drill down into every official department, degree program, session, semester, section, and course.
           </p>
         </div>
 
-        {/* Dynamic Search */}
+        {/* Dynamic Search Input */}
         <div className="relative w-full md:w-80 shrink-0">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
           <input
@@ -251,20 +341,24 @@ export const UniversityDigitalTwin: React.FC<Props> = ({ allRecords, activeSessi
         </div>
       </div>
 
-      {/* University Level Node */}
+      {/* Main Hierarchy Explorer */}
       <div className="space-y-4">
-        {/* Main University root box */}
+        {/* Root University Level Box */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => toggleNode('uni')}
-                className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center shrink-0 text-slate-300"
+                className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center shrink-0 text-slate-300 cursor-pointer"
               >
-                {expandedNodes['uni'] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                {expandedNodes['uni'] ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
               </button>
-              <div className="p-1.5 bg-emerald-950/60 rounded border border-emerald-800">
+              <div className="p-2 bg-emerald-950/80 rounded-lg border border-emerald-800">
                 <Award className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
@@ -272,12 +366,12 @@ export const UniversityDigitalTwin: React.FC<Props> = ({ allRecords, activeSessi
                   MNS University of Engineering &amp; Technology (MNS-UET)
                 </h4>
                 <p className="text-[11px] text-slate-400">
-                  Global System Administrator Root Node
+                  Global Academic Administration Root Node • {UNIVERSITY_DEPARTMENTS.length} Official Departments
                 </p>
               </div>
             </div>
 
-            {/* University Aggregate KPI Badge */}
+            {/* University Compliance Badge */}
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-xs font-bold text-slate-400">Overall Compliance Index</div>
@@ -287,236 +381,345 @@ export const UniversityDigitalTwin: React.FC<Props> = ({ allRecords, activeSessi
               </div>
               <div className="h-10 w-1 bg-emerald-500 rounded-full" />
               <div className="text-xs text-slate-400 font-mono">
-                <div>Total: <strong>{universityStats.total}</strong></div>
-                <div>Done: <strong className="text-emerald-400">{universityStats.uploaded}</strong></div>
+                <div>
+                  Total: <strong>{universityStats.total}</strong>
+                </div>
+                <div>
+                  Uploaded: <strong className="text-emerald-400">{universityStats.uploaded}</strong>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Level 1: Faculties (Rendered if root expanded) */}
+        {/* Level 1: Real MNS-UET Departments */}
         {expandedNodes['uni'] && (
-          <div className="pl-6 border-l border-slate-800 space-y-3.5 mt-2">
-            {Object.values(digitalTwinData).filter(fac => matchesSearch(fac, searchQuery)).map((fac: any) => {
-              const isFacExpanded = expandedNodes[fac.id];
-              const facPct = fac.totalCourses > 0 ? Math.round((fac.uploadedCourses / fac.totalCourses) * 100) : 100;
+          <div className="pl-3 sm:pl-6 border-l border-slate-800 space-y-3 mt-2">
+            {Object.values(digitalTwinDepartments)
+              .filter((dept) => matchesSearch(dept, searchQuery))
+              .map((dept) => {
+                const isDeptExpanded = expandedNodes[dept.id];
+                const deptPct =
+                  dept.totalCourses > 0
+                    ? Math.round((dept.uploadedCourses / dept.totalCourses) * 100)
+                    : 0;
 
-              return (
-                <div key={fac.id} className="space-y-2">
-                  <div className="bg-slate-850 p-3 rounded-lg border border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleNode(fac.id)}
-                        className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300"
-                      >
-                        {isFacExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                      </button>
-                      <Building2 className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-black uppercase text-slate-200">{fac.name}</span>
+                const progCount = Object.keys(dept.programs).length;
+
+                return (
+                  <div key={dept.id} className="space-y-2">
+                    {/* Department Header */}
+                    <div className="bg-slate-850 p-3 rounded-lg border border-slate-800 flex items-center justify-between flex-wrap gap-2 hover:border-slate-700 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleNode(dept.id)}
+                          className="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 cursor-pointer"
+                        >
+                          {isDeptExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <Building2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs sm:text-sm font-black uppercase text-slate-100">
+                          [{dept.code}] {dept.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-semibold bg-slate-800 px-2 py-0.5 rounded-full">
+                          {progCount} Programs
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs font-semibold">
+                        <span className="font-mono text-slate-400">
+                          {dept.uploadedCourses} / {dept.totalCourses} courses
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            deptPct >= 90
+                              ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                              : deptPct >= 50
+                              ? 'bg-blue-950/80 text-blue-400 border border-blue-800'
+                              : deptPct > 0
+                              ? 'bg-amber-950/80 text-amber-400 border border-amber-800'
+                              : 'bg-rose-950/80 text-rose-400 border border-rose-800'
+                          }`}
+                        >
+                          {deptPct}% Compliance
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs font-semibold">
-                      <span className="font-mono text-slate-400">
-                        {fac.uploadedCourses}/{fac.totalCourses}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        facPct > 85 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800' :
-                        facPct > 50 ? 'bg-amber-950/80 text-amber-400 border border-amber-800' :
-                        'bg-rose-950/80 text-rose-400 border border-rose-800'
-                      }`}>
-                        {facPct}% Compliance
-                      </span>
-                    </div>
-                  </div>
+                    {/* Level 2: Degree Programs under Department */}
+                    {isDeptExpanded && (
+                      <div className="pl-4 sm:pl-6 border-l border-slate-800 space-y-2">
+                        {Object.values(dept.programs)
+                          .filter((prog) => matchesSearch(prog, searchQuery))
+                          .map((prog) => {
+                            const isProgExpanded = expandedNodes[prog.id];
+                            const progPct =
+                              prog.totalCourses > 0
+                                ? Math.round((prog.uploadedCourses / prog.totalCourses) * 100)
+                                : 0;
 
-                  {/* Level 2: Departments */}
-                  {isFacExpanded && (
-                    <div className="pl-6 border-l border-slate-800 space-y-2">
-                      {Object.values(fac.departments).filter(dept => matchesSearch(dept, searchQuery)).map((dept: any) => {
-                        const isDeptExpanded = expandedNodes[dept.id];
-                        const deptPct = dept.totalCourses > 0 ? Math.round((dept.uploadedCourses / dept.totalCourses) * 100) : 100;
+                            return (
+                              <div key={prog.id} className="space-y-1.5">
+                                {/* Program Header */}
+                                <div className="bg-slate-900/80 p-2.5 rounded border border-slate-800 hover:border-slate-700 transition-colors flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleNode(prog.id)}
+                                      className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 cursor-pointer"
+                                    >
+                                      {isProgExpanded ? (
+                                        <ChevronDown className="w-3 h-3" />
+                                      ) : (
+                                        <ChevronRight className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                    <GraduationCap className="w-4 h-4 text-indigo-400" />
+                                    <span className="text-xs font-bold text-slate-200">
+                                      {prog.name}
+                                    </span>
+                                    <span className="text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                      {prog.degreeLevel}
+                                    </span>
+                                  </div>
 
-                        return (
-                          <div key={dept.id} className="space-y-1.5">
-                            <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800 hover:border-slate-750 transition-colors flex items-center justify-between flex-wrap gap-2">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleNode(dept.id)}
-                                  className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-750 flex items-center justify-center text-slate-400"
-                                >
-                                  {isDeptExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                </button>
-                                <span className="text-xs font-bold text-slate-300">
-                                  [{dept.code}] {dept.name}
-                                </span>
-                              </div>
+                                  <div className="flex items-center gap-2 text-xs font-mono">
+                                    <span className="text-[10px] text-slate-400">
+                                      {prog.uploadedCourses} / {prog.totalCourses}
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                        progPct >= 90
+                                          ? 'text-emerald-400 bg-emerald-950/60'
+                                          : progPct > 0
+                                          ? 'text-amber-400 bg-amber-950/60'
+                                          : 'text-rose-400 bg-rose-950/60'
+                                      }`}
+                                    >
+                                      {progPct}%
+                                    </span>
+                                  </div>
+                                </div>
 
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className="font-mono text-slate-400 text-[10px]">{dept.uploadedCourses}/{dept.totalCourses}</span>
-                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                  deptPct > 85 ? 'text-emerald-400 bg-emerald-950/40' : 'text-amber-400 bg-amber-950/40'
-                                }`}>
-                                  {deptPct}%
-                                </span>
-                              </div>
-                            </div>
+                                {/* Level 3: Sessions */}
+                                {isProgExpanded && (
+                                  <div className="pl-4 sm:pl-6 border-l border-slate-800 space-y-1.5">
+                                    {Object.values(prog.sessions)
+                                      .filter((sess) => matchesSearch(sess, searchQuery))
+                                      .map((sess) => {
+                                        const isSessExpanded = expandedNodes[sess.id];
+                                        const sessPct =
+                                          sess.totalCourses > 0
+                                            ? Math.round(
+                                                (sess.uploadedCourses / sess.totalCourses) * 100
+                                              )
+                                            : 0;
 
-                            {/* Level 3: Programs */}
-                            {isDeptExpanded && (
-                              <div className="pl-6 border-l border-slate-800 space-y-1.5">
-                                {Object.values(dept.programs).filter(prog => matchesSearch(prog, searchQuery)).map((prog: any) => {
-                                  const isProgExpanded = expandedNodes[prog.id];
-                                  const progPct = prog.totalCourses > 0 ? Math.round((prog.uploadedCourses / prog.totalCourses) * 100) : 100;
+                                        return (
+                                          <div key={sess.id} className="space-y-1">
+                                            {/* Session Header */}
+                                            <div className="bg-slate-950/60 p-2 rounded flex items-center justify-between text-xs border border-slate-850">
+                                              <div className="flex items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleNode(sess.id)}
+                                                  className="w-4 h-4 rounded bg-slate-900 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+                                                >
+                                                  {isSessExpanded ? (
+                                                    <ChevronDown className="w-3 h-3" />
+                                                  ) : (
+                                                    <ChevronRight className="w-3 h-3" />
+                                                  )}
+                                                </button>
+                                                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                                                <span className="font-semibold text-slate-300">
+                                                  {sess.name}
+                                                </span>
+                                              </div>
+                                              <span className="font-mono text-[10px] text-slate-400">
+                                                {sess.uploadedCourses} / {sess.totalCourses} ({sessPct}%)
+                                              </span>
+                                            </div>
 
-                                  return (
-                                    <div key={prog.id} className="space-y-1">
-                                      <div className="bg-slate-950/60 p-2 rounded flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleNode(prog.id)}
-                                            className="w-4 h-4 rounded bg-slate-900 flex items-center justify-center text-slate-500"
-                                          >
-                                            {isProgExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
-                                          </button>
-                                          <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
-                                          <span className="font-medium text-slate-300">{prog.name}</span>
-                                        </div>
-                                        <span className="font-mono text-[10px] text-slate-400">{prog.uploadedCourses}/{prog.totalCourses} ({progPct}%)</span>
-                                      </div>
+                                            {/* Level 4: Semesters */}
+                                            {isSessExpanded && (
+                                              <div className="pl-4 sm:pl-6 border-l border-slate-800 space-y-1">
+                                                {Object.values(sess.semesters)
+                                                  .filter((sem) => matchesSearch(sem, searchQuery))
+                                                  .map((sem) => {
+                                                    const isSemExpanded = expandedNodes[sem.id];
+                                                    const semPct =
+                                                      sem.totalCourses > 0
+                                                        ? Math.round(
+                                                            (sem.uploadedCourses / sem.totalCourses) * 100
+                                                          )
+                                                        : 0;
 
-                                      {/* Level 4: Sessions */}
-                                      {isProgExpanded && (
-                                        <div className="pl-6 border-l border-slate-850 space-y-1">
-                                          {Object.values(prog.sessions).filter(sess => matchesSearch(sess, searchQuery)).map((sess: any) => {
-                                            const isSessExpanded = expandedNodes[sess.id];
-
-                                            return (
-                                              <div key={sess.id} className="space-y-1">
-                                                <div className="p-1.5 flex items-center justify-between text-[11px] text-slate-400">
-                                                  <div className="flex items-center gap-1.5">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => toggleNode(sess.id)}
-                                                      className="text-slate-500 hover:text-slate-300"
-                                                    >
-                                                      {isSessExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                                    </button>
-                                                    <Calendar className="w-3 h-3 text-emerald-500" />
-                                                    <span>{sess.name}</span>
-                                                  </div>
-                                                  <span className="font-mono text-[10px]">{sess.uploadedCourses}/{sess.totalCourses}</span>
-                                                </div>
-
-                                                {/* Level 5: Semesters */}
-                                                {isSessExpanded && (
-                                                  <div className="pl-6 border-l border-slate-800 space-y-1">
-                                                    {Object.values(sess.semesters).filter(sem => matchesSearch(sem, searchQuery)).map((sem: any) => {
-                                                      const isSemExpanded = expandedNodes[sem.id];
-
-                                                      return (
-                                                        <div key={sem.id} className="space-y-1">
-                                                          <div className="p-1 flex items-center justify-between text-[10px] text-slate-400">
-                                                            <div className="flex items-center gap-1.5">
-                                                              <button
-                                                                type="button"
-                                                                onClick={() => toggleNode(sem.id)}
-                                                                className="text-slate-600 hover:text-slate-400"
-                                                              >
-                                                                {isSemExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
-                                                              </button>
-                                                              <Layers className="w-2.5 h-2.5 text-indigo-400" />
-                                                              <span>{sem.name}</span>
-                                                            </div>
-                                                            <span className="font-mono">{sem.uploadedCourses}/{sem.totalCourses}</span>
+                                                    return (
+                                                      <div key={sem.id} className="space-y-1">
+                                                        {/* Semester Header */}
+                                                        <div className="p-1.5 flex items-center justify-between text-[11px] text-slate-300 bg-slate-900/40 rounded hover:bg-slate-900/80 transition-colors">
+                                                          <div className="flex items-center gap-1.5">
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => toggleNode(sem.id)}
+                                                              className="text-slate-500 hover:text-slate-300 cursor-pointer"
+                                                            >
+                                                              {isSemExpanded ? (
+                                                                <ChevronDown className="w-3 h-3" />
+                                                              ) : (
+                                                                <ChevronRight className="w-3 h-3" />
+                                                              )}
+                                                            </button>
+                                                            <Layers className="w-3 h-3 text-indigo-400" />
+                                                            <span className="font-medium">
+                                                              {sem.name}
+                                                            </span>
                                                           </div>
+                                                          <span className="font-mono text-[10px] text-slate-400">
+                                                            {sem.uploadedCourses} / {sem.totalCourses} ({semPct}%)
+                                                          </span>
+                                                        </div>
 
-                                                          {/* Level 6: Sections */}
-                                                          {isSemExpanded && (
-                                                            <div className="pl-5 border-l border-slate-850 space-y-1">
-                                                              {Object.values(sem.sections).filter(sec => matchesSearch(sec, searchQuery)).map((sec: any) => {
-                                                                const isSecExpanded = expandedNodes[sec.id];
-                                                                const secPct = sec.totalCourses > 0 ? Math.round((sec.uploadedCourses / sec.totalCourses) * 100) : 100;
+                                                        {/* Level 5: Sections */}
+                                                        {isSemExpanded && (
+                                                          <div className="pl-4 sm:pl-5 border-l border-slate-800 space-y-1">
+                                                            {Object.values(sem.sections)
+                                                              .filter((sec) =>
+                                                                matchesSearch(sec, searchQuery)
+                                                              )
+                                                              .map((sec) => {
+                                                                const isSecExpanded =
+                                                                  expandedNodes[sec.id];
+                                                                const secPct =
+                                                                  sec.totalCourses > 0
+                                                                    ? Math.round(
+                                                                        (sec.uploadedCourses /
+                                                                          sec.totalCourses) *
+                                                                          100
+                                                                      )
+                                                                    : 0;
 
                                                                 return (
-                                                                  <div key={sec.id} className="space-y-1">
-                                                                    <div className="p-1 flex items-center justify-between text-[10px] bg-slate-950/40 rounded">
-                                                                      <div className="flex items-center gap-1">
+                                                                  <div
+                                                                    key={sec.id}
+                                                                    className="space-y-1"
+                                                                  >
+                                                                    {/* Section Header */}
+                                                                    <div className="p-1.5 flex items-center justify-between text-[10px] bg-slate-950/80 rounded border border-slate-800">
+                                                                      <div className="flex items-center gap-1.5 flex-wrap">
                                                                         <button
                                                                           type="button"
-                                                                          onClick={() => toggleNode(sec.id)}
-                                                                          className="text-slate-600 hover:text-slate-400 mr-0.5"
+                                                                          onClick={() =>
+                                                                            toggleNode(sec.id)
+                                                                          }
+                                                                          className="text-slate-500 hover:text-slate-300 cursor-pointer mr-0.5"
                                                                         >
-                                                                          {isSecExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                                                                          {isSecExpanded ? (
+                                                                            <ChevronDown className="w-2.5 h-2.5" />
+                                                                          ) : (
+                                                                            <ChevronRight className="w-2.5 h-2.5" />
+                                                                          )}
                                                                         </button>
-                                                                        <span className="font-bold text-slate-300">{sec.name}</span>
-                                                                        <span className="text-[9px] text-slate-500 font-medium">({sec.shift})</span>
-                                                                        <span className="text-[9px] text-slate-400 ml-1">Coordinator: <em>{sec.coordinator}</em></span>
+                                                                        <span className="font-bold text-slate-200">
+                                                                          {sec.name}
+                                                                        </span>
+                                                                        <span className="text-[9px] text-indigo-300 font-semibold bg-indigo-950 px-1.5 py-0.2 rounded">
+                                                                          {sec.shift} Shift
+                                                                        </span>
+                                                                        <span className="text-[9px] text-slate-400">
+                                                                          Coord:{' '}
+                                                                          <strong className="text-slate-300">
+                                                                            {sec.coordinator}
+                                                                          </strong>
+                                                                        </span>
                                                                       </div>
-                                                                      <span className={`px-1 rounded text-[9px] font-mono font-bold ${
-                                                                        secPct === 100 ? 'text-emerald-400 bg-emerald-950/40' : 'text-amber-400 bg-amber-950/40'
-                                                                      }`}>
-                                                                        {sec.uploadedCourses}/{sec.totalCourses} ({secPct}%)
+                                                                      <span
+                                                                        className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold ${
+                                                                          secPct === 100
+                                                                            ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800'
+                                                                            : secPct > 0
+                                                                            ? 'text-amber-400 bg-amber-950/60 border border-amber-800'
+                                                                            : 'text-rose-400 bg-rose-950/60 border border-rose-800'
+                                                                        }`}
+                                                                      >
+                                                                        {sec.uploadedCourses} / {sec.totalCourses} ({secPct}%)
                                                                       </span>
                                                                     </div>
 
-                                                                    {/* Level 7: Individual Course Leaves */}
+                                                                    {/* Level 6: Course Leaves */}
                                                                     {isSecExpanded && (
-                                                                      <div className="pl-5 border-l border-slate-900 space-y-0.5 py-1">
-                                                                        {sec.courses.map((course: any) => {
-                                                                          const done = course.status === 'Uploaded';
-                                                                          return (
-                                                                            <div key={course.id} className="flex items-center justify-between text-[10px] hover:bg-slate-850 p-1 rounded transition-colors">
-                                                                              <div className="flex items-center gap-1.5 min-w-0">
-                                                                                {done ? (
-                                                                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                                                                ) : (
-                                                                                  <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                                                                )}
-                                                                                <span className="font-mono text-emerald-400 shrink-0">{course.code}</span>
-                                                                                <span className="text-slate-300 truncate font-sans">{course.title}</span>
-                                                                                <span className="text-[9px] text-slate-500 hidden sm:inline shrink-0 font-light">| Inst: {course.uploadedBy}</span>
+                                                                      <div className="pl-4 border-l border-slate-800 space-y-0.5 py-1">
+                                                                        {sec.courses.map(
+                                                                          (course) => {
+                                                                            const done =
+                                                                              course.status ===
+                                                                              'Uploaded';
+                                                                            return (
+                                                                              <div
+                                                                                key={course.id}
+                                                                                className="flex items-center justify-between text-[10px] hover:bg-slate-850 p-1.5 rounded transition-colors"
+                                                                              >
+                                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                                  {done ? (
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                                                                  ) : (
+                                                                                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                                                                  )}
+                                                                                  <span className="font-mono text-emerald-400 font-bold shrink-0">
+                                                                                    {course.code}
+                                                                                  </span>
+                                                                                  <span className="text-slate-200 truncate font-medium">
+                                                                                    {course.title}
+                                                                                  </span>
+                                                                                  <span className="text-[9px] text-slate-400 hidden sm:inline shrink-0 font-light">
+                                                                                    • Inst:{' '}
+                                                                                    {course.uploadedBy}
+                                                                                  </span>
+                                                                                </div>
+                                                                                <span
+                                                                                  className={`px-2 py-0.5 rounded text-[8px] font-black uppercase shrink-0 ${
+                                                                                    done
+                                                                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                                                                      : 'bg-rose-950 text-rose-300 border border-rose-800'
+                                                                                  }`}
+                                                                                >
+                                                                                  {course.status}
+                                                                                </span>
                                                                               </div>
-                                                                              <span className={`px-1.5 py-0.2 rounded-[3px] text-[8px] font-extrabold uppercase shrink-0 ${
-                                                                                done ? 'bg-emerald-950 text-emerald-400' : 'bg-rose-950 text-rose-400'
-                                                                              }`}>
-                                                                                {course.status}
-                                                                              </span>
-                                                                            </div>
-                                                                          );
-                                                                        })}
+                                                                            );
+                                                                          }
+                                                                        )}
                                                                       </div>
                                                                     )}
                                                                   </div>
                                                                 );
                                                               })}
-                                                            </div>
-                                                          )}
-                                                        </div>
-                                                      );
-                                                    })}
-                                                  </div>
-                                                )}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })}
                                               </div>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>

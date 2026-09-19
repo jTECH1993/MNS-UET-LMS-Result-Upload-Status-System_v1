@@ -420,10 +420,15 @@ export class VCAnalyticsService {
             targetSections = ['A'];
           }
 
+          const isMasterOrPhd = prog.degreeLevel === 'MS' || prog.degreeLevel === 'PhD';
+          const defaultSemesters = isMasterOrPhd
+            ? ['1', '2', '3', '4']
+            : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+
           const semestersToEvaluate: string[] =
             semesterList.length > 0
               ? semesterList
-              : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+              : defaultSemesters;
 
           const sectionBreakdowns: SectionBreakdown[] = [];
           let progCourses = 0;
@@ -486,6 +491,28 @@ export class VCAnalyticsService {
                   });
                 });
                 secTotal += validSubjects.length;
+              } else {
+                // Semester unsubmitted: account for expected curricular courses (5 courses per semester)
+                const defaultCoursesCount = 5;
+                for (let idx = 0; idx < defaultCoursesCount; idx++) {
+                  secPending++;
+                  courseDetails.push({
+                    id: `unsubmitted-${semId}-${secName}-${idx}`,
+                    courseCode: `SEM${semId}-CRS${idx + 1}`,
+                    subjectTitle: `Semester ${semId} Curricular Subject ${idx + 1}`,
+                    creditHours: '3(3-0)',
+                    status: 'Pending',
+                    dateUploaded: '',
+                    uploadedBy: coordinatorDim.name,
+                    remarks: 'Awaiting coordinator upload in LMS',
+                    expected: true,
+                    submitted: false,
+                    coordinatorName: coordinatorDim.name,
+                    deadline,
+                    lastActivity: 'Not Started',
+                  });
+                }
+                secTotal += defaultCoursesCount;
               }
             });
 
@@ -510,10 +537,8 @@ export class VCAnalyticsService {
             progInProgress += secInProgress;
           });
 
-          // CRITICAL FIX: If no LMS records have been uploaded yet for this program shift,
-          // account for expected curricular courses so unassigned/pending programs accurately pull down completion rate
           if (progCourses === 0) {
-            const expectedDefaultCourses = 6 * targetSections.length; // standard 6 courses per section
+            const expectedDefaultCourses = 5 * semestersToEvaluate.length * targetSections.length;
             progCourses = expectedDefaultCourses;
             progUploaded = 0;
             progPending = expectedDefaultCourses;

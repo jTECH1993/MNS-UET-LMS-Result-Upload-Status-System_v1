@@ -830,6 +830,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     searchQuery,
   ]);
 
+  const analytics = useMemo(() => {
+    return VCAnalyticsService.buildAcademicHierarchy({
+      allRecords,
+      currentSession: activeSessions,
+      semesterFilter: selectedSemesterFilter,
+      shiftFilter: selectedShiftFilter as any,
+      sectionFilter: selectedSectionFilter,
+    });
+  }, [
+    allRecords,
+    activeSessions,
+    selectedSemesterFilter,
+    selectedShiftFilter,
+    selectedSectionFilter,
+  ]);
+
   return (
     <div id="vc-admin-dashboard" className="space-y-6">
       {/* VC Dashboard Header Banner with University Emblem */}
@@ -1463,14 +1479,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-2xl font-black text-emerald-700 group-hover:text-emerald-900 transition-colors">
-              {stats.totalUploadedAcrossUni}
+              {analytics.uploadedCourses}
             </span>
             <span className="text-xs font-bold text-emerald-600">
-              {stats.totalSubjectsAcrossUni > 0
-                ? `${Math.round(
-                    (stats.totalUploadedAcrossUni / stats.totalSubjectsAcrossUni) * 100
-                  )}%`
-                : '0%'}
+              {analytics.overallCompletionRate}%
             </span>
           </div>
           <p className="text-[11px] text-emerald-700 mt-3">
@@ -1497,7 +1509,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-2xl font-black text-amber-700 group-hover:text-amber-900 transition-colors">
-              {stats.totalPendingAcrossUni}
+              {analytics.pendingCourses}
             </span>
             <span className="text-xs text-amber-600">courses awaiting upload</span>
           </div>
@@ -1984,6 +1996,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             allRecords={allRecords}
             activeSessions={activeSessions}
             selectedSemesterFilter={selectedSemesterFilter}
+            selectedShiftFilter={selectedShiftFilter}
           />
         </div>
       )}
