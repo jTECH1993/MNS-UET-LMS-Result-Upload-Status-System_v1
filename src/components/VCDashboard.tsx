@@ -414,9 +414,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       const targetDeptPrograms = dept.programs.filter((prog) => {
         const hasSub = allRecords.some(
           (r) =>
-            r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
-            r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
-            activeSessions.includes(r.session || '2023')
+            r &&
+            r.department &&
+            StorageService._isDeptMatch(dept.name, r.department) &&
+            StorageService._isProgMatch(prog.name, r.program) &&
+            activeSessions.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023'))
         );
         return activeProgNames.includes(prog.name) || hasSub;
       });
@@ -435,14 +437,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             semSectionMap[sem.id] = {};
 
             // Find all matching submissions in database for this department, program, shift, active sessions & semester
-            const matchingRecords = allRecords.filter(
-              (r) =>
-                r.department.trim() === dept.name.trim() &&
-                r.program.trim() === prog.name.trim() &&
-                (r.shift || 'Morning') === shiftName &&
-                activeSessions.includes(r.session || '2023') &&
-                (r.semester || '1') === sem.id
-            );
+            const matchingRecords = allRecords.filter((r) => {
+              if (!r || !r.department || !r.program) return false;
+              if (!StorageService._isDeptMatch(dept.name, r.department)) return false;
+              if (!StorageService._isProgMatch(prog.name, r.program)) return false;
+              const rShift = (r.shift || 'Morning').trim().toLowerCase();
+              if (rShift !== shiftName.trim().toLowerCase()) return false;
+              const rSess = (r.session || '2023').trim();
+              const sessionMatch = activeSessions.some(
+                (s) => rSess.startsWith(s) || s.startsWith(rSess) || rSess.includes(s) || s.includes(rSess)
+              );
+              if (!sessionMatch) return false;
+              const rSemNum = String(r.semester || '1').replace(/\D/g, '') || '1';
+              return rSemNum === sem.id;
+            });
 
             matchingRecords.forEach((r) => {
               const sec = (r.section || 'A').trim().toUpperCase();
@@ -617,6 +625,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sum.totalSubjects;
             totalUploadedAcrossUni += sum.uploaded;
             totalPendingAcrossUni += sum.pending;
+          } else {
+            // Unsubmitted cohort slot: 5 expected curricular courses
+            const expectedCourses = 5;
+            totalSubjectsAcrossUni += expectedCourses;
+            totalPendingAcrossUni += expectedCourses;
           }
         } else {
           if (sData.hasSubmission) {
@@ -624,6 +637,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             totalSubjectsAcrossUni += sData.totalSubjects;
             totalUploadedAcrossUni += sData.totalUploaded;
             totalPendingAcrossUni += sData.totalPending;
+          } else {
+            // Unsubmitted program across 8 semesters: 40 expected curricular courses
+            const expectedCourses = 40;
+            totalSubjectsAcrossUni += expectedCourses;
+            totalPendingAcrossUni += expectedCourses;
           }
         }
       });
@@ -674,7 +692,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       deptPrograms.forEach((prog) => {
         const shifts = [
           { name: 'Morning', data: prog.shifts.Morning },
-          { name: 'Evening', data: prog.shifts.Evening }
+          { name: 'Evening', data: prog.shifts.Evening },
         ];
         shifts.forEach(({ name, data: shift }) => {
           if (selectedSemesterFilter === 'ALL') {
@@ -684,6 +702,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalUploaded += shift.totalUploaded;
               totalPending += shift.totalPending;
               submittedCohorts += 1;
+            } else {
+              const exp = 40;
+              totalSubjects += exp;
+              totalPending += exp;
             }
           } else {
             const rec = shift.semesterRecords[selectedSemesterFilter];
@@ -694,19 +716,20 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               totalSubjects += s.totalSubjects;
               totalUploaded += s.uploaded;
               totalPending += s.pending;
+            } else {
+              const exp = 5;
+              totalSubjects += exp;
+              totalPending += exp;
             }
           }
         });
       });
 
       let percentage = totalSubjects > 0 ? Math.round((totalUploaded / totalSubjects) * 100) : 0;
-      if (totalPending === 0 && totalUploaded === totalSubjects && totalSubjects > 0) {
+      if (totalPending > 0 && percentage >= 100) {
+        percentage = 99;
+      } else if (totalPending === 0 && totalUploaded === totalSubjects && totalSubjects > 0) {
         percentage = 100;
-      } else if ((submittedCohorts < totalCohorts || totalPending > 0) && percentage >= 100) {
-        percentage = Math.min(percentage, Math.floor((totalUploaded / Math.max(totalSubjects, 1)) * 100));
-        if (percentage >= 100) {
-          percentage = 95;
-        }
       }
       if (totalUploaded === 0) {
         percentage = 0;

@@ -175,13 +175,17 @@ export default function App() {
         setActiveView('VC');
       } else {
         setActiveView('HOD');
-        if (currentUser.department) {
+        const userDeptValid = currentUser.department && UNIVERSITY_DEPARTMENTS.some((d) => d.name.trim().toLowerCase() === currentUser.department.trim().toLowerCase() || d.code.trim().toLowerCase() === currentUser.department.trim().toLowerCase());
+        if (userDeptValid) {
           setTargetDept(currentUser.department);
+        } else {
+          setTargetDept(UNIVERSITY_DEPARTMENTS[0].name);
         }
+
         if (currentUser.program) {
           setTargetProg(currentUser.program);
-        } else if (currentUser.department) {
-          const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === currentUser.department);
+        } else {
+          const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === (currentUser.department || '').trim().toLowerCase()) || UNIVERSITY_DEPARTMENTS[0];
           if (deptObj && deptObj.programs.length > 0) {
             setTargetProg(deptObj.programs[0].name);
           }
@@ -202,8 +206,13 @@ export default function App() {
   // Validate that targetProg belongs to targetDept; if not, select the first valid program of targetDept
   useEffect(() => {
     if (!targetDept) return;
-    const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === targetDept.trim().toLowerCase());
-    if (deptObj && deptObj.programs.length > 0) {
+    const deptObj = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === targetDept.trim().toLowerCase() || d.code.trim().toLowerCase() === targetDept.trim().toLowerCase()
+    );
+    if (!deptObj) {
+      setTargetDept(UNIVERSITY_DEPARTMENTS[0].name);
+      setTargetProg(UNIVERSITY_DEPARTMENTS[0].programs[0].name);
+    } else if (deptObj.programs.length > 0) {
       const isValid = deptObj.programs.some((p) => p.name.trim().toLowerCase() === (targetProg || '').trim().toLowerCase());
       if (!isValid) {
         setTargetProg(deptObj.programs[0].name);
@@ -220,8 +229,11 @@ export default function App() {
     } else {
       setActiveView('HOD');
       setIsInspectionMode(false);
-      if (session.department) {
+      const isAcademicDept = session.department && UNIVERSITY_DEPARTMENTS.some((d) => d.name.trim().toLowerCase() === session.department.trim().toLowerCase() || d.code.trim().toLowerCase() === session.department.trim().toLowerCase());
+      if (isAcademicDept) {
         setTargetDept(session.department);
+      } else {
+        setTargetDept(UNIVERSITY_DEPARTMENTS[0].name);
       }
       const userAssignedProgs = session.assignedPrograms && session.assignedPrograms.length > 0
         ? session.assignedPrograms
@@ -238,8 +250,8 @@ export default function App() {
         } else if (session.assignedShifts && session.assignedShifts.length > 0) {
           setTargetShift(session.assignedShifts[0]);
         }
-      } else if (session.department) {
-        const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === session.department);
+      } else {
+        const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => isAcademicDept && d.name.trim().toLowerCase() === session.department.trim().toLowerCase()) || UNIVERSITY_DEPARTMENTS[0];
         if (deptObj && deptObj.programs.length > 0) {
           setTargetProg(deptObj.programs[0].name);
         }

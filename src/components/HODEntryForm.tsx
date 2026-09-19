@@ -192,8 +192,10 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Available programs for current department (guaranteed to include all department offerings)
   const currentDeptPrograms = useMemo(() => {
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
-    if (!dept) return [];
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === (department || '').trim().toLowerCase() || d.code.trim().toLowerCase() === (department || '').trim().toLowerCase()
+    );
+    if (!dept) return UNIVERSITY_DEPARTMENTS[0].programs;
     if (onlySessionFilter && !isReadOnly) {
       const activeNames = StorageService.getSessionPrograms(department, session);
       const filtered = dept.programs.filter((p) => activeNames.includes(p.name));
@@ -203,8 +205,10 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [department, session, onlySessionFilter, isReadOnly, rosterVersion]);
 
   const allDeptPrograms = useMemo(() => {
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
-    return dept ? dept.programs : [];
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === (department || '').trim().toLowerCase() || d.code.trim().toLowerCase() === (department || '').trim().toLowerCase()
+    );
+    return dept ? dept.programs : UNIVERSITY_DEPARTMENTS[0].programs;
   }, [department]);
 
   // Institutional Privilege Check:
@@ -740,28 +744,38 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   }, [currentUser, department, isReadOnly, readOnly]);
 
-  // Ensure the selected program is valid and enrolled in the selected session for the selected department
+  // Ensure the selected program is valid for the selected department
   useEffect(() => {
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name === department);
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === (department || '').trim().toLowerCase() || d.code.trim().toLowerCase() === (department || '').trim().toLowerCase()
+    );
     if (!dept) return;
 
     const activeNames = StorageService.getSessionPrograms(department, session);
-    const isProgramInDept = dept.programs.some((p) => p.name === program);
-    const isProgramActiveInSession = activeNames.includes(program);
+    const isProgramInDept = dept.programs.some(
+      (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+    );
 
+    if (isPrivilegedUser) {
+      if (!isProgramInDept && dept.programs.length > 0) {
+        setProgram(dept.programs[0].name);
+        if (onProgramChangedProp) onProgramChangedProp(dept.programs[0].name);
+      }
+      return;
+    }
+
+    const isProgramActiveInSession = activeNames.includes(program);
     if (!isProgramInDept || !isProgramActiveInSession) {
-      // Find the first program that is enrolled in this session for this department
       const enrolled = dept.programs.filter((p) => activeNames.includes(p.name));
       if (enrolled.length > 0) {
         setProgram(enrolled[0].name);
         if (onProgramChangedProp) onProgramChangedProp(enrolled[0].name);
-      } else if (dept.programs.length > 0 && !isProgramInDept) {
-        // Fallback to the first program of the department if none are enrolled
+      } else if (dept.programs.length > 0) {
         setProgram(dept.programs[0].name);
         if (onProgramChangedProp) onProgramChangedProp(dept.programs[0].name);
       }
     }
-  }, [department, session, storageVersion, rosterVersion, allDeptPrograms, program, onProgramChangedProp]);
+  }, [department, session, storageVersion, rosterVersion, allDeptPrograms, program, isPrivilegedUser, onProgramChangedProp]);
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
@@ -771,7 +785,9 @@ export const HODEntryForm: React.FC<Props> = ({
     }
     setDepartment(newDept);
     if (onDepartmentChangedProp) onDepartmentChangedProp(newDept);
-    const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === newDept.trim().toLowerCase());
+    const targetDept = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === newDept.trim().toLowerCase() || d.code.trim().toLowerCase() === newDept.trim().toLowerCase()
+    );
     if (targetDept && targetDept.programs.length > 0) {
       const progName = targetDept.programs[0].name;
       setProgram(progName);
@@ -817,13 +833,13 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
-    const targetDept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === department.trim().toLowerCase());
+    const targetDept = UNIVERSITY_DEPARTMENTS.find(
+      (d) => d.name.trim().toLowerCase() === department.trim().toLowerCase() || d.code.trim().toLowerCase() === department.trim().toLowerCase()
+    );
     if (targetDept) {
-      const enrolledPrograms = targetDept.programs.filter((p) => activeNames.includes(p.name));
-      const programsToUse = enrolledPrograms.length > 0 ? enrolledPrograms : targetDept.programs;
-      const isValid = programsToUse.some((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
-      if (!isValid && programsToUse.length > 0) {
-        const fallback = programsToUse[0].name;
+      const isValid = targetDept.programs.some((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
+      if (!isValid && targetDept.programs.length > 0) {
+        const fallback = targetDept.programs[0].name;
         setProgram(fallback);
         if (onProgramChangedProp) onProgramChangedProp(fallback);
       }
@@ -2238,12 +2254,9 @@ export const HODEntryForm: React.FC<Props> = ({
                   );
                 }
 
-                const enrolledList = allDeptPrograms.filter((p) => activeNames.includes(p.name));
-                const enrolled = enrolledList.length > 0 ? enrolledList : allDeptPrograms;
-                const isFallback = enrolledList.length === 0;
-
+                const enrolled = allDeptPrograms;
                 return (
-                  <optgroup label={isFallback ? `Department Degree Offerings (${enrolled.length})` : `Department Degree Offerings (${enrolled.length})`}>
+                  <optgroup label={`Department Degree Offerings (${enrolled.length})`}>
                     {enrolled.map((p) => {
                       const isCoordinated = currentUser?.assignedPrograms
                         ? currentUser.assignedPrograms.includes(p.name)

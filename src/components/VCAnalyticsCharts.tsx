@@ -198,17 +198,24 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
     const sessionSet = new Set(effectiveSessions);
 
     allRecords.forEach((r) => {
+      if (!r) return;
       // Session filter check
-      if (sessionSet.size > 0 && !sessionSet.has(r.session) && !sessionSet.has('ALL')) {
-        return;
+      if (sessionSet.size > 0 && !sessionSet.has('ALL')) {
+        const rSess = (r.session || '2023').trim();
+        const matchesSession = Array.from(sessionSet).some(
+          (s) => rSess.startsWith(s) || s.startsWith(rSess) || rSess.includes(s) || s.includes(rSess)
+        );
+        if (!matchesSession) return;
       }
       // Shift filter check
-      if (selectedShiftFilter && selectedShiftFilter !== 'ALL' && r.shift !== selectedShiftFilter) {
-        return;
+      if (selectedShiftFilter && selectedShiftFilter !== 'ALL') {
+        const rShift = (r.shift || 'Morning').trim().toLowerCase();
+        if (rShift !== selectedShiftFilter.trim().toLowerCase()) return;
       }
       // Section filter check
-      if (selectedSectionFilter && selectedSectionFilter !== 'ALL' && r.section !== selectedSectionFilter) {
-        return;
+      if (selectedSectionFilter && selectedSectionFilter !== 'ALL') {
+        const rSec = (r.section || 'A').trim().toUpperCase();
+        if (rSec !== selectedSectionFilter.trim().toUpperCase()) return;
       }
 
       if (r.subjects && Array.isArray(r.subjects)) {

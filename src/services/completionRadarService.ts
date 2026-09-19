@@ -287,7 +287,6 @@ export class CompletionRadarService {
     const deadlineInfo = this.getDeadlineInfo();
 
     return UNIVERSITY_DEPARTMENTS.map((dept) => {
-      const activeProgNames = this.getActiveProgramsForDepartment(dept.name, currentSession, allRecords);
       const hod = this.resolveHOD(dept.name);
       const coord = this.resolveCoordinator(dept.name);
 
@@ -296,16 +295,15 @@ export class CompletionRadarService {
       let inProgress = 0;
       let lastActivity = 'No recent activity';
 
-      activeProgNames.forEach((progName) => {
-        const progUnits = this.getProgramSectionUnits(dept.name, progName, currentSession, allRecords, semesterFilter);
-        progUnits.forEach((u) => {
-          submitted += u.submitted;
-          pending += u.pending;
-          inProgress += u.inProgress;
-          if (u.lastActivity && u.lastActivity !== 'No recent activity' && u.lastActivity !== 'Awaiting coordinator grade entry') {
-            lastActivity = u.lastActivity;
-          }
-        });
+      // Evaluate ALL program units across all shifts (Morning & Evening)
+      const progUnits = this.getProgramsCoverage(dept.name, currentSession, allRecords, semesterFilter, 'ALL');
+      progUnits.forEach((u) => {
+        submitted += u.submitted;
+        pending += u.pending;
+        inProgress += u.inProgress;
+        if (u.lastActivity && u.lastActivity !== 'No recent activity' && u.lastActivity !== 'Awaiting coordinator grade entry') {
+          lastActivity = u.lastActivity;
+        }
       });
 
       const total = submitted + pending + inProgress;

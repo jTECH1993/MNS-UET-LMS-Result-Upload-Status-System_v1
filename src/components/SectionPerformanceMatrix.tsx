@@ -25,7 +25,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
   }[] = [];
 
   departments.forEach((dept) => {
-    dept.programs.slice(0, 4).forEach((prog) => {
+    dept.programs.forEach((prog) => {
       const secMap: { [secName: string]: SectionBreakdown } = {};
       prog.sections.forEach((sec) => {
         secMap[sec.section] = sec;

@@ -53,7 +53,8 @@ export const SubmissionTrendCard: React.FC<Props> = ({
       let coursesUploaded = 0;
 
       allRecords.forEach((r) => {
-        if (activeDepartment && r.department.toLowerCase() !== activeDepartment.toLowerCase()) {
+        if (!r || !r.department) return;
+        if (activeDepartment && !StorageService._isDeptMatch(activeDepartment, r.department)) {
           return;
         }
 
@@ -63,21 +64,16 @@ export const SubmissionTrendCard: React.FC<Props> = ({
 
         if (matchDate) {
           uploads++;
-          const valid = r.subjects.filter((s) => s.status === 'Uploaded').length;
+          const valid = (r.subjects || []).filter((s) => s.status === 'Uploaded').length;
           coursesUploaded += valid;
         }
       });
 
-      // If simulated demo dataset has few records today, provide smooth realistic academic historical curve
-      const baseline = (6 - i) * 2 + (i % 2 === 0 ? 3 : 1);
-      const finalUploads = Math.max(uploads, baseline);
-      const finalCourses = Math.max(coursesUploaded, finalUploads * 4);
-
       days.push({
         dateStr,
         label,
-        uploads: finalUploads,
-        coursesUploaded: finalCourses,
+        uploads,
+        coursesUploaded,
       });
     }
 
@@ -93,7 +89,7 @@ export const SubmissionTrendCard: React.FC<Props> = ({
       let pending = 0;
 
       const deptRecords = allRecords.filter(
-        (r) => r.department.trim().toLowerCase() === dept.name.trim().toLowerCase()
+        (r) => r && r.department && StorageService._isDeptMatch(dept.name, r.department)
       );
 
       deptRecords.forEach((r) => {

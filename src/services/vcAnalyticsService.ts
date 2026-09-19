@@ -205,8 +205,10 @@ export class VCAnalyticsService {
       // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
       allRecords.forEach((r) => {
         if (
-          r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
-          sessionList.includes(r.session || '2023') &&
+          r &&
+          r.department &&
+          StorageService._isDeptMatch(dept.name, r.department) &&
+          sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023')) &&
           r.program &&
           r.program.trim()
         ) {
@@ -254,17 +256,21 @@ export class VCAnalyticsService {
           // Check if both Morning and Evening records or coordinators exist in DB
           const hasMorningRecs = allRecords.some(
             (r) =>
-              r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
-              r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
-              (r.shift || 'Morning') === 'Morning' &&
-              sessionList.includes(r.session || '2023')
+              r &&
+              r.department &&
+              StorageService._isDeptMatch(dept.name, r.department) &&
+              StorageService._isProgMatch(prog.name, r.program) &&
+              (r.shift || 'Morning').trim().toLowerCase() === 'morning' &&
+              sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023'))
           );
           const hasEveningRecs = allRecords.some(
             (r) =>
-              r.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
-              r.program.trim().toLowerCase() === prog.name.trim().toLowerCase() &&
-              r.shift === 'Evening' &&
-              sessionList.includes(r.session || '2023')
+              r &&
+              r.department &&
+              StorageService._isDeptMatch(dept.name, r.department) &&
+              StorageService._isProgMatch(prog.name, r.program) &&
+              (r.shift || '').trim().toLowerCase() === 'evening' &&
+              sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023'))
           );
 
           const hasMorningCoord = matchingCoordAccounts.some((acc) => {
@@ -357,14 +363,23 @@ export class VCAnalyticsService {
             });
           }
 
-          // Filter submission records strictly matching department, program, session, semester, section, AND activeShift
+          // Filter submission records matching department, program, session, semester, section, AND activeShift
           const matchingRecords = allRecords.filter((r) => {
-            if (r.department.trim().toLowerCase() !== dept.name.trim().toLowerCase()) return false;
-            if (r.program.trim().toLowerCase() !== prog.name.trim().toLowerCase()) return false;
-            if (!sessionList.includes(r.session || '2023')) return false;
-            if (semesterList.length > 0 && !semesterList.includes(r.semester || '1')) return false;
-            const rShift = r.shift || 'Morning';
-            if (rShift !== activeShift) return false;
+            if (!r || !r.department || !r.program) return false;
+            if (!StorageService._isDeptMatch(dept.name, r.department)) return false;
+            if (!StorageService._isProgMatch(prog.name, r.program)) return false;
+            const rSess = (r.session || '2023').trim();
+            const sessionMatch = sessionList.some(
+              (s) => rSess.startsWith(s) || s.startsWith(rSess) || rSess.includes(s) || s.includes(rSess)
+            );
+            if (!sessionMatch) return false;
+            if (semesterList.length > 0) {
+              const rSemNum = String(r.semester || '1').replace(/\D/g, '') || '1';
+              const semMatch = semesterList.some((s) => String(s).replace(/\D/g, '') === rSemNum);
+              if (!semMatch) return false;
+            }
+            const rShift = (r.shift || 'Morning').trim().toLowerCase();
+            if (rShift !== activeShift.trim().toLowerCase()) return false;
             return true;
           });
 
@@ -420,15 +435,18 @@ export class VCAnalyticsService {
             targetSections = ['A'];
           }
 
-          const isMasterOrPhd = prog.degreeLevel === 'MS' || prog.degreeLevel === 'PhD';
-          const defaultSemesters = isMasterOrPhd
-            ? ['1', '2', '3', '4']
-            : ACADEMIC_SEMESTERS.map((s: { id: string }) => s.id);
+          // Find semesters that have actual records for this program and shift
+          const recordedSemIds = new Set<string>();
+          matchingRecords.forEach((r) => {
+            if (r.semester) recordedSemIds.add(String(r.semester).trim());
+          });
 
           const semestersToEvaluate: string[] =
             semesterList.length > 0
               ? semesterList
-              : defaultSemesters;
+              : recordedSemIds.size > 0
+              ? Array.from(recordedSemIds)
+              : ['1'];
 
           const sectionBreakdowns: SectionBreakdown[] = [];
           let progCourses = 0;
@@ -658,23 +676,16 @@ export class VCAnalyticsService {
       });
 
       let deptCompletion = deptCourses > 0 ? Math.round((deptUploaded / deptCourses) * 100) : 0;
-      const activeProgramsWithCourses = programDims.filter(p => p.totalCourses > 0);
-      const completedProgramsCount = activeProgramsWithCourses.filter((p) => p.completionRate >= 100 && p.pendingCourses === 0).length;
+      const activeProgramsWithCourses = programDims.filter((p) => p.totalCourses > 0);
+      const completedProgramsCount = activeProgramsWithCourses.filter(
+        (p) => p.completionRate >= 100 && p.pendingCourses === 0
+      ).length;
       const totalProgramsCount = activeProgramsWithCourses.length;
-      const hasUnfinishedPrograms = completedProgramsCount < totalProgramsCount;
       const allProgramsCompleted = totalProgramsCount > 0 && completedProgramsCount === totalProgramsCount;
 
-      // CRITICAL FIX: If ANY active program with courses in the department is still pending or has courses left,
-      // the department completion rate CANNOT read 100%!
-      if (hasUnfinishedPrograms) {
-        const courseBasedPct = deptCourses > 0 ? Math.floor((deptUploaded / deptCourses) * 100) : 0;
-        const programBasedCap = totalProgramsCount > 0 ? Math.floor((completedProgramsCount / totalProgramsCount) * 100) : 0;
-        
-        // Capped strictly below 100%
-        deptCompletion = Math.min(courseBasedPct, programBasedCap > 0 ? programBasedCap : courseBasedPct);
-        if (deptCompletion >= 100) {
-          deptCompletion = programBasedCap > 0 ? programBasedCap : Math.min(courseBasedPct, 95);
-        }
+      // Ensure that if any courses or programs are pending, department cannot falsely read 100%
+      if (deptPending > 0 && deptCompletion >= 100) {
+        deptCompletion = 99;
       }
       if (deptCourses > 0 && deptUploaded === deptCourses && deptPending === 0) {
         deptCompletion = 100;

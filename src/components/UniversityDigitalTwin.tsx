@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SubmissionRecord, AcademicShift } from '../types';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
+import { StorageService } from '../services/storageService';
 import { Building2, GraduationCap, Calendar, Layers, CheckCircle2, AlertCircle, Search, ChevronRight, ChevronDown, Award } from 'lucide-react';
 
 interface Props {
@@ -156,15 +157,22 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
               uploadedCourses: 0,
             };
 
-            // Find matching database records for this exact department, program, session, and semester
-            const matchingRecords = allRecords.filter(
-              (r) =>
-                r.department.trim().toLowerCase() === deptNode.name.trim().toLowerCase() &&
-                r.program.trim().toLowerCase() === progNode.name.trim().toLowerCase() &&
-                (r.session || '2023') === sessId &&
-                (r.semester || '1').trim() === semId &&
-                (selectedShiftFilter === 'ALL' || (r.shift || 'Morning') === selectedShiftFilter)
-            );
+            // Find matching database records for this department, program, session, and semester
+            const matchingRecords = allRecords.filter((r) => {
+              if (!r || !r.department || !r.program) return false;
+              if (!StorageService._isDeptMatch(deptNode.name, r.department)) return false;
+              if (!StorageService._isProgMatch(progNode.name, r.program)) return false;
+              const rSess = (r.session || '2023').trim();
+              const sessMatch = rSess.startsWith(sessId) || sessId.startsWith(rSess) || rSess.includes(sessId) || sessId.includes(rSess);
+              if (!sessMatch) return false;
+              const rSemNum = String(r.semester || '1').replace(/\D/g, '') || '1';
+              if (rSemNum !== semId) return false;
+              if (selectedShiftFilter !== 'ALL') {
+                const rShift = (r.shift || 'Morning').trim().toLowerCase();
+                if (rShift !== selectedShiftFilter.trim().toLowerCase()) return false;
+              }
+              return true;
+            });
 
             // Collect sections ('A' by default, plus 'B' if data exists)
             const sectionsSet = new Set<string>(['A']);
