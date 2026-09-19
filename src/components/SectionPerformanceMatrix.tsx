@@ -118,7 +118,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {matrixRows.slice(0, 12).map((row) => (
+            {matrixRows.map((row) => (
               <tr
                 key={`${row.deptCode}-${row.program.program}`}
                 className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"

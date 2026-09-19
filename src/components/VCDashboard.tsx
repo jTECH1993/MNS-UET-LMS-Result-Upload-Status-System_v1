@@ -8,6 +8,7 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
+  LabelList,
 } from 'recharts';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SHIFTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
@@ -1896,7 +1897,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                     fill="#10B981"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={30}
-                  />
+                  >
+                    <LabelList
+                      dataKey={currentBarKey}
+                      position="top"
+                      formatter={(v: any) => `${v}%`}
+                      style={{ fontSize: '10px', fontWeight: 'bold', fill: '#10B981' }}
+                    />
+                  </Bar>
                   {prevBarKey && (
                     <Bar
                       dataKey={prevBarKey}

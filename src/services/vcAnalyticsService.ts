@@ -366,7 +366,7 @@ export class VCAnalyticsService {
           // Filter submission records matching department, program, session, semester, section, AND activeShift
           const matchingRecords = allRecords.filter((r) => {
             if (!r || !r.department || !r.program) return false;
-            if (!StorageService._isDeptMatch(dept.name, r.department)) return false;
+            if (!StorageService._isDeptMatch(dept.name, r.department) && !StorageService._isDeptMatch(dept.code, r.department)) return false;
             if (!StorageService._isProgMatch(prog.name, r.program)) return false;
             const rSess = (r.session || '2023').trim();
             const sessionMatch = sessionList.some(
@@ -378,8 +378,10 @@ export class VCAnalyticsService {
               const semMatch = semesterList.some((s) => String(s).replace(/\D/g, '') === rSemNum);
               if (!semMatch) return false;
             }
-            const rShift = (r.shift || 'Morning').trim().toLowerCase();
-            if (rShift !== activeShift.trim().toLowerCase()) return false;
+            if (shiftFilter !== 'ALL') {
+              const rShift = (r.shift || 'Morning').trim().toLowerCase();
+              if (rShift !== activeShift.trim().toLowerCase()) return false;
+            }
             return true;
           });
 
@@ -509,8 +511,8 @@ export class VCAnalyticsService {
                   });
                 });
                 secTotal += validSubjects.length;
-              } else {
-                // Semester unsubmitted: account for expected curricular courses (5 courses per semester)
+              } else if (coordinatorDim.isAssigned) {
+                // Active assigned coordinator awaiting upload
                 const defaultCoursesCount = 5;
                 for (let idx = 0; idx < defaultCoursesCount; idx++) {
                   secPending++;
@@ -555,7 +557,7 @@ export class VCAnalyticsService {
             progInProgress += secInProgress;
           });
 
-          if (progCourses === 0) {
+          if (progCourses === 0 && coordinatorDim.isAssigned) {
             const expectedDefaultCourses = 5 * semestersToEvaluate.length * targetSections.length;
             progCourses = expectedDefaultCourses;
             progUploaded = 0;
