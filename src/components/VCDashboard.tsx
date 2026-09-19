@@ -160,13 +160,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return () => window.removeEventListener('mnsuet_storage_updated', handleRecalc);
   }, []);
 
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'AI_ASSISTANT' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ADMIN_CONSOLE'>('COMMAND_CENTER');
-
-  // AI Assistant State
-  const [aiQuestion, setAiQuestion] = useState<string>('');
-  const [aiResponse, setAiResponse] = useState<string>('');
-  const [aiLoading, setAiLoading] = useState<boolean>(false);
-  const [aiError, setAiError] = useState<string>('');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ADMIN_CONSOLE'>('COMMAND_CENTER');
 
   // Change History / Audit Trail Modal State
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
@@ -835,32 +829,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     statusFilter,
     searchQuery,
   ]);
-
-  const handleAskAi = async (questionText: string) => {
-    if (!questionText.trim()) return;
-    setAiLoading(true);
-    setAiError('');
-    setAiResponse('');
-    try {
-      const res = await fetch('/api/gemini/vc-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          question: questionText,
-          currentRecords: allRecords 
-        })
-      });
-      if (!res.ok) {
-        throw new Error(`Server returned error: ${res.statusText}`);
-      }
-      const data = await res.json();
-      setAiResponse(data.response || 'No answer generated.');
-    } catch (err: any) {
-      setAiError(err.message || 'Error communicating with AI Assistant');
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   return (
     <div id="vc-admin-dashboard" className="space-y-6">
@@ -1586,19 +1554,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <span>Live System Audit Trail</span>
           </button>
           <button
-            id="btn-vc-mode-ai-assistant"
-            type="button"
-            onClick={() => setDashboardViewMode('AI_ASSISTANT')}
-            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              dashboardViewMode === 'AI_ASSISTANT'
-                ? 'bg-emerald-750 text-white shadow-xs ring-2 ring-emerald-500/20'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-            <span>AI Assistant</span>
-          </button>
-          <button
             id="btn-vc-mode-digital-twin"
             type="button"
             onClick={() => setDashboardViewMode('DIGITAL_TWIN')}
@@ -2018,152 +1973,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               </div>
             </div>
             <VCAuditFeed />
-          </div>
-        </div>
-      )}
-
-      {/* AI Executive Assistant Tab */}
-      {dashboardViewMode === 'AI_ASSISTANT' && (
-        <div className="space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 text-slate-100 shadow-xl">
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-4 mb-5">
-              <div className="w-10 h-10 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-xl animate-bounce">
-                🧠
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
-                  MNS-UET AI Executive Assistant (Gemini Powered)
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Ask complex database queries, audit coordinator status, analyze program-level delays, or summarize university academic standing.
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Presets for Vice Chancellor */}
-            <div className="mb-6">
-              <span className="text-xs font-bold text-slate-400 block mb-2.5 uppercase tracking-wider">
-                Select a recommended executive query preset:
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                {[
-                  {
-                    q: 'Which departments are currently causing the biggest delays?',
-                    desc: 'Audits laggy program sections'
-                  },
-                  {
-                    q: 'Which coordinators have unsubmitted courses?',
-                    desc: 'Identifies stalled roster coordinators'
-                  },
-                  {
-                    q: 'Show me an audit of HODs/coordinators without assignments.',
-                    desc: 'Lists unassigned active program entities'
-                  },
-                  {
-                    q: 'What is the overall status of the Mechanical Engineering department?',
-                    desc: 'Generates detailed departmental summary'
-                  }
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setAiQuestion(item.q);
-                      handleAskAi(item.q);
-                    }}
-                    className="p-3 bg-slate-950 hover:bg-slate-850 rounded-lg border border-slate-800 hover:border-emerald-500 text-left transition-all group flex flex-col justify-between h-24"
-                  >
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors line-clamp-2">
-                      {item.q}
-                    </span>
-                    <span className="text-[10px] text-slate-500 italic block mt-1.5 border-t border-slate-900 pt-1 w-full">
-                      {item.desc}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* AI Response Block */}
-            <div className="bg-slate-950 rounded-xl border border-slate-850 overflow-hidden min-h-[250px] flex flex-col mb-5">
-              <div className="bg-slate-900 px-4 py-2.5 border-b border-slate-850 flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Assistant Consultation Terminal
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  Model: gemini-3.8-flash
-                </span>
-              </div>
-
-              <div className="p-5 flex-1 overflow-y-auto max-h-[450px]">
-                {aiLoading ? (
-                  <div className="space-y-4 py-8 flex flex-col items-center justify-center text-center">
-                    <div className="relative">
-                      <div className="w-12 h-12 rounded-full border-4 border-emerald-950 border-t-emerald-500 animate-spin" />
-                      <div className="absolute inset-0 flex items-center justify-center font-black text-emerald-400 text-sm">
-                        AI
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-emerald-400 animate-pulse uppercase tracking-wider">
-                        Consulting Live MNS-UET Databases...
-                      </p>
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Correlating 8 semesters, coordinator locks, and upload compliance vectors.
-                      </p>
-                    </div>
-                  </div>
-                ) : aiError ? (
-                  <div className="p-4 bg-rose-950/40 border border-rose-800/80 rounded-lg text-rose-300 text-xs flex items-center gap-3">
-                    <span className="text-base">❌</span>
-                    <div>
-                      <strong className="block font-black">AI Communication Error</strong>
-                      <span>{aiError}</span>
-                    </div>
-                  </div>
-                ) : aiResponse ? (
-                  <div className="bg-slate-900/40 border border-slate-850 p-4.5 rounded-lg">
-                    <MarkdownRenderer text={aiResponse} />
-                  </div>
-                ) : (
-                  <div className="text-center py-16 text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-lg text-slate-400">
-                      💡
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-400">Consultation Shell Is Ready</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Select a preset above or type your question in the prompt bar below.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Custom Query Input */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleAskAi(aiQuestion);
-              }}
-              className="flex gap-2.5"
-            >
-              <input
-                type="text"
-                value={aiQuestion}
-                onChange={(e) => setAiQuestion(e.target.value)}
-                placeholder="Ask Gemini: 'Which departments have unsubmitted sections in sem 1?'..."
-                disabled={aiLoading}
-                className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 hover:border-slate-700 rounded-lg px-4 py-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 transition-all"
-              />
-              <button
-                type="submit"
-                disabled={aiLoading || !aiQuestion.trim()}
-                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg disabled:opacity-50 transition-all shadow-md hover:shadow-emerald-950 flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                {aiLoading ? 'Thinking...' : 'Consult Assistant'}
-              </button>
-            </form>
           </div>
         </div>
       )}
