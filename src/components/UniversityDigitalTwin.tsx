@@ -185,95 +185,110 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
               uploadedCourses: 0,
             };
 
-            // Find matching database records for this department, program, session, and semester
-            const matchingRecords = allRecords.filter((r) => {
-              if (!r || !r.department || !r.program) return false;
-              if (!StorageService._isDeptMatch(deptNode.name, r.department)) return false;
-              if (!StorageService._isProgMatch(progNode.name, r.program)) return false;
-              const rSess = (r.session || '2023').trim();
-              const sessMatch = rSess.startsWith(sessId) || sessId.startsWith(rSess) || rSess.includes(sessId) || sessId.includes(rSess);
-              if (!sessMatch) return false;
-              const rSemNum = String(r.semester || '1').replace(/\D/g, '') || '1';
-              if (rSemNum !== semId) return false;
+            const programShifts = progNode.supportedShifts.filter((sh) => {
               if (selectedShiftFilter !== 'ALL') {
-                const rShift = (r.shift || 'Morning').trim().toLowerCase();
-                if (rShift !== selectedShiftFilter.trim().toLowerCase()) return false;
+                return sh.trim().toLowerCase() === selectedShiftFilter.trim().toLowerCase();
               }
               return true;
             });
 
-            // Collect sections ('A' by default, plus 'B' if data exists)
-            const sectionsSet = new Set<string>(['A']);
-            matchingRecords.forEach((r) => {
-              const sec = (r.section || 'A').trim().toUpperCase();
-              if (sec) sectionsSet.add(sec);
-            });
+            programShifts.forEach((shName) => {
+              // Find matching database records for this department, program, session, semester, and shift
+              const matchingRecords = allRecords.filter((r) => {
+                if (!r || !r.department || !r.program) return false;
+                if (!StorageService._isDeptMatch(deptNode.name, r.department)) return false;
+                if (!StorageService._isProgMatch(progNode.name, r.program)) return false;
+                const rSess = (r.session || '2023').trim();
+                const sessMatch = rSess.startsWith(sessId) || sessId.startsWith(rSess) || rSess.includes(sessId) || sessId.includes(rSess);
+                if (!sessMatch) return false;
+                const rSemNum = String(r.semester || '1').replace(/\D/g, '') || '1';
+                if (rSemNum !== semId) return false;
+                const rShift = (r.shift || 'Morning').trim().toLowerCase();
+                return rShift === shName.trim().toLowerCase();
+              });
 
-            Array.from(sectionsSet)
-              .sort()
-              .forEach((secName) => {
-                const secKey = `Section ${secName}`;
+              // Collect sections ('A' by default, plus any other sections if data exists in database)
+              const sectionsSet = new Set<string>(['A']);
+              matchingRecords.forEach((r) => {
+                const sec = (r.section || 'A').trim().toUpperCase();
+                if (sec) sectionsSet.add(sec);
+              });
 
-                const secRecords = matchingRecords.filter(
-                  (r) => (r.section || 'A').trim().toUpperCase() === secName
-                );
+              Array.from(sectionsSet)
+                .sort()
+                .forEach((secName) => {
+                  const secKey = `Section ${secName} (${shName})`;
 
-                let secUploaded = 0;
-                let secTotal = 0;
-                const coursesList: CourseLeaf[] = [];
-                let coordinatorName = 'Not Assigned';
-                let shiftName = 'Morning';
+                  const secRecords = matchingRecords.filter(
+                    (r) => (r.section || 'A').trim().toUpperCase() === secName
+                  );
 
-                if (secRecords.length > 0) {
-                  secRecords.forEach((r) => {
-                    if (r.hodCoordinator) coordinatorName = r.hodCoordinator;
-                    if (r.shift) shiftName = r.shift;
+                  let secUploaded = 0;
+                  let secTotal = 0;
+                  const coursesList: CourseLeaf[] = [];
+                  let coordinatorName = 'Not Assigned';
 
-                    const subs = r.subjects || [];
-                    const validSubs = subs.filter(
-                      (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
-                    );
+                  if (secRecords.length > 0) {
+                    secRecords.forEach((r) => {
+                      if (r.hodCoordinator) coordinatorName = r.hodCoordinator;
 
-                    if (validSubs.length > 0) {
-                      validSubs.forEach((sub, idx) => {
-                        const isUploaded = sub.status === 'Uploaded';
-                        if (isUploaded) secUploaded++;
-                        secTotal++;
+                      const subs = r.subjects || [];
+                      const validSubs = subs.filter(
+                        (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+                      );
 
-                        coursesList.push({
-                          id: `course_${semNode.id}_${secName}_${sub.id || idx}`,
-                          code: sub.courseCode || `SEM${semId}-CRS${idx + 1}`,
-                          title: sub.subjectTitle || `Curricular Subject ${idx + 1}`,
-                          status: isUploaded
-                            ? 'Uploaded'
-                            : sub.status === 'In Progress'
-                            ? 'In Progress'
-                            : 'Pending',
-                          uploadedBy: sub.uploadedBy || r.accessedBy || coordinatorName,
-                          uploadedAt: sub.dateUploaded || r.updatedAt || 'Updated in LMS',
+                      if (validSubs.length > 0) {
+                        validSubs.forEach((sub, idx) => {
+                          const isUploaded = sub.status === 'Uploaded';
+                          if (isUploaded) secUploaded++;
+                          secTotal++;
+
+                          coursesList.push({
+                            id: `course_${semNode.id}_${shName}_${secName}_${sub.id || idx}`,
+                            code: sub.courseCode || `${deptNode.code}-${semId}${String(idx + 1).padStart(2, '0')}`,
+                            title: sub.subjectTitle || `Curricular Subject ${idx + 1}`,
+                            status: isUploaded
+                              ? 'Uploaded'
+                              : sub.status === 'In Progress'
+                              ? 'In Progress'
+                              : 'Pending',
+                            uploadedBy: sub.uploadedBy || r.accessedBy || coordinatorName,
+                            uploadedAt: sub.dateUploaded || r.updatedAt || 'Updated in LMS',
+                          });
                         });
+                      }
+                    });
+                  } else {
+                    // Seed 5 pending courses to represent the unsubmitted curriculum courses
+                    secTotal = 5;
+                    for (let idx = 0; idx < 5; idx++) {
+                      coursesList.push({
+                        id: `course_pending_${semNode.id}_${shName}_${secName}_${idx}`,
+                        code: `${deptNode.code}-${semId}0${idx + 1}`,
+                        title: `Pending LMS Submission - Subject ${idx + 1}`,
+                        status: 'Pending',
+                        uploadedBy: 'Not Assigned',
+                        uploadedAt: 'Pending Submission',
                       });
                     }
-                  });
-                }
+                  }
 
-                // Reflect exact database courses count; if empty, keep secTotal = 0 and coursesList empty
+                  const secNode: SectionNode = {
+                    id: `sec_${semNode.id}_${shName}_${secName}`,
+                    name: `Section ${secName}`,
+                    sectionName: secName,
+                    shift: shName,
+                    coordinator: coordinatorName,
+                    courses: coursesList,
+                    totalCourses: secTotal,
+                    uploadedCourses: secUploaded,
+                  };
 
-                const secNode: SectionNode = {
-                  id: `sec_${semNode.id}_${secName}`,
-                  name: secKey,
-                  sectionName: secName,
-                  shift: shiftName,
-                  coordinator: coordinatorName,
-                  courses: coursesList,
-                  totalCourses: secTotal,
-                  uploadedCourses: secUploaded,
-                };
-
-                semNode.sections[secKey] = secNode;
-                semNode.totalCourses += secTotal;
-                semNode.uploadedCourses += secUploaded;
-              });
+                  semNode.sections[secKey] = secNode;
+                  semNode.totalCourses += secTotal;
+                  semNode.uploadedCourses += secUploaded;
+                });
+            });
 
             sessNode.semesters[semKey] = semNode;
             sessNode.totalCourses += semNode.totalCourses;

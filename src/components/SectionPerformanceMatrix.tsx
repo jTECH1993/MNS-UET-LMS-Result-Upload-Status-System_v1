@@ -149,7 +149,7 @@ export const SectionPerformanceMatrix: React.FC<Props> = ({
                   </div>
                   <div className="mt-1">
                     <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      {row.shiftLabel} Shift
+                      {row.shiftLabel}
                     </span>
                   </div>
                 </td>
