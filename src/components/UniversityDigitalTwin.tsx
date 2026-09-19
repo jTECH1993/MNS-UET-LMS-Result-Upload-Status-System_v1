@@ -257,21 +257,7 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
                   });
                 }
 
-                // If no LMS course rows exist yet in DB for this semester & section, add 5 expected pending courses
-                if (coursesList.length === 0) {
-                  const defaultCoursesCount = 5;
-                  for (let idx = 0; idx < defaultCoursesCount; idx++) {
-                    secTotal++;
-                    coursesList.push({
-                      id: `expected_${semNode.id}_${secName}_${idx}`,
-                      code: `SEM${semId}-CRS${idx + 1}`,
-                      title: `Semester ${semId} Curricular Subject ${idx + 1}`,
-                      status: 'Pending',
-                      uploadedBy: 'Awaiting Coordinator Upload',
-                      uploadedAt: 'Not Started',
-                    });
-                  }
-                }
+                // Reflect exact database courses count; if empty, keep secTotal = 0 and coursesList empty
 
                 const secNode: SectionNode = {
                   id: `sec_${semNode.id}_${secName}`,

@@ -69,33 +69,28 @@ export function ActionCenterPanel({ allRecords }: Props) {
     };
   }, []);
 
-  // Calculate dynamic stats across departments
+  // Calculate dynamic stats across departments from authentic database records
   const departmentStats = useMemo(() => {
     return UNIVERSITY_DEPARTMENTS.map((dept, index) => {
       const deptCode = dept.code;
       const deptRecords = allRecords.filter(r => 
         r.department === dept.name || 
+        StorageService._isDeptMatch(dept.name, r.department) ||
         r.department?.toLowerCase().includes(dept.code.toLowerCase())
       );
 
-      let totalSubjects = dept.programs.length * 8; // standard calculation
+      let totalSubjectsFromRecords = 0;
       let uploadedCount = 0;
 
       deptRecords.forEach(r => {
         if (r.subjects && Array.isArray(r.subjects)) {
+          totalSubjectsFromRecords += r.subjects.length;
           uploadedCount += r.subjects.filter((s: any) => s.status === 'Uploaded').length;
         }
       });
 
-      // Sample fallback for realistic numbers if demo mode
-      if (uploadedCount === 0) {
-        if (dept.code === 'CS') uploadedCount = 44;
-        else if (dept.code === 'EE') uploadedCount = 52;
-        else if (dept.code === 'ME') uploadedCount = 28;
-        else if (dept.code === 'CE') uploadedCount = 35;
-        else if (dept.code === 'CHE') uploadedCount = 18;
-        else uploadedCount = totalSubjects - 2;
-      }
+      // If database has submission records, use exact course count; else compute expected curriculum courses for official programs
+      const totalSubjects = totalSubjectsFromRecords > 0 ? totalSubjectsFromRecords : dept.programs.length * 5;
 
       const pendingCount = Math.max(0, totalSubjects - uploadedCount);
       const progressPct = totalSubjects > 0 ? Math.round((uploadedCount / totalSubjects) * 100) : 0;
@@ -121,7 +116,7 @@ export function ActionCenterPanel({ allRecords }: Props) {
     });
   }, [allRecords]);
 
-  // Aggregate Top Bar Metrics
+  // Aggregate Top Bar Metrics from dynamic database calculations
   const aggregatedMetrics = useMemo(() => {
     const totalSubjectsAll = departmentStats.reduce((acc, d) => acc + d.totalSubjects, 0);
     const totalUploadedAll = departmentStats.reduce((acc, d) => acc + d.uploadedCount, 0);
@@ -132,12 +127,12 @@ export function ActionCenterPanel({ allRecords }: Props) {
     const atRiskDepts = departmentStats.filter(d => d.status === 'At Risk').length;
 
     return {
-      uploaded: totalUploadedAll || 342,
-      total: totalSubjectsAll || 420,
-      pct: overallPct || 81.4,
-      completedDepts: completedDepts || 28,
-      inProgressDepts: inProgressDepts || 8,
-      atRiskDepts: atRiskDepts || 2
+      uploaded: totalUploadedAll,
+      total: totalSubjectsAll,
+      pct: overallPct,
+      completedDepts,
+      inProgressDepts,
+      atRiskDepts
     };
   }, [departmentStats]);
 
@@ -280,45 +275,44 @@ export function ActionCenterPanel({ allRecords }: Props) {
       </div>
 
       {/* Action Center Navigation Sub-Tabs */}
-      <div className="flex items-center justify-between gap-3 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 p-2 rounded-2xl border-2 border-indigo-500/50 shadow-md">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveSubTab('DASHBOARD')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2.5 cursor-pointer ${
               activeSubTab === 'DASHBOARD'
-                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-xl ring-2 ring-indigo-400 scale-[1.02]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <Target className="w-4 h-4" />
-            <span>Compliance Dashboard</span>
+            <Target className="w-4 h-4 text-indigo-300" />
+            <span>1. Compliance Dashboard &amp; Metrics</span>
+            {activeSubTab === 'DASHBOARD' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSubTab('EXECUTIVE_SUMMARY')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2.5 cursor-pointer ${
               activeSubTab === 'EXECUTIVE_SUMMARY'
-                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-xl ring-2 ring-indigo-400 scale-[1.02]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <FileText className="w-4 h-4 text-amber-400" />
-            <span>📋 VC Executive Summary</span>
+            <FileText className="w-4 h-4 text-amber-300" />
+            <span>2. VC Executive Result Summary (Copy &amp; Communication)</span>
+            {activeSubTab === 'EXECUTIVE_SUMMARY' && (
+              <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
+            )}
           </button>
         </div>
 
-        {activeSubTab === 'DASHBOARD' && (
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('EXECUTIVE_SUMMARY')}
-            className="hidden sm:flex items-center gap-1.5 text-xs font-extrabold text-indigo-400 hover:text-indigo-300 px-3 py-1.5 rounded-lg bg-indigo-950/60 border border-indigo-800/60 transition-all cursor-pointer"
-          >
-            <span>Generate Copyable Summary</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="px-3.5 py-1.5 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-bold">
+          Active Action Sub-Tab: <span className="text-white font-black">{activeSubTab === 'DASHBOARD' ? 'Compliance Dashboard' : 'VC Executive Summary Panel'}</span>
+        </div>
       </div>
 
       {activeSubTab === 'EXECUTIVE_SUMMARY' ? (

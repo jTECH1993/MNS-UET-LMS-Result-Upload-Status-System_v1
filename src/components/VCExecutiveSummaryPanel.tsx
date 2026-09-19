@@ -105,14 +105,11 @@ export function VCExecutiveSummaryPanel({ allRecords }: Props) {
           }
         });
 
-        // If no records explicitly present but active program, estimate standard 5 courses per semester
-        if (totalExpected === 0 && (sessionFilter === 'All' || sessionFilter === '2023' || sessionFilter === 'Fall 2023')) {
-          totalExpected = 5;
-          uploadedCount = 0;
-        }
-
+        // Compute status strictly based on authentic database records
         let progStatus: 'COMPLETE' | 'PARTIAL' | 'INCOMPLETE' | 'NOT_SUBMITTED' = 'NOT_SUBMITTED';
-        if (uploadedCount > 0 && uploadedCount >= totalExpected) {
+        if (totalExpected === 0) {
+          progStatus = 'NOT_SUBMITTED';
+        } else if (uploadedCount > 0 && uploadedCount >= totalExpected) {
           progStatus = 'COMPLETE';
         } else if (uploadedCount > 0 && uploadedCount < totalExpected) {
           progStatus = totalExpected - uploadedCount === 1 || hasLabMissing ? 'INCOMPLETE' : 'PARTIAL';
