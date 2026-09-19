@@ -531,11 +531,36 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         // Dynamically activate program if it has submissions, overriding static cache
         const isSessionActive = activeProgNames.includes(prog.name) || hasAny;
 
-        // If department coordinator entered Evening, automatically prioritize Evening!
-        let recommendedShift: AcademicShift = 'Morning';
-        if (hasEvening && !hasMorning) {
-          recommendedShift = 'Evening';
+        // Determine dynamic supported shifts based strictly on coordinator selection / submitted records:
+        let dynamicSupportedShifts: AcademicShift[] = [];
+        if (hasMorning && hasEvening) {
+          dynamicSupportedShifts = ['Morning', 'Evening'];
+        } else if (hasMorning) {
+          dynamicSupportedShifts = ['Morning'];
+        } else if (hasEvening) {
+          dynamicSupportedShifts = ['Evening'];
+        } else {
+          // Check if any records exist in allRecords for this program across any session/semester
+          const progRecords = allRecords.filter((r) =>
+            StorageService._isDeptMatch(dept.name, r.department) &&
+            StorageService._isProgMatch(prog.name, r.program)
+          );
+          const morningRec = progRecords.some((r) => (r.shift || 'Morning').trim().toLowerCase() === 'morning');
+          const eveningRec = progRecords.some((r) => (r.shift || 'Morning').trim().toLowerCase() === 'evening');
+
+          if (morningRec && eveningRec) {
+            dynamicSupportedShifts = ['Morning', 'Evening'];
+          } else if (eveningRec) {
+            dynamicSupportedShifts = ['Evening'];
+          } else if (morningRec) {
+            dynamicSupportedShifts = ['Morning'];
+          } else {
+            dynamicSupportedShifts = ['Morning'];
+          }
         }
+
+        // If department coordinator entered Evening, automatically prioritize Evening!
+        let recommendedShift: AcademicShift = dynamicSupportedShifts[0] || 'Morning';
 
         const sessionDetail = StorageService.getProgramSessionDetail(
           dept.name,
@@ -551,7 +576,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           degreeLevel: prog.degreeLevel,
           sessionActive: isSessionActive,
           sessionDetail,
-          supportedShifts: prog.supportedShifts || ['Morning', 'Evening'],
+          supportedShifts: dynamicSupportedShifts,
           shifts: {
             Morning: morningData,
             Evening: eveningData,
@@ -701,11 +726,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       let totalCohorts = 0;
 
       deptPrograms.forEach((prog) => {
-        const shifts = [
-          { name: 'Morning', data: prog.shifts.Morning },
-          { name: 'Evening', data: prog.shifts.Evening },
-        ];
-        shifts.forEach(({ name, data: shift }) => {
+        const shiftsToInspect = prog.supportedShifts && prog.supportedShifts.length > 0
+          ? prog.supportedShifts
+          : ['Morning'];
+
+        shiftsToInspect.forEach((shName) => {
+          const shift = prog.shifts[shName];
+          if (!shift) return;
+
           if (selectedSemesterFilter === 'ALL') {
             totalCohorts += 1;
             if (shift.hasSubmission) {

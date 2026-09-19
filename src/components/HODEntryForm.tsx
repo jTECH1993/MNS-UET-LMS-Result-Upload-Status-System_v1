@@ -2549,54 +2549,58 @@ export const HODEntryForm: React.FC<Props> = ({
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Shift <span className="text-rose-600">*</span>
             </label>
-            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
-              <button
-                id="btn-shift-morning"
-                type="button"
-                onClick={() => handleShiftChange('Morning')}
-                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  shift === 'Morning'
-                    ? 'bg-amber-500 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200'
-                }`}
-                title={
-                  shiftStatuses.morning.hasRecord
-                    ? `Morning: ${shiftStatuses.morning.courseCount} course(s) saved`
-                    : 'Morning: No saved courses'
-                }
-              >
-                <Sun className="w-3.5 h-3.5" />
-                <span>Morning</span>
-                {shiftStatuses.morning.hasRecord ? (
-                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Morning' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
-                    ● {shiftStatuses.morning.courseCount}
-                  </span>
-                ) : null}
-              </button>
+            <div className={`grid ${allowedShiftsForProgram.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200`}>
+              {allowedShiftsForProgram.includes('Morning') && (
+                <button
+                  id="btn-shift-morning"
+                  type="button"
+                  onClick={() => handleShiftChange('Morning')}
+                  className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    shift === 'Morning'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title={
+                    shiftStatuses.morning.hasRecord
+                      ? `Morning: ${shiftStatuses.morning.courseCount} course(s) saved`
+                      : 'Morning: No saved courses'
+                  }
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Morning</span>
+                  {shiftStatuses.morning.hasRecord ? (
+                    <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Morning' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
+                      ● {shiftStatuses.morning.courseCount}
+                    </span>
+                  ) : null}
+                </button>
+              )}
 
-              <button
-                id="btn-shift-evening"
-                type="button"
-                onClick={() => handleShiftChange('Evening')}
-                className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  shift === 'Evening'
-                    ? 'bg-indigo-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200'
-                }`}
-                title={
-                  shiftStatuses.evening.hasRecord
-                    ? `Evening: ${shiftStatuses.evening.courseCount} course(s) saved`
-                    : 'Evening: No saved courses'
-                }
-              >
-                <Moon className="w-3.5 h-3.5" />
-                <span>Evening</span>
-                {shiftStatuses.evening.hasRecord ? (
-                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Evening' ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900'}`}>
-                    ● {shiftStatuses.evening.courseCount}
-                  </span>
-                ) : null}
-              </button>
+              {allowedShiftsForProgram.includes('Evening') && (
+                <button
+                  id="btn-shift-evening"
+                  type="button"
+                  onClick={() => handleShiftChange('Evening')}
+                  className={`py-1.5 px-2 rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                    shift === 'Evening'
+                      ? 'bg-indigo-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title={
+                    shiftStatuses.evening.hasRecord
+                      ? `Evening: ${shiftStatuses.evening.courseCount} course(s) saved`
+                      : 'Evening: No saved courses'
+                  }
+                >
+                  <Moon className="w-3.5 h-3.5" />
+                  <span>Evening</span>
+                  {shiftStatuses.evening.hasRecord ? (
+                    <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${shift === 'Evening' ? 'bg-indigo-900 text-white' : 'bg-indigo-100 text-indigo-900'}`}>
+                      ● {shiftStatuses.evening.courseCount}
+                    </span>
+                  ) : null}
+                </button>
+              )}
             </div>
           </div>
 

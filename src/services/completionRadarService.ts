@@ -364,19 +364,32 @@ export class CompletionRadarService {
         (p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase()
       );
 
-      let targetShifts: AcademicShift[] = progObj?.supportedShifts || ['Morning'];
+      let targetShifts: AcademicShift[] = [];
+      const hasEveningRecs = allRecords.some(
+        (r) =>
+          r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
+          r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
+          r.shift === 'Evening'
+      );
+      const hasMorningRecs = allRecords.some(
+        (r) =>
+          r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
+          r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
+          (r.shift || 'Morning') === 'Morning'
+      );
+
+      if (hasMorningRecs && hasEveningRecs) {
+        targetShifts = ['Morning', 'Evening'];
+      } else if (hasEveningRecs) {
+        targetShifts = ['Evening'];
+      } else if (hasMorningRecs) {
+        targetShifts = ['Morning'];
+      } else {
+        targetShifts = ['Morning'];
+      }
+
       if (shiftFilter !== 'ALL') {
         targetShifts = targetShifts.includes(shiftFilter) ? [shiftFilter] : targetShifts;
-      } else {
-        const hasEveningRecs = allRecords.some(
-          (r) =>
-            r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
-            r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
-            r.shift === 'Evening'
-        );
-        if (!targetShifts.includes('Evening') && hasEveningRecs) {
-          targetShifts = [...targetShifts, 'Evening'];
-        }
       }
 
       targetShifts.forEach((shift) => {

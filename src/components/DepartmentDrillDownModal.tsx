@@ -273,7 +273,7 @@ export const DepartmentDrillDownModal: React.FC<Props> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredPrograms.map((prog) => {
-                  const coordShifts = prog.coordinator.shifts || ['Morning', 'Evening'];
+                  const coordShifts = (prog as any).supportedShifts || prog.coordinator?.shifts || ['Morning'];
                   const isMorning = coordShifts.includes('Morning');
                   const isEvening = coordShifts.includes('Evening');
 
