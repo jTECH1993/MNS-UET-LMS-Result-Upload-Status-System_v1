@@ -161,7 +161,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return () => window.removeEventListener('mnsuet_storage_updated', handleRecalc);
   }, []);
 
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ADMIN_CONSOLE'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER'>('COMMAND_CENTER');
 
   // Change History / Audit Trail Modal State
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
@@ -1644,23 +1644,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping ml-0.5" />
             )}
           </button>
-
-          <button
-            id="btn-vc-mode-admin-console"
-            type="button"
-            onClick={() => setDashboardViewMode('ADMIN_CONSOLE')}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-              dashboardViewMode === 'ADMIN_CONSOLE'
-                ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400 scale-[1.02]'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-rose-300" />
-            <span>6. Admin Console</span>
-            {dashboardViewMode === 'ADMIN_CONSOLE' && (
-              <span className="w-2 h-2 rounded-full bg-rose-300 animate-ping ml-0.5" />
-            )}
-          </button>
         </div>
       </div>
 
@@ -1673,7 +1656,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             {dashboardViewMode === 'ACTIVITY' && <Activity className="w-6 h-6 text-sky-400" />}
             {dashboardViewMode === 'DIGITAL_TWIN' && <Building2 className="w-6 h-6 text-indigo-400" />}
             {dashboardViewMode === 'ACTION_CENTER' && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
-            {dashboardViewMode === 'ADMIN_CONSOLE' && <ShieldCheck className="w-6 h-6 text-rose-400" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -1691,7 +1673,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && '3. System Audit Trail & Real-Time Security Logs'}
               {dashboardViewMode === 'DIGITAL_TWIN' && '4. University Digital Twin Architecture Matrix'}
               {dashboardViewMode === 'ACTION_CENTER' && '5. VC Executive Action Center & Circular Directives'}
-              {dashboardViewMode === 'ADMIN_CONSOLE' && '6. Vice Chancellor Administrative Console'}
             </h2>
             <p className="text-xs text-slate-300 mt-0.5">
               {dashboardViewMode === 'COMMAND_CENTER' && 'Comprehensive overview of institutional bottlenecks, high-level upload stats, and interactive completion radar.'}
@@ -1699,7 +1680,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && 'Live event stream tracking coordinator logins, HOD verifications, and result upload timestamps.'}
               {dashboardViewMode === 'DIGITAL_TWIN' && 'Interactive hierarchical view of departments, degree programs, academic sessions, and semesters.'}
               {dashboardViewMode === 'ACTION_CENTER' && 'Department compliance overview, official Vice Chancellor result upload summaries, and circular dispatch.'}
-              {dashboardViewMode === 'ADMIN_CONSOLE' && 'Manage system configurations, user accounts, academic sessions, and administrative controls.'}
             </p>
           </div>
         </div>
@@ -2118,13 +2098,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       {dashboardViewMode === 'ACTION_CENTER' && (
         <div className="mt-2">
           <ActionCenterPanel allRecords={allRecords} />
-        </div>
-      )}
-
-      {/* Admin Console Tab */}
-      {dashboardViewMode === 'ADMIN_CONSOLE' && (
-        <div className="mt-2">
-          <AdminGodModePanel allRecords={allRecords} />
         </div>
       )}
 
