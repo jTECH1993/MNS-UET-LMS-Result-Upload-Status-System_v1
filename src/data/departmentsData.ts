@@ -64,8 +64,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'BS Data Science', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Software Engineering Technology (B.Tech)', degreeLevel: 'B.Tech', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Internet of Things (IoT)', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Computer Science', degreeLevel: 'MS', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'PhD Computer Science', degreeLevel: 'PhD', department: 'Department of Computer Science', session2023: false, supportedShifts: ['Morning'] },
+      { name: 'MS Computer Science', degreeLevel: 'MS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
+      { name: 'PhD Computer Science', degreeLevel: 'PhD', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning'] },
     ],
   },
   {
@@ -74,8 +74,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
     programs: [
       { name: 'B.Sc. Electrical Engineering', degreeLevel: 'BS Engineering', department: 'Department of Electrical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Electrical Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Electrical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Electrical Engineering', degreeLevel: 'MS', department: 'Department of Electrical Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
-      { name: 'PhD Electrical Engineering', degreeLevel: 'PhD', department: 'Department of Electrical Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'MS Electrical Engineering', degreeLevel: 'MS', department: 'Department of Electrical Engineering & Technology', session2023: true, supportedShifts: ['Evening'] },
+      { name: 'PhD Electrical Engineering', degreeLevel: 'PhD', department: 'Department of Electrical Engineering & Technology', session2023: true, supportedShifts: ['Evening'] },
     ],
   },
   {
@@ -84,7 +84,7 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
     programs: [
       { name: 'B.Sc. Mechanical Engineering', degreeLevel: 'BS Engineering', department: 'Department of Mechanical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Mechanical Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Mechanical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Mechanical Engineering', degreeLevel: 'MS', department: 'Department of Mechanical Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'MS Mechanical Engineering', degreeLevel: 'MS', department: 'Department of Mechanical Engineering & Technology', session2023: true, supportedShifts: ['Evening'] },
     ],
   },
   {
@@ -95,7 +95,7 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'B.Sc. Civil Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Civil Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Architectural Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Civil Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Building & Architectural Engineering', degreeLevel: 'BS Engineering', department: 'Department of Civil Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Civil Engineering', degreeLevel: 'MS', department: 'Department of Civil Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'MS Civil Engineering', degreeLevel: 'MS', department: 'Department of Civil Engineering & Technology', session2023: true, supportedShifts: ['Evening'] },
     ],
   },
   {
@@ -105,8 +105,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'B.Sc. Chemical Engineering', degreeLevel: 'BS Engineering', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Chemical Engineering Technology', degreeLevel: 'BS Engineering Technology', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'B.Sc. Food Engineering', degreeLevel: 'BS Engineering', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Chemical Engineering', degreeLevel: 'MS', department: 'Department of Chemical Engineering & Technology', session2023: false, supportedShifts: ['Evening'] },
-      { name: 'PhD Chemical Engineering', degreeLevel: 'PhD', department: 'Department of Chemical Engineering & Technology', session2023: false, supportedShifts: ['Morning', 'Evening'] },
+      { name: 'MS Chemical Engineering', degreeLevel: 'MS', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Evening'] },
+      { name: 'PhD Chemical Engineering', degreeLevel: 'PhD', department: 'Department of Chemical Engineering & Technology', session2023: true, supportedShifts: ['Morning', 'Evening'] },
     ],
   },
   {
@@ -119,8 +119,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'BS Financial Technologies (FinTech)', degreeLevel: 'BS', department: 'Department of Management Sciences', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Entrepreneurship', degreeLevel: 'BS', department: 'Department of Management Sciences', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'MBA', degreeLevel: 'MBA', department: 'Department of Management Sciences', session2023: true, supportedShifts: ['Evening', 'Morning'] },
-      { name: 'MS Management Sciences', degreeLevel: 'MS', department: 'Department of Management Sciences', session2023: false, supportedShifts: ['Evening'] },
-      { name: 'MS Project Management', degreeLevel: 'MS', department: 'Department of Management Sciences', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'MS Management Sciences', degreeLevel: 'MS', department: 'Department of Management Sciences', session2023: true, supportedShifts: ['Evening'] },
+      { name: 'MS Project Management', degreeLevel: 'MS', department: 'Department of Management Sciences', session2023: true, supportedShifts: ['Evening'] },
     ],
   },
   {
@@ -131,8 +131,8 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'BS Physics', degreeLevel: 'BS', department: 'Department of Basic Sciences & Humanities', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Chemistry', degreeLevel: 'BS', department: 'Department of Basic Sciences & Humanities', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Environmental Sciences', degreeLevel: 'BS', department: 'Department of Basic Sciences & Humanities', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'MS Mathematics', degreeLevel: 'MS', department: 'Department of Basic Sciences & Humanities', session2023: false, supportedShifts: ['Evening'] },
-      { name: 'MS Physics', degreeLevel: 'MS', department: 'Department of Basic Sciences & Humanities', session2023: false, supportedShifts: ['Evening'] },
+      { name: 'MS Mathematics', degreeLevel: 'MS', department: 'Department of Basic Sciences & Humanities', session2023: true, supportedShifts: ['Evening'] },
+      { name: 'MS Physics', degreeLevel: 'MS', department: 'Department of Basic Sciences & Humanities', session2023: true, supportedShifts: ['Evening'] },
     ],
   },
 ];

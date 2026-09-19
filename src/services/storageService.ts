@@ -304,51 +304,42 @@ export class StorageService {
     customRecords?: SubmissionRecord[]
   ): string[] {
     const roster = this.getAllSessionRoster(sessionName);
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) =>
+        d.name.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+        d.code.trim().toLowerCase() === departmentName.trim().toLowerCase()
+    );
     if (!dept) return [];
 
     let activePrograms: string[] = [];
-    const is2023 = sessionName === '2023' || sessionName.includes('23');
 
-    // 1. If coordinator/HOD configured a roster for this department and session in database:
-    const configuredKey = Object.keys(roster).find(k => k.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    // 1. If coordinator/HOD/Admin configured a roster for this department and session in database:
+    const configuredKey = Object.keys(roster).find(
+      (k) =>
+        k.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+        k.trim().toLowerCase() === dept.code.trim().toLowerCase() ||
+        k.trim().toLowerCase() === dept.name.trim().toLowerCase()
+    );
+
     let isConfigured = false;
-    if (configuredKey && Array.isArray(roster[configuredKey])) {
+    if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
       isConfigured = true;
-      activePrograms = roster[configuredKey].filter((progName) => {
-        const pObj = dept.programs.find((p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase());
-        if (!pObj) return true;
-        // In Session 2023, exclude programs marked session2023: false unless they have genuine submissions
-        if (is2023 && pObj.session2023 === false) {
-          const records = customRecords || StorageService.getAllSubmissions();
-          const hasSub = records.some(
-            (r) =>
-              r.department &&
-              r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() &&
-              (r.session || '2023').trim() === sessionName.trim() &&
-              r.program &&
-              r.program.trim().toLowerCase() === progName.trim().toLowerCase()
-          );
-          return hasSub;
-        }
-        return true;
-      });
+      // Preserve all programs explicitly selected in the roster
+      activePrograms = [...roster[configuredKey]];
     } else {
-      // 2. Default coordinator template: For Session 2023, only programs where session2023 === true!
-      activePrograms = dept.programs
-        .filter((p) => (is2023 ? p.session2023 !== false : true))
-        .map((p) => p.name);
+      // 2. Default coordinator template: Include all official programs of the department
+      activePrograms = dept.programs.map((p) => p.name);
     }
 
-    // 3. Dynamic Database inclusion: If any submission record exists in the database for this program in this session,
-    // it is DEFINITELY an active program for this session! (Only run if NOT explicitly configured by the user to avoid overriding custom excludes)
-    if (!isConfigured) {
-      try {
-        const records = customRecords || this.getAllSubmissions();
+    // 3. Dynamic Database & Account inclusion: If any submission record or account assignment exists for a program in this session
+    try {
+      const records = customRecords || this.getAllSubmissions();
       records.forEach((r) => {
         if (
           r.department &&
-          r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() &&
+          (r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+            r.department.trim().toLowerCase() === dept.code.trim().toLowerCase() ||
+            r.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) &&
           (r.session || '2023').trim() === sessionName.trim()
         ) {
           if (r.program && !activePrograms.includes(r.program.trim())) {
@@ -357,7 +348,6 @@ export class StorageService {
         }
       });
     } catch (e) {}
-    }
 
     return activePrograms;
   }

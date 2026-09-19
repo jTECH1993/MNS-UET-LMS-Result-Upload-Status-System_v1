@@ -129,8 +129,36 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
 
     // Build nested tree structure for every department and program
     Object.values(departmentsMap).forEach((deptNode) => {
-      Object.values(deptNode.programs).forEach((progNode) => {
+      Object.keys(deptNode.programs).forEach((progName) => {
+        const progNode = deptNode.programs[progName];
+
         targetSessions.forEach((sessId) => {
+          const activeProgramsForSession = StorageService.getSessionPrograms(
+            deptNode.name,
+            sessId,
+            allRecords
+          );
+
+          // Check if this program is enrolled/active in this session or has records
+          const isEnrolledInSession = activeProgramsForSession.some(
+            (p) => p.trim().toLowerCase() === progNode.name.trim().toLowerCase()
+          );
+
+          const hasRecordsInSession = allRecords.some(
+            (r) =>
+              r &&
+              r.department &&
+              r.program &&
+              StorageService._isDeptMatch(deptNode.name, r.department) &&
+              StorageService._isProgMatch(progNode.name, r.program) &&
+              ((r.session || '2023').trim() === sessId || (r.session || '2023').includes(sessId))
+          );
+
+          // Only include this session for the program if it is selected/enrolled in this session or has submissions
+          if (!isEnrolledInSession && !hasRecordsInSession) {
+            return;
+          }
+
           const sessKey = `Session ${sessId}`;
           const sessNode: SessionNode = {
             id: `sess_${progNode.id}_${sessId}`,
@@ -271,8 +299,13 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
           progNode.uploadedCourses += sessNode.uploadedCourses;
         });
 
-        deptNode.totalCourses += progNode.totalCourses;
-        deptNode.uploadedCourses += progNode.uploadedCourses;
+        if (Object.keys(progNode.sessions).length > 0) {
+          deptNode.totalCourses += progNode.totalCourses;
+          deptNode.uploadedCourses += progNode.uploadedCourses;
+        } else {
+          // Remove program if it has no active sessions for current session filter
+          delete deptNode.programs[progName];
+        }
       });
     });
 
