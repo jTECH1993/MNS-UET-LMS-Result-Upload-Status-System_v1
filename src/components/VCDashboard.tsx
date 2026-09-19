@@ -214,6 +214,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
   // Handler for "Find the Bottleneck" button
   const handleFindBottleneck = () => {
+    // Automatically switch to the Executive Command Center tab
+    setDashboardViewMode('COMMAND_CENTER');
+
     const p = institutionalBottleneck.primary;
     setRadarDrillPath({
       deptName: p.department,
@@ -246,13 +249,16 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       sectionId: p.section.replace('Section ', '').trim(),
     });
 
-    const el = document.getElementById('university-completion-radar');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    setTimeout(() => {
+      const el = document.getElementById('university-completion-radar');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleJumpToBottleneck = (info: BottleneckInfo) => {
+    setDashboardViewMode('COMMAND_CENTER');
     setRadarDrillPath({
       deptName: info.department,
       progName: info.program,
@@ -260,10 +266,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       sectionId: info.section.replace('Section ', '').trim(),
     });
     setHighlightedBottleneckSection(info.section);
-    const el = document.getElementById('university-completion-radar');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    setTimeout(() => {
+      const el = document.getElementById('university-completion-radar');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   // Decoupled Academic Hierarchy Engine (One-to-many Department -> Programs -> Sections -> Courses)
