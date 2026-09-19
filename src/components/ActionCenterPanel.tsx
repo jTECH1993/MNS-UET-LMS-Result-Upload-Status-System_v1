@@ -24,12 +24,16 @@ import {
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { DirectiveService, InstitutionalDirective } from '../services/directiveService';
 import { StorageService } from '../services/storageService';
+import { VCExecutiveSummaryPanel } from './VCExecutiveSummaryPanel';
 
 interface Props {
   allRecords: any[];
 }
 
 export function ActionCenterPanel({ allRecords }: Props) {
+  // Sub-tab view mode inside Action Center
+  const [activeSubTab, setActiveSubTab] = useState<'DASHBOARD' | 'EXECUTIVE_SUMMARY'>('DASHBOARD');
+
   // Filters
   const [selectedSession, setSelectedSession] = useState<string>('Fall 2025');
   const [selectedExamStage, setSelectedExamStage] = useState<string>('Mid Exams');
@@ -275,8 +279,54 @@ export function ActionCenterPanel({ allRecords }: Props) {
         </div>
       </div>
 
-      {/* 2. TOP EXECUTIVE METRIC CARDS (4 CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Action Center Navigation Sub-Tabs */}
+      <div className="flex items-center justify-between gap-3 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('DASHBOARD')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'DASHBOARD'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            <span>Compliance Dashboard</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('EXECUTIVE_SUMMARY')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'EXECUTIVE_SUMMARY'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-amber-400" />
+            <span>📋 VC Executive Summary</span>
+          </button>
+        </div>
+
+        {activeSubTab === 'DASHBOARD' && (
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('EXECUTIVE_SUMMARY')}
+            className="hidden sm:flex items-center gap-1.5 text-xs font-extrabold text-indigo-400 hover:text-indigo-300 px-3 py-1.5 rounded-lg bg-indigo-950/60 border border-indigo-800/60 transition-all cursor-pointer"
+          >
+            <span>Generate Copyable Summary</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {activeSubTab === 'EXECUTIVE_SUMMARY' ? (
+        <VCExecutiveSummaryPanel allRecords={allRecords} />
+      ) : (
+        <>
+          {/* 2. TOP EXECUTIVE METRIC CARDS (4 CARDS) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Card 1: Results Uploaded */}
         <div className="p-4 rounded-2xl bg-slate-900/90 border border-indigo-500/30 hover:border-indigo-500/60 transition-all shadow-lg relative overflow-hidden group">
@@ -690,6 +740,8 @@ export function ActionCenterPanel({ allRecords }: Props) {
           </button>
         </div>
       </div>
+    </>
+  )}
 
       {/* MODAL: DISPATCH EXECUTIVE DIRECTIVE ORDER */}
       {isNewDirectiveModalOpen && (
