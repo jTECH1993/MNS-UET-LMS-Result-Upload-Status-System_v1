@@ -433,6 +433,9 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
                     labelFormatter={(label, items) => {
                       if (items && items[0] && items[0].payload) {
                         const p = items[0].payload;
+                        if (p.Uploaded === 0 || p.Percentage === 0) {
+                          return `⚠️ ${p.fullName} (${p.deptCode}) • 🚨 0% MISSING SUBMISSIONS`;
+                        }
                         return `${p.fullName} (${p.deptCode}) • ${p.Percentage}% Done`;
                       }
                       return label;
@@ -455,10 +458,16 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
                   <Bar
                     dataKey="Pending"
                     name="Pending Courses"
-                    fill="#dc2626"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={28}
-                  />
+                  >
+                    {programGroupedData.map((entry, idx) => (
+                      <Cell
+                        key={`cell-prog-${idx}`}
+                        fill={entry.Uploaded === 0 ? '#dc2626' : '#f59e0b'}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}

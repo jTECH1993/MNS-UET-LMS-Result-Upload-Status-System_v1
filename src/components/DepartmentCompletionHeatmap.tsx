@@ -24,10 +24,11 @@ export const DepartmentCompletionHeatmap: React.FC<Props> = ({
     if (pct >= 90) return 'bg-emerald-600 dark:bg-emerald-500';
     if (pct >= 70) return 'bg-blue-600 dark:bg-blue-500';
     if (pct >= 50) return 'bg-amber-500 dark:bg-amber-400';
-    return 'bg-rose-600 dark:bg-rose-500';
+    return 'bg-rose-600 dark:bg-rose-500 font-bold';
   };
 
   const getBadgeColor = (pct: number) => {
+    if (pct === 0) return 'text-white bg-rose-600 dark:bg-rose-600 border-rose-700 dark:border-rose-700 font-black animate-pulse shadow-2xs';
     if (pct >= 90) return 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
     if (pct >= 70) return 'text-blue-700 bg-blue-50 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800';
     if (pct >= 50) return 'text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800';

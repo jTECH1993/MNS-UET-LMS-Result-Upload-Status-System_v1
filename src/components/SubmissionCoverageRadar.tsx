@@ -537,8 +537,17 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                       {/* Academic Unit Label (Left Y-Axis) */}
                       <div className="w-full sm:w-64 shrink-0 flex items-center justify-between sm:justify-start gap-2">
                         <div className="flex flex-col min-w-0 pr-1">
-                          <span className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-blue-300 transition-colors truncate">
-                            {unit.name}
+                          <span className={`text-xs sm:text-sm font-semibold transition-colors truncate flex items-center gap-1.5 ${
+                            unit.submitted === 0
+                              ? 'text-rose-400 font-bold group-hover:text-rose-300'
+                              : 'text-slate-200 group-hover:text-blue-300'
+                          }`}>
+                            {unit.submitted === 0 && (
+                              <span className="text-[9px] font-black bg-rose-600 text-white px-1.5 py-0.2 rounded shrink-0 animate-pulse">
+                                0% MISSING
+                              </span>
+                            )}
+                            <span className="truncate">{unit.name}</span>
                           </span>
                           <div className="text-[10px] text-slate-400 flex items-center gap-1.5 truncate mt-0.5">
                             <span>
@@ -557,7 +566,7 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                         <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0" />
                       </div>
 
-                      {/* Stacked Horizontal Bar (Submitted in Blue #4f79ec, Pending in Green #5cb874) */}
+                      {/* Stacked Horizontal Bar (Submitted in Blue #4f79ec, Pending in Green #5cb874 or Red #dc2626 if 0%) */}
                       <div className="flex-1 relative">
                         {/* Background guide track */}
                         <div className="w-full h-8 sm:h-9 bg-slate-900/90 rounded-lg overflow-hidden flex items-center p-0.5 border border-slate-800/80 relative shadow-inner">
@@ -592,18 +601,23 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                               </div>
                             )}
 
-                            {/* Green Segment: Pending */}
+                            {/* Green or Red Segment: Pending */}
                             {unit.pending > 0 && (
                               <div
-                                className="h-full bg-[#5cb874] hover:bg-[#68c781] transition-colors flex items-center justify-end px-2"
+                                className={`h-full transition-colors flex items-center justify-end px-2 ${
+                                  unit.submitted === 0
+                                    ? 'bg-rose-600 hover:bg-rose-700 text-white' // Solid red for 0% upload progress (Missing Submissions)
+                                    : 'bg-[#5cb874] hover:bg-[#68c781]'
+                                }`}
                                 style={{
                                   width: `${(unit.pending / (unit.submitted + unit.pending || 1)) * 100}%`,
                                 }}
-                                title={`${unit.pending} Pending`}
+                                title={`${unit.pending} Pending ${unit.submitted === 0 ? '(0% Uploaded - Missing Submissions!)' : ''}`}
                               >
                                 {pendingPct > 8 && (
-                                  <span className="text-[11px] font-bold text-white font-mono drop-shadow">
-                                    {unit.pending}
+                                  <span className="text-[11px] font-bold text-white font-mono drop-shadow flex items-center gap-1">
+                                    {unit.submitted === 0 && <AlertCircle className="w-3 h-3 text-white" />}
+                                    {unit.pending} {unit.submitted === 0 ? 'MISSING' : ''}
                                   </span>
                                 )}
                               </div>
@@ -616,16 +630,21 @@ export const SubmissionCoverageRadar: React.FC<Props> = ({
                       <div className="hidden md:flex items-center justify-end gap-2 w-36 shrink-0 text-right">
                         {unit.total > 0 ? (
                           <>
-                            <span className="text-xs font-bold text-slate-200 font-mono">
+                            <span className={`text-xs font-bold font-mono ${unit.submitted === 0 ? 'text-rose-400 font-black' : 'text-slate-200'}`}>
                               {unit.completionRate}%
                             </span>
-                            <span className="text-[11px] text-slate-400 font-mono">
+                            <span className={`text-[11px] font-mono ${unit.submitted === 0 ? 'text-rose-300 font-bold' : 'text-slate-400'}`}>
                               ({unit.submitted}/{unit.total})
                             </span>
+                            {unit.submitted === 0 && (
+                              <span className="text-[9px] font-extrabold uppercase bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded">
+                                MISSING
+                              </span>
+                            )}
                           </>
                         ) : (
-                          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/60">
-                            Awaiting Upload
+                          <span className="text-[10px] font-semibold text-rose-400 uppercase tracking-wide bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/80">
+                            0% - Missing Submissions
                           </span>
                         )}
                       </div>
