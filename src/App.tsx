@@ -19,6 +19,8 @@ import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
+import { RolePerspectiveComparisonModal } from './components/RolePerspectiveComparisonModal';
+import { UserAccount } from './types';
 import {
   CheckCircle2,
   Database,
@@ -37,6 +39,11 @@ import {
   Sparkles,
   Calendar,
   Ban,
+  Eye,
+  HelpCircle,
+  ArrowRight,
+  Shield,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function App() {
@@ -83,6 +90,11 @@ export default function App() {
   const [isDataMigrationModalOpen, setIsDataMigrationModalOpen] = useState<boolean>(false);
   const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
+
+  // Admin Role Preview Simulation Mode: Allows System Admin to view page exactly as HOD or Coordinator
+  const [adminPreviewMode, setAdminPreviewMode] = useState<'OFF' | 'HOD' | 'COORDINATOR'>('OFF');
+  const [simulatedAccount, setSimulatedAccount] = useState<UserAccount | null>(null);
 
   // Initialize theme on app boot
   useEffect(() => {
@@ -337,6 +349,56 @@ export default function App() {
     return <AuthScreen onAuthenticated={handleAuthenticated} />;
   }
 
+  const isRootAdmin = currentUser.role === 'ADMIN';
+
+  // Compute effective user session based on Admin Simulator Mode
+  const effectiveUser: ActiveUserSession = (() => {
+    if (!isRootAdmin) return currentUser;
+
+    if (simulatedAccount) {
+      return {
+        id: simulatedAccount.id,
+        username: simulatedAccount.username,
+        name: `${simulatedAccount.name} [Simulated ${simulatedAccount.role}]`,
+        email: simulatedAccount.email,
+        role: simulatedAccount.role,
+        department: simulatedAccount.department || targetDept,
+        program: simulatedAccount.program || targetProg,
+        assignedPrograms: simulatedAccount.assignedPrograms || (simulatedAccount.program ? [simulatedAccount.program] : [targetProg]),
+        assignedShifts: simulatedAccount.assignedShifts,
+        programShiftAssignments: simulatedAccount.programShiftAssignments,
+        designation: simulatedAccount.designation,
+        approvalStatus: simulatedAccount.approvalStatus || 'APPROVED',
+        avatarUrl: simulatedAccount.avatarUrl,
+      };
+    }
+
+    if (adminPreviewMode === 'HOD') {
+      return {
+        ...currentUser,
+        role: 'HOD',
+        department: targetDept,
+        name: `${currentUser.name} (HOD Simulation)`,
+        designation: `Head of Department - ${targetDept}`,
+      };
+    }
+
+    if (adminPreviewMode === 'COORDINATOR') {
+      return {
+        ...currentUser,
+        role: 'COORDINATOR',
+        department: targetDept,
+        program: targetProg,
+        assignedPrograms: [targetProg],
+        approvalStatus: 'APPROVED',
+        name: `${currentUser.name} (Coordinator Simulation)`,
+        designation: `Program Coordinator - ${targetProg}`,
+      };
+    }
+
+    return currentUser;
+  })();
+
   const selectedDeptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name === targetDept);
   const selectedProgObj = selectedDeptObj?.programs.find((p) => p.name === targetProg);
   const targetDegreeLevel = selectedProgObj?.degreeLevel || 'BS';
@@ -351,12 +413,12 @@ export default function App() {
     targetAcademicSection
   );
 
-  const isAdmin = currentUser.role === 'ADMIN';
-  const isVC = currentUser.role === 'VC';
-  const isCoordinator = currentUser.role === 'COORDINATOR';
-  const isLecturer = currentUser.role === 'LECTURER';
-  const isVisitingLecturer = currentUser.role === 'VISITING_LECTURER';
-  const isHOD = currentUser.role === 'HOD';
+  const isAdmin = effectiveUser.role === 'ADMIN';
+  const isVC = effectiveUser.role === 'VC';
+  const isCoordinator = effectiveUser.role === 'COORDINATOR';
+  const isLecturer = effectiveUser.role === 'LECTURER';
+  const isVisitingLecturer = effectiveUser.role === 'VISITING_LECTURER';
+  const isHOD = effectiveUser.role === 'HOD';
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex font-sans transition-colors duration-200">
@@ -366,7 +428,7 @@ export default function App() {
         onSelectModule={(mod) => {
           setActiveModule(mod);
           if (mod === 'LMS') {
-            if (currentUser.role === 'VC') {
+            if (effectiveUser.role === 'VC') {
               setActiveView('VC');
               setIsInspectionMode(false);
             }
@@ -375,13 +437,13 @@ export default function App() {
         activeView={activeView}
         onViewChange={(view) => {
           setActiveView(view);
-          if (view === 'HOD' && currentUser.role === 'VC') {
+          if (view === 'HOD' && effectiveUser.role === 'VC') {
             setIsInspectionMode(true);
           } else if (view === 'VC') {
             setIsInspectionMode(false);
           }
         }}
-        currentUser={currentUser}
+        currentUser={effectiveUser}
         currentSession={targetSession}
         isOpenMobile={isSidebarOpenMobile}
         onCloseMobile={() => setIsSidebarOpenMobile(false)}
@@ -397,7 +459,7 @@ export default function App() {
           activeView={activeView}
           onViewChange={(view) => {
             setActiveView(view);
-            if (view === 'HOD' && currentUser.role === 'VC') {
+            if (view === 'HOD' && effectiveUser.role === 'VC') {
               setIsInspectionMode(true);
             } else if (view === 'VC') {
               setIsInspectionMode(false);
@@ -408,7 +470,7 @@ export default function App() {
           onOpenDataMigrationModal={() => setIsDataMigrationModalOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           onLogout={handleLogout}
-          currentUser={currentUser}
+          currentUser={effectiveUser}
           savedCount={allRecords.length}
           currentSession={targetSession}
           currentSemester={targetSemester}
@@ -418,9 +480,115 @@ export default function App() {
 
         {/* Main Container */}
         <main className="max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
+          {/* Admin Role Simulation & Perspective Guide Bar (Visible to Administrator) */}
+          {isRootAdmin && (
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-xl border border-indigo-500/30 shadow-md flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold flex items-center gap-2">
+                    <span>Admin Role Simulator:</span>
+                    {adminPreviewMode === 'OFF' && !simulatedAccount && (
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide">
+                        Master Admin View (Full Access)
+                      </span>
+                    )}
+                    {adminPreviewMode === 'HOD' && (
+                      <span className="bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1">
+                        <Building className="w-3 h-3" />
+                        Simulating HOD Page ({targetDept})
+                      </span>
+                    )}
+                    {adminPreviewMode === 'COORDINATOR' && (
+                      <span className="bg-teal-500/30 text-teal-300 border border-teal-400/40 px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1">
+                        <GraduationCap className="w-3 h-3" />
+                        Simulating Coordinator Page ({targetProg})
+                      </span>
+                    )}
+                    {simulatedAccount && (
+                      <span className="bg-amber-500/30 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded text-[10px] font-extrabold flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        Simulating Account: {simulatedAccount.name} ({simulatedAccount.role})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-300">
+                    Switch between HOD and Coordinator views to experience their page layout, banners, and access controls in real time.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* View Switch Buttons */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulatedAccount(null);
+                    setAdminPreviewMode('OFF');
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    adminPreviewMode === 'OFF' && !simulatedAccount
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  title="Switch to Full Institutional Admin View"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Admin Master</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulatedAccount(null);
+                    setAdminPreviewMode('HOD');
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    adminPreviewMode === 'HOD'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  title="Simulate Head of Department (HOD) page with department isolation and delegation tools"
+                >
+                  <Building className="w-3.5 h-3.5" />
+                  <span>Preview HOD Page</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulatedAccount(null);
+                    setAdminPreviewMode('COORDINATOR');
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    adminPreviewMode === 'COORDINATOR'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  title="Simulate Program Coordinator page with strict program isolation and HOD notification banner"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Preview Coordinator Page</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsComparisonModalOpen(true)}
+                  className="px-2.5 py-1.5 bg-indigo-900/60 hover:bg-indigo-800 border border-indigo-400/40 text-indigo-200 font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Open visual breakdown of HOD vs Coordinator interface features"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Comparison Guide</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeModule === 'WORK_ON_DEMAND' ? (
             <WorkOnDemandView
-              currentUser={currentUser}
+              currentUser={effectiveUser}
               currentSession={targetSession}
               onSwitchToLMS={() => setActiveModule('LMS')}
               onOpenDatabaseModal={() => setIsFirebaseModalOpen(true)}
@@ -929,7 +1097,7 @@ export default function App() {
         {/* View Switching: HOD Entry Form (Read-only for VC / Inspection) or VC Dashboard */}
         {activeView === 'HOD' ? (
           <HODEntryForm
-            readOnly={currentUser.role === 'VC' || isInspectionMode}
+            readOnly={effectiveUser.role === 'VC' || (isInspectionMode && !isRootAdmin)}
             onRecordSavedOrDeleted={reloadRecords}
             selectedDepartmentProp={targetDept}
             selectedProgramProp={targetProg}
@@ -943,7 +1111,7 @@ export default function App() {
             onDepartmentChangedProp={(newDept) => setTargetDept(newDept)}
             onProgramChangedProp={(newProg) => setTargetProg(newProg)}
             onShiftChangedProp={(newShift) => setTargetShift(newShift)}
-            currentUser={currentUser}
+            currentUser={effectiveUser}
             onOpenUserModal={() => setIsUserModalOpen(true)}
             onSwitchToVC={() => {
               setIsInspectionMode(false);
@@ -1029,12 +1197,28 @@ export default function App() {
       />
 
       {/* Admin User Accounts Management Modal */}
-      {isAdmin && (
+      {isRootAdmin && (
         <UserAccountsModal
           isOpen={isUserAccountsModalOpen}
           onClose={() => setIsUserAccountsModalOpen(false)}
+          onPreviewUser={(acc) => {
+            setSimulatedAccount(acc);
+            setAdminPreviewMode('OFF');
+            if (acc.department) setTargetDept(acc.department);
+            if (acc.program) setTargetProg(acc.program);
+          }}
         />
       )}
+
+      {/* Role Perspective Comparison Modal (Admin reference) */}
+      <RolePerspectiveComparisonModal
+        isOpen={isComparisonModalOpen}
+        onClose={() => setIsComparisonModalOpen(false)}
+        onSelectPreviewMode={(mode) => {
+          setSimulatedAccount(null);
+          setAdminPreviewMode(mode);
+        }}
+      />
 
       {/* Database Schema & Danger Zone Modal (Admin only) */}
       {isAdmin && (

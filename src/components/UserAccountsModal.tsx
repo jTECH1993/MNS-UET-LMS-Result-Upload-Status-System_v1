@@ -16,14 +16,20 @@ import {
   XCircle,
   Sun,
   Moon,
+  Eye,
 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  onPreviewUser?: (account: UserAccount) => void;
 }
 
-export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
+export const UserAccountsModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onPreviewUser,
+}) => {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [feedback, setFeedback] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -434,6 +440,19 @@ export const UserAccountsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             </div>
                           ) : (
                             <div className="flex items-center justify-end gap-1">
+                              {onPreviewUser && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onPreviewUser(acc);
+                                    onClose();
+                                  }}
+                                  className="p-1.5 text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  title={`Preview portal UI exactly as ${acc.name} (${acc.role})`}
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
