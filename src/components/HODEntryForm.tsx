@@ -25,6 +25,7 @@ import { BulkCourseImportModal } from './BulkCourseImportModal';
 import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
 import { RequestAdditionalProgramModal } from './RequestAdditionalProgramModal';
 import { ChangeHistoryModal } from './ChangeHistoryModal';
+import { DepartmentExportModal } from './DepartmentExportModal';
 import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import {
@@ -381,6 +382,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [userProgramRequests, setUserProgramRequests] = useState<ProgramAccessRequest[]>([]);
   const [isReqProgModalOpen, setIsReqProgModalOpen] = useState<boolean>(false);
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const isPendingCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'PENDING';
   const isRejectedCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'REJECTED';
 
@@ -1930,6 +1932,18 @@ export const HODEntryForm: React.FC<Props> = ({
             <Layers className="w-3.5 h-3.5 text-slate-500" />
             <span>SEMESTER {semester}</span>
           </span>
+
+          {/* Export Department / Program Official Records (PDF / CSV) */}
+          <button
+            id="btn-export-department-report-top"
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            title="Download verified departmental results as CSV or print official signed PDF records"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export (PDF / CSV)</span>
+          </button>
 
           {/* VC View Link: Return button if read-only, otherwise switch link */}
           {onSwitchToVC && (currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') && (
@@ -4338,16 +4352,28 @@ export const HODEntryForm: React.FC<Props> = ({
               </button>
             </div>
 
-            {/* CSV Export for this program */}
-            <div className="flex items-center gap-2">
+            {/* Export options for this department & program */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                id="btn-export-department-report-bottom"
+                type="button"
+                onClick={() => setIsExportModalOpen(true)}
+                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                title="Open official department PDF and CSV export modal"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Department (PDF / CSV)</span>
+              </button>
+
               <button
                 id="btn-export-program-csv"
                 type="button"
                 onClick={handleExportCurrent}
-                className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                title="Quick download CSV for current section"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span>Export Program CSV</span>
+                <span>Quick CSV</span>
               </button>
             </div>
           </>
@@ -4712,6 +4738,24 @@ export const HODEntryForm: React.FC<Props> = ({
           }}
         />
       )}
+
+      {/* Department & Program Result Export Modal (PDF / CSV) */}
+      <DepartmentExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        department={department}
+        program={program}
+        degreeLevel={degreeLevel}
+        shift={shift}
+        section={section}
+        session={session}
+        semester={semester}
+        hodCoordinator={hodCoordinator}
+        submissionDate={submissionDate}
+        currentSubjects={subjects}
+        currentRecord={loadedRecord}
+        currentUser={currentUser}
+      />
     </div>
   );
 };

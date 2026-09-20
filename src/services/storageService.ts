@@ -1818,6 +1818,23 @@ export class StorageService {
     };
   }
 
+  // Get all submissions for a specific department
+  public static getDepartmentSubmissions(department: string, session?: string): SubmissionRecord[] {
+    const all = this.getAllSubmissions();
+    return all.filter((r) => {
+      const matchDept = this._isDeptMatch(department, r.department);
+      const matchSess = session ? String(r.session || '2023').trim() === String(session).trim() : true;
+      return matchDept && matchSess;
+    });
+  }
+
+  // Export specific department's result data to CSV
+  public static exportDepartmentCSV(department: string, session?: string, customRecords?: SubmissionRecord[]): void {
+    const records = customRecords || this.getDepartmentSubmissions(department, session);
+    const filename = `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_LMS_Results_${session || 'AllSessions'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    this.exportCSV(records, filename);
+  }
+
   // Export university master records to CSV (or custom records)
   public static exportCSV(customRecords?: SubmissionRecord[], filename?: string): void {
     const records = customRecords || this.getAllSubmissions();

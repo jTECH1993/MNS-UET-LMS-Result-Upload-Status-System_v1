@@ -35,6 +35,7 @@ import { SubmissionTrendCard } from './SubmissionTrendCard';
 import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { UniversityDigitalTwin } from './UniversityDigitalTwin';
+import { CircularProgress } from './CircularProgress';
 import {
   CompletionRadarService,
   BottleneckInfo,
@@ -787,6 +788,61 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       };
     });
   }, [allUniversityPrograms, selectedSemesterFilter]);
+
+  // Filtered department list for Matrix based on search query (by Department Name, Code, Program, or Coordinator)
+  const filteredDepartmentStats = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return departmentStats;
+
+    return departmentStats.filter((dept) => {
+      if (
+        dept.deptName.toLowerCase().includes(query) ||
+        dept.deptCode.toLowerCase().includes(query)
+      ) {
+        return true;
+      }
+
+      // Check if any program in this department matches the query
+      const deptPrograms = allUniversityPrograms.filter((p) => p.department === dept.deptName);
+      for (const prog of deptPrograms) {
+        if (
+          prog.program.toLowerCase().includes(query) ||
+          prog.degreeLevel.toLowerCase().includes(query)
+        ) {
+          return true;
+        }
+
+        const checkRecords = [
+          ...Object.values(prog.shifts.Morning.semesterRecords),
+          ...Object.values(prog.shifts.Evening.semesterRecords),
+        ].filter(Boolean) as SubmissionRecord[];
+
+        for (const rec of checkRecords) {
+          if (
+            rec.hodCoordinator?.toLowerCase().includes(query) ||
+            rec.accessedBy?.toLowerCase().includes(query) ||
+            rec.userDesignation?.toLowerCase().includes(query)
+          ) {
+            return true;
+          }
+          if (rec.subjects && Array.isArray(rec.subjects)) {
+            for (const s of rec.subjects) {
+              if (
+                s.courseCode?.toLowerCase().includes(query) ||
+                s.subjectTitle?.toLowerCase().includes(query) ||
+                s.uploadedBy?.toLowerCase().includes(query) ||
+                s.remarks?.toLowerCase().includes(query)
+              ) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+
+      return false;
+    });
+  }, [departmentStats, searchQuery, allUniversityPrograms]);
 
   // Filtered program list (Single Row Per Program)
   const filteredPrograms = useMemo(() => {
@@ -2224,8 +2280,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       {/* Vice Chancellor Executive Productivity Suite: Department Performance & Compliance Matrix */}
       <div className="bg-white rounded-lg border border-slate-300 shadow-2xs overflow-hidden">
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <Building2 className="w-4 h-4 text-indigo-700" />
             <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight uppercase">
               Department Compliance &amp; Accountability Matrix
@@ -2233,103 +2289,165 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <span className="text-[10px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
               Executive Oversight
             </span>
+            {searchQuery && (
+              <span className="text-[10px] bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                <span>Matching &quot;{searchQuery}&quot; ({filteredDepartmentStats.length} Depts)</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="hover:text-emerald-950 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-slate-500">
-            Click any department card to filter results instantly
-          </span>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                id="input-search-departments-quick"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search dept, program, coordinator..."
+                className="w-full pl-8 pr-7 py-1 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                  title="Clear search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-500 hidden md:inline shrink-0">
+              Click any card to inspect
+            </span>
+          </div>
         </div>
 
         <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-          {departmentStats.map((dept) => {
-            const isSelected = selectedDeptFilter === dept.deptName;
-            const hasData = dept.totalSubjects > 0;
-            const isFull = hasData && dept.percentage === 100;
-            const isPartial = hasData && dept.percentage > 0 && dept.percentage < 100;
-
-            return (
-              <div
-                key={dept.deptCode}
-                onClick={() => {
-                  setSelectedDeptFilter(isSelected ? 'ALL' : dept.deptName);
-                  setTimeout(() => {
-                    document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 100);
-                }}
-                className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between group ${
-                  isSelected
-                    ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'
-                    : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs'
-                }`}
+          {filteredDepartmentStats.length === 0 ? (
+            <div className="col-span-full py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-300 p-4">
+              <p className="font-semibold text-slate-600">No departments or programs match &quot;{searchQuery}&quot;.</p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="mt-2 text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
               >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors">
-                      {dept.deptCode}
-                    </span>
-                    {isFull ? (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-300">
-                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
-                        100% Complete
-                      </span>
-                    ) : isPartial ? (
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-amber-300">
-                        <Clock className="w-2.5 h-2.5 text-amber-700" />
-                        {dept.totalPending} Pending
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {dept.programsCount} Programs
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-[11px] font-semibold text-slate-700 line-clamp-1" title={dept.deptName}>
-                    {dept.deptName}
-                  </h4>
-                </div>
+                Clear Search Filter
+              </button>
+            </div>
+          ) : (
+            filteredDepartmentStats.map((dept) => {
+              const isSelected = selectedDeptFilter === dept.deptName;
+              const hasData = dept.totalSubjects > 0;
+              const isFull = hasData && dept.percentage === 100;
+              const isPartial = hasData && dept.percentage > 0 && dept.percentage < 100;
 
-                <div className="mt-2.5 pt-2 border-t border-slate-200/80">
-                  <div className="flex flex-col gap-0.5 mb-1.5">
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      Course Sheets: <strong className="text-slate-800">{dept.submittedCohorts}</strong> Submitted
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      {dept.totalSubjects > 0 
-                        ? `Courses: ${dept.totalUploaded} / ${dept.totalSubjects} Uploaded`
-                        : 'Courses: Awaiting Data Entry'}
-                    </span>
+              return (
+                <div
+                  key={dept.deptCode}
+                  onClick={() => {
+                    setSelectedDeptFilter(isSelected ? 'ALL' : dept.deptName);
+                    setTimeout(() => {
+                      document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
+                  className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between group ${
+                    isSelected
+                      ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'
+                      : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        {/* Circular Progress Indicator next to department name */}
+                        <CircularProgress
+                          percentage={dept.percentage}
+                          size={34}
+                          strokeWidth={3.5}
+                        />
+                        <div>
+                          <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors block">
+                            {dept.deptCode}
+                          </span>
+                          <h4 className="text-[11px] font-semibold text-slate-700 line-clamp-1" title={dept.deptName}>
+                            {dept.deptName}
+                          </h4>
+                        </div>
+                      </div>
+
+                      {isFull ? (
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-300 shrink-0">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                          100%
+                        </span>
+                      ) : isPartial ? (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-amber-300 shrink-0">
+                          <Clock className="w-2.5 h-2.5 text-amber-700" />
+                          {dept.totalPending} Pend.
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                          {dept.programsCount} Progs
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-baseline justify-between text-[11px] mb-1">
-                    <span className="text-slate-700 font-bold">Genuine Compliance</span>
-                    <span
-                      className={`font-black ${
-                        isFull
-                          ? 'text-emerald-700'
-                          : dept.percentage > 50
-                          ? 'text-indigo-700'
-                          : 'text-slate-700'
-                      }`}
-                    >
-                      {dept.percentage}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        isFull
-                          ? 'bg-emerald-600'
-                          : dept.percentage > 50
-                          ? 'bg-indigo-600'
-                          : dept.percentage > 0
-                          ? 'bg-amber-500'
-                          : 'bg-slate-300'
-                      }`}
-                      style={{ width: `${dept.percentage}%` }}
-                    />
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-200/80">
+                    <div className="flex flex-col gap-0.5 mb-1.5">
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Course Sheets: <strong className="text-slate-800">{dept.submittedCohorts}</strong> Submitted
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        {dept.totalSubjects > 0 
+                          ? `Courses: ${dept.totalUploaded} / ${dept.totalSubjects} Uploaded`
+                          : 'Courses: Awaiting Data Entry'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between text-[11px] mb-1">
+                      <span className="text-slate-700 font-bold">Genuine Compliance</span>
+                      <span
+                        className={`font-black ${
+                          isFull
+                            ? 'text-emerald-700'
+                            : dept.percentage > 50
+                            ? 'text-indigo-700'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        {dept.percentage}%
+                      </span>
+                    </div>
+                    {/* Small progress bar */}
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isFull
+                            ? 'bg-emerald-600'
+                            : dept.percentage > 50
+                            ? 'bg-indigo-600'
+                            : dept.percentage > 0
+                            ? 'bg-amber-500'
+                            : 'bg-slate-300'
+                        }`}
+                        style={{ width: `${dept.percentage}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
