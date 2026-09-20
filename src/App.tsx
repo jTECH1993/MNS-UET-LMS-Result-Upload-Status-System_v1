@@ -121,6 +121,38 @@ export default function App() {
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterModalDept, setRosterModalDept] = useState<string>('Department of Computer Science');
 
+  // Auto-refresh control state
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('mnsuet_auto_refresh_enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleToggleAutoRefresh = (enabled: boolean) => {
+    setIsAutoRefreshEnabled(enabled);
+    try {
+      localStorage.setItem('mnsuet_auto_refresh_enabled', JSON.stringify(enabled));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await StorageService.apiSyncSubmissions();
+      reloadRecords();
+    } catch (err) {
+      console.error('Manual refresh error:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 400);
+    }
+  };
+
   const reloadRecords = () => {
     const list = StorageService.getAllSubmissions();
     setAllRecords(list);
@@ -137,15 +169,19 @@ export default function App() {
       reloadRecords();
     });
     StorageService.logAccess('Accessed MNS-UET Result Portal', targetDept);
-    
-    // Live database data polling (Requirement 2 & 8)
+  }, []);
+
+  // Live database data polling controlled by user toggle
+  useEffect(() => {
+    if (!isAutoRefreshEnabled) return;
+
     const interval = setInterval(() => {
       StorageService.apiSyncSubmissions().then(() => {
         reloadRecords();
       });
     }, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAutoRefreshEnabled]);
 
   // Listen for storage changes, active session switches and roster changes
   useEffect(() => {
@@ -478,6 +514,10 @@ export default function App() {
           currentSemester={targetSemester}
           onToggleMobileSidebar={() => setIsSidebarOpenMobile((prev) => !prev)}
           activeModule={activeModule}
+          isAutoRefreshEnabled={isAutoRefreshEnabled}
+          onToggleAutoRefresh={handleToggleAutoRefresh}
+          onManualRefresh={handleManualRefresh}
+          isRefreshing={isRefreshing}
         />
 
         {/* Main Container */}

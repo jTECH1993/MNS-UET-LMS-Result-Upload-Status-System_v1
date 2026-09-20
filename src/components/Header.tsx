@@ -16,6 +16,10 @@ interface Props {
   currentSemester?: string;
   onToggleMobileSidebar?: () => void;
   activeView?: "VC" | "HOD"; onViewChange?: (v: "VC" | "HOD") => void; activeModule?: 'LMS' | 'WORK_ON_DEMAND';
+  isAutoRefreshEnabled?: boolean;
+  onToggleAutoRefresh?: (enabled: boolean) => void;
+  onManualRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const Header: React.FC<Props> = ({
@@ -30,6 +34,10 @@ export const Header: React.FC<Props> = ({
   currentSemester = '1',
   onToggleMobileSidebar,
   activeModule = 'LMS',
+  isAutoRefreshEnabled = true,
+  onToggleAutoRefresh,
+  onManualRefresh,
+  isRefreshing = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -88,13 +96,64 @@ export const Header: React.FC<Props> = ({
 
   return (
     <header className="bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-800 shadow-xs sticky top-0 z-30 transition-colors">
-      <div className="bg-emerald-900 dark:bg-emerald-950 px-3 py-1 flex items-center justify-between shadow-inner">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
-          <span className="text-[10px] sm:text-xs font-semibold text-emerald-100 tracking-wide">
-            MNS-UET Multan • Session {currentSession} – Semester {currentSemester}
-          </span>
+      <div className="bg-emerald-900 dark:bg-emerald-950 px-3 py-1 flex flex-wrap items-center justify-between gap-2 shadow-inner">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+            <span className="text-[10px] sm:text-xs font-semibold text-emerald-100 tracking-wide">
+              MNS-UET Multan • Session {currentSession} – Semester {currentSemester}
+            </span>
+          </div>
+
+          {/* User-controlled Live Auto-Refresh Toggle */}
+          <div className="flex items-center gap-1.5 bg-emerald-950/90 px-2 py-0.5 rounded-full border border-emerald-600/60 text-emerald-100 text-[10px] sm:text-[11px] shadow-2xs">
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold select-none" title="Toggle automatic 10-second polling of the database">
+              <span className="text-[10px] sm:text-[11px] font-bold text-emerald-100">
+                Live Auto-Refresh
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isAutoRefreshEnabled}
+                onClick={() => onToggleAutoRefresh?.(!isAutoRefreshEnabled)}
+                className={`relative inline-flex h-4 w-7 sm:h-4.5 sm:w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isAutoRefreshEnabled ? 'bg-emerald-400' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-3 w-3 sm:h-3.5 sm:w-3.5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    isAutoRefreshEnabled ? 'translate-x-3 sm:translate-x-3.5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </label>
+            {isAutoRefreshEnabled ? (
+              <span className="flex items-center gap-1 text-[9px] font-mono font-black bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                10s
+              </span>
+            ) : (
+              <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">
+                OFF
+              </span>
+            )}
+          </div>
+
+          {/* Manual Refresh Data Button when Live Auto-Refresh is disabled */}
+          {!isAutoRefreshEnabled && (
+            <button
+              type="button"
+              onClick={onManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1 sm:gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-0.5 sm:px-3 rounded-full border border-amber-500 text-[10px] sm:text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+              title="Click to manually fetch latest database updates and control data usage"
+            >
+              <RefreshCw className={`w-3 h-3 text-slate-950 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Syncing...' : 'Refresh Data'}</span>
+            </button>
+          )}
         </div>
+
         <div className="flex items-center gap-1.5 sm:gap-2 text-[11px]">
           <button onClick={handleToggleTheme} className="flex items-center gap-1.5 bg-emerald-950/90 hover:bg-emerald-800 text-emerald-100 px-2 py-0.5 rounded-full border border-emerald-600/60 transition-all cursor-pointer font-medium">
             {isDark ? (<><Sun className="w-3.5 h-3.5 text-amber-400" /><span className="text-amber-300 font-semibold hidden sm:inline">Day</span></>) : (<><Moon className="w-3.5 h-3.5 text-indigo-300" /><span className="text-indigo-200 font-semibold hidden sm:inline">Night</span></>)}
@@ -134,6 +193,19 @@ export const Header: React.FC<Props> = ({
 
         <div className="hidden md:flex flex-col items-end gap-2 shrink-0">
           <div className="flex items-center gap-1.5">
+            {!isAutoRefreshEnabled && (
+              <button
+                type="button"
+                onClick={onManualRefresh}
+                disabled={isRefreshing}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-lg border border-amber-600 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-60 mr-1"
+                title="Manual Data Sync (Auto-Refresh Disabled)"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-slate-950 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Syncing...' : 'Refresh Data'}</span>
+              </button>
+            )}
+
             {isVC && (
               <div className="flex items-center gap-2 mr-2">
                 <button type="button" className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 shadow-2xs">
@@ -163,6 +235,39 @@ export const Header: React.FC<Props> = ({
             <span>Session: <strong>{currentSession}</strong></span>
             <span>Saved Records: <strong>{savedCount}</strong></span>
           </div>
+
+          <div className="p-2.5 rounded-lg bg-emerald-950/90 border border-emerald-800 text-xs text-emerald-100 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">Live Auto-Refresh (10s)</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isAutoRefreshEnabled}
+                onClick={() => onToggleAutoRefresh?.(!isAutoRefreshEnabled)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isAutoRefreshEnabled ? 'bg-emerald-400' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    isAutoRefreshEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            {!isAutoRefreshEnabled && (
+              <button
+                type="button"
+                onClick={onManualRefresh}
+                disabled={isRefreshing}
+                className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded flex items-center gap-1 shadow-xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <button onClick={onOpenProfileModal} className="py-2 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5"><User className="w-3.5 h-3.5" /> Edit Profile</button>
             <button onClick={handleToggleTheme} className="py-2 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5">{isDark ? <><Sun className="w-3.5 h-3.5 text-amber-500" />Day Mode</> : <><Moon className="w-3.5 h-3.5 text-indigo-500" />Night Mode</>}</button>

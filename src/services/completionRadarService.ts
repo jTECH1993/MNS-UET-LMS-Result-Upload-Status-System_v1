@@ -121,6 +121,14 @@ export class CompletionRadarService {
       if (progName) {
         const cleanProg = progName.trim().toLowerCase();
         
+        // If shift is specified, verify that the program actually supports this shift
+        if (shift) {
+          const supportedShifts = StorageService.getProgramShifts(deptName, progName);
+          if (!supportedShifts.includes(shift)) {
+            return { isAssigned: false, name: 'Shift Not Offered', designation: 'Shift Not Offered' };
+          }
+        }
+
         // Find all coordinators/lecturers for this specific program
         const programCoords = accounts.filter((a) => {
           if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
@@ -363,47 +371,44 @@ export class CompletionRadarService {
     const deadlineInfo = this.getDeadlineInfo();
     const resultUnits: RadarUnit[] = [];
 
+    const globalActiveShifts = StorageService.getGlobalActiveShifts();
+
     activeProgNames.forEach((progName, idx) => {
       const progObj = deptObj?.programs.find(
         (p) => p.name.trim().toLowerCase() === progName.trim().toLowerCase()
       );
 
+      // Program's configured/supported shifts filtered by global active shifts
+      const programAllowedShifts = StorageService.getProgramShifts(deptName, progName);
+      const validShifts = programAllowedShifts.filter((s) => globalActiveShifts.includes(s));
+      const shiftsToEvaluate = validShifts.length > 0 ? validShifts : programAllowedShifts;
+
       let targetShifts: AcademicShift[] = [];
-      const hasEveningRecs = allRecords.some(
-        (r) =>
-          r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
-          r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
-          r.shift === 'Evening'
-      );
-      const hasMorningRecs = allRecords.some(
-        (r) =>
-          r.department.trim().toLowerCase() === deptName.trim().toLowerCase() &&
-          r.program.trim().toLowerCase() === progName.trim().toLowerCase() &&
-          (r.shift || 'Morning') === 'Morning'
-      );
 
-      const coordMorning = this.resolveCoordinator(deptName, progName, 'Morning');
-      const coordEvening = this.resolveCoordinator(deptName, progName, 'Evening');
-
-      const isMorningActive = hasMorningRecs || coordMorning.isAssigned;
-      const isEveningActive = hasEveningRecs || coordEvening.isAssigned;
-
-      if (isMorningActive && isEveningActive) {
-        targetShifts = ['Morning', 'Evening'];
-      } else if (isEveningActive) {
-        targetShifts = ['Evening'];
-      } else if (isMorningActive) {
-        targetShifts = ['Morning'];
+      if (shiftsToEvaluate.length === 1) {
+        targetShifts = [shiftsToEvaluate[0]];
       } else {
-        if (progObj?.degreeLevel === 'B.Tech' || progName.includes('(B.Tech)')) {
-          targetShifts = ['Evening'];
-        } else {
-          targetShifts = ['Morning'];
+        shiftsToEvaluate.forEach((s) => {
+          const hasRecs = allRecords.some(
+            (r) =>
+              StorageService._isDeptMatch(r.department || '', deptName) &&
+              StorageService._isProgMatch(r.program || '', progName) &&
+              (r.shift || 'Morning') === s
+          );
+          const coord = this.resolveCoordinator(deptName, progName, s);
+
+          if (hasRecs || coord.isAssigned) {
+            targetShifts.push(s);
+          }
+        });
+
+        if (targetShifts.length === 0 && shiftsToEvaluate.length > 0) {
+          targetShifts = [shiftsToEvaluate[0]];
         }
       }
 
       if (shiftFilter !== 'ALL') {
-        targetShifts = targetShifts.includes(shiftFilter) ? [shiftFilter] : targetShifts;
+        targetShifts = targetShifts.filter((s) => s === shiftFilter);
       }
 
       targetShifts.forEach((shift) => {
@@ -753,24 +758,30 @@ export class CompletionRadarService {
       const hod = this.resolveHOD(dept.name);
 
       activeProgNames.forEach((progName) => {
-        const coord = this.resolveCoordinator(dept.name, progName);
+        const programShifts = StorageService.getProgramShifts(dept.name, progName);
+        const globalActiveShifts = StorageService.getGlobalActiveShifts();
+        const validShifts = programShifts.filter((s) => globalActiveShifts.includes(s));
+        const shiftsToEvaluate = validShifts.length > 0 ? validShifts : programShifts;
 
-        // Check Semesters (or filtered ones)
-        const targetSems = semList.length > 0
-          ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
-          : ACADEMIC_SEMESTERS;
+        shiftsToEvaluate.forEach((shift) => {
+          const coord = this.resolveCoordinator(dept.name, progName, shift);
 
-        targetSems.forEach((sem) => {
-          const activeSections = StorageService.getAvailableSectionsForCohort(
-            dept.name,
-            progName,
-            sessionList[0] || '2023',
-            sem.id,
-            'Morning'
-          );
+          // Check Semesters (or filtered ones)
+          const targetSems = semList.length > 0
+            ? ACADEMIC_SEMESTERS.filter((s) => semList.includes(s.id))
+            : ACADEMIC_SEMESTERS;
 
-          activeSections.forEach((secId) => {
-            const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, sessionList, allRecords);
+          targetSems.forEach((sem) => {
+            const activeSections = StorageService.getAvailableSectionsForCohort(
+              dept.name,
+              progName,
+              sessionList[0] || '2023',
+              sem.id,
+              shift
+            );
+
+            activeSections.forEach((secId) => {
+              const unit = this.getSectionUnit(dept.name, progName, sem.id, secId, sessionList, allRecords, shift);
 
             let pendingCoursesCount = unit.pending;
             let totalCoursesCount = unit.total;
@@ -834,7 +845,7 @@ export class CompletionRadarService {
                 department: dept.name,
                 deptCode: dept.code,
                 program: progName,
-                shift: 'Morning',
+                shift,
                 semesterId: sem.id,
                 semesterLabel: sem.label,
                 section: `Section ${secId}`,
@@ -866,7 +877,7 @@ export class CompletionRadarService {
                       coordinatorName: coord.name,
                       deadlineText: deadlineInfo.text,
                       lastActivity: 'Not started',
-                      shift: 'Morning',
+                      shift,
                     })),
               });
             }
@@ -874,6 +885,7 @@ export class CompletionRadarService {
         });
       });
     });
+  });
 
     // Program-level deduplication: Find the most critical bottleneck for EACH program across all departments
     const progBottlenecksMap: Record<string, BottleneckInfo> = {};
