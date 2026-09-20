@@ -378,14 +378,24 @@ export class CompletionRadarService {
           (r.shift || 'Morning') === 'Morning'
       );
 
-      if (hasMorningRecs && hasEveningRecs) {
+      const coordMorning = this.resolveCoordinator(deptName, progName, 'Morning');
+      const coordEvening = this.resolveCoordinator(deptName, progName, 'Evening');
+
+      const isMorningActive = hasMorningRecs || coordMorning.isAssigned;
+      const isEveningActive = hasEveningRecs || coordEvening.isAssigned;
+
+      if (isMorningActive && isEveningActive) {
         targetShifts = ['Morning', 'Evening'];
-      } else if (hasEveningRecs) {
+      } else if (isEveningActive) {
         targetShifts = ['Evening'];
-      } else if (hasMorningRecs) {
+      } else if (isMorningActive) {
         targetShifts = ['Morning'];
       } else {
-        targetShifts = ['Morning'];
+        if (progObj?.degreeLevel === 'B.Tech' || progName.includes('(B.Tech)')) {
+          targetShifts = ['Evening'];
+        } else {
+          targetShifts = ['Morning'];
+        }
       }
 
       if (shiftFilter !== 'ALL') {

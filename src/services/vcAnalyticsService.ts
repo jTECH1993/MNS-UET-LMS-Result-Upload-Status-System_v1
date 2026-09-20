@@ -280,20 +280,49 @@ export class VCAnalyticsService {
           );
 
           const hasMorningCoord = matchingCoordAccounts.some((acc) => {
-            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || ['Morning'];
+            let shs: string[] = [];
+            if (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) {
+              shs = acc.programShiftAssignments[prog.name];
+            } else if (acc.programShiftAssignments) {
+              const matchedKey = Object.keys(acc.programShiftAssignments).find((k) =>
+                StorageService._isProgMatch(prog.name, k)
+              );
+              if (matchedKey) shs = acc.programShiftAssignments[matchedKey];
+            }
+            if (shs.length === 0 && acc.assignedShifts) {
+              shs = acc.assignedShifts;
+            }
             return shs.includes('Morning');
           });
+
           const hasEveningCoord = matchingCoordAccounts.some((acc) => {
-            const shs = (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) || acc.assignedShifts || [];
+            let shs: string[] = [];
+            if (acc.programShiftAssignments && acc.programShiftAssignments[prog.name]) {
+              shs = acc.programShiftAssignments[prog.name];
+            } else if (acc.programShiftAssignments) {
+              const matchedKey = Object.keys(acc.programShiftAssignments).find((k) =>
+                StorageService._isProgMatch(prog.name, k)
+              );
+              if (matchedKey) shs = acc.programShiftAssignments[matchedKey];
+            }
+            if (shs.length === 0 && acc.assignedShifts) {
+              shs = acc.assignedShifts;
+            }
             return shs.includes('Evening');
           });
 
           if ((hasMorningRecs || hasMorningCoord) && (hasEveningRecs || hasEveningCoord)) {
             targetShifts = ['Morning', 'Evening'];
           } else if (hasEveningRecs || hasEveningCoord) {
-            targetShifts = hasMorningRecs || hasMorningCoord ? ['Morning', 'Evening'] : ['Evening'];
-          } else {
+            targetShifts = ['Evening'];
+          } else if (hasMorningRecs || hasMorningCoord) {
             targetShifts = ['Morning'];
+          } else {
+            if (prog.degreeLevel === 'B.Tech' || prog.name.includes('(B.Tech)')) {
+              targetShifts = ['Evening'];
+            } else {
+              targetShifts = ['Morning'];
+            }
           }
         }
 

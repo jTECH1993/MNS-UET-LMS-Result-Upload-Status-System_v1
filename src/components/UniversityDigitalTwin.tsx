@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { SubmissionRecord, AcademicShift } from '../types';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
+import { AuthService } from '../services/authService';
+import { CompletionRadarService } from '../services/completionRadarService';
 import { Building2, GraduationCap, Calendar, Layers, CheckCircle2, AlertCircle, Search, ChevronRight, ChevronDown, Award } from 'lucide-react';
 
 interface Props {
@@ -88,6 +90,7 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
 
   // Build the clean digital twin hierarchy directly starting from real MNS-UET Departments & Programs
   const digitalTwinDepartments = useMemo(() => {
+    const accounts = AuthService.getAccounts();
     const departmentsMap: Record<string, DepartmentNode> = {};
 
     // 1. Seed all real official departments from data definitions
@@ -185,12 +188,69 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
               uploadedCourses: 0,
             };
 
-            const programShifts = progNode.supportedShifts.filter((sh) => {
-              if (selectedShiftFilter !== 'ALL') {
-                return sh.trim().toLowerCase() === selectedShiftFilter.trim().toLowerCase();
-              }
-              return true;
+            // Determine active shifts dynamically for this program in this session
+            const progSessRecords = allRecords.filter((r) => {
+              if (!r || !r.department || !r.program) return false;
+              if (!StorageService._isDeptMatch(deptNode.name, r.department)) return false;
+              if (!StorageService._isProgMatch(progNode.name, r.program)) return false;
+              const rSess = (r.session || '2023').trim();
+              return rSess.startsWith(sessId) || sessId.startsWith(rSess) || rSess.includes(sessId) || sessId.includes(rSess);
             });
+
+            const hasMorningRecs = progSessRecords.some((r) => (r.shift || 'Morning').trim().toLowerCase() === 'morning');
+            const hasEveningRecs = progSessRecords.some((r) => (r.shift || '').trim().toLowerCase() === 'evening');
+
+            const cleanProg = progNode.name.trim().toLowerCase();
+            const matchingCoordAccounts = accounts.filter((a) => {
+              if (a.role !== 'COORDINATOR' && a.role !== 'LECTURER') return false;
+              const assigned = a.assignedPrograms || (a.program ? [a.program] : []);
+              return assigned.some((p) => p.trim().toLowerCase() === cleanProg);
+            });
+
+            let hasMorningCoord = false;
+            let hasEveningCoord = false;
+
+            matchingCoordAccounts.forEach((acc) => {
+              let shs: string[] = [];
+              if (acc.programShiftAssignments && acc.programShiftAssignments[progNode.name]) {
+                shs = acc.programShiftAssignments[progNode.name];
+              } else if (acc.programShiftAssignments) {
+                const matchedKey = Object.keys(acc.programShiftAssignments).find((k) =>
+                  StorageService._isProgMatch(progNode.name, k)
+                );
+                if (matchedKey) shs = acc.programShiftAssignments[matchedKey];
+              }
+              if (shs.length === 0 && acc.assignedShifts) {
+                shs = acc.assignedShifts;
+              }
+              if (shs.includes('Morning')) hasMorningCoord = true;
+              if (shs.includes('Evening')) hasEveningCoord = true;
+            });
+
+            let programShifts: string[] = [];
+            if (selectedShiftFilter !== 'ALL') {
+              programShifts = [selectedShiftFilter];
+            } else if (progNode.supportedShifts.length === 1) {
+              programShifts = [progNode.supportedShifts[0]];
+            } else {
+              const isMorningActive = hasMorningRecs || hasMorningCoord;
+              const isEveningActive = hasEveningRecs || hasEveningCoord;
+
+              if (isMorningActive && isEveningActive) {
+                programShifts = ['Morning', 'Evening'];
+              } else if (isEveningActive) {
+                programShifts = ['Evening'];
+              } else if (isMorningActive) {
+                programShifts = ['Morning'];
+              } else {
+                // If neither has records nor coordinators assigned yet:
+                if (progNode.degreeLevel === 'B.Tech' || progNode.name.includes('(B.Tech)')) {
+                  programShifts = ['Evening'];
+                } else {
+                  programShifts = ['Morning'];
+                }
+              }
+            }
 
             programShifts.forEach((shName) => {
               // Find matching database records for this department, program, session, semester, and shift
@@ -230,7 +290,25 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
 
                   if (secRecords.length > 0) {
                     secRecords.forEach((r) => {
-                      if (r.hodCoordinator) coordinatorName = r.hodCoordinator;
+                      if (r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator')) {
+                        coordinatorName = r.hodCoordinator.trim();
+                      }
+                    });
+                  }
+
+                  if (coordinatorName === 'Not Assigned') {
+                    const resolved = CompletionRadarService.resolveCoordinator(
+                      deptNode.name,
+                      progNode.name,
+                      shName as AcademicShift
+                    );
+                    if (resolved.isAssigned) {
+                      coordinatorName = resolved.name;
+                    }
+                  }
+
+                  if (secRecords.length > 0) {
+                    secRecords.forEach((r) => {
 
                       const subs = r.subjects || [];
                       const validSubs = subs.filter(
