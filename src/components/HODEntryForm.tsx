@@ -1938,11 +1938,11 @@ export const HODEntryForm: React.FC<Props> = ({
             id="btn-export-department-report-top"
             type="button"
             onClick={() => setIsExportModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
-            title="Download verified departmental results as CSV or print official signed PDF records"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            title="Generate official signed PDF reports or CSV archives of department and program results"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export (PDF / CSV)</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>Export Official PDF Report</span>
           </button>
 
           {/* VC View Link: Return button if read-only, otherwise switch link */}
@@ -4361,8 +4361,8 @@ export const HODEntryForm: React.FC<Props> = ({
                 className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
                 title="Open official department PDF and CSV export modal"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export Department (PDF / CSV)</span>
+                <Printer className="w-3.5 h-3.5" />
+                <span>Export Official PDF Report</span>
               </button>
 
               <button
@@ -4373,7 +4373,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 title="Quick download CSV for current section"
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span>Quick CSV</span>
+                <span>Download CSV</span>
               </button>
             </div>
           </>

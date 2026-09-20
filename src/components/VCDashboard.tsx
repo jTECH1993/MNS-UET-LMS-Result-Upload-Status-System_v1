@@ -77,7 +77,8 @@ import {
   TrendingUp,
   Activity,
   Timer,
-  Info
+  Info,
+  Target
 } from 'lucide-react';
 
 interface Props {
@@ -844,6 +845,35 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     });
   }, [departmentStats, searchQuery, allUniversityPrograms]);
 
+  // Executive Top Summary Metrics (Total Pending Departments, Completed Uploads, Departments Requiring Attention)
+  const executiveSummaryMetrics = useMemo(() => {
+    const totalDepts = departmentStats.length;
+    const completedDepts = departmentStats.filter((d) => d.percentage === 100 && d.totalSubjects > 0);
+    const pendingDepts = departmentStats.filter((d) => d.percentage < 100);
+    const attentionDepts = departmentStats.filter(
+      (d) => d.percentage === 0 || (d.totalPending > 0 && d.percentage < 50)
+    );
+
+    const totalUploadedCourses = departmentStats.reduce((acc, d) => acc + d.totalUploaded, 0);
+    const totalPendingCourses = departmentStats.reduce((acc, d) => acc + d.totalPending, 0);
+    const totalCourses = departmentStats.reduce((acc, d) => acc + d.totalSubjects, 0);
+    const overallPercentage = totalCourses > 0 ? Math.round((totalUploadedCourses / totalCourses) * 100) : 0;
+
+    return {
+      totalDepts,
+      totalPendingDepts: pendingDepts.length,
+      pendingDeptsList: pendingDepts,
+      totalCompletedDepts: completedDepts.length,
+      completedDeptsList: completedDepts,
+      totalAttentionDepts: attentionDepts.length,
+      attentionDeptsList: attentionDepts,
+      totalUploadedCourses,
+      totalPendingCourses,
+      totalCourses,
+      overallPercentage,
+    };
+  }, [departmentStats]);
+
   // Filtered program list (Single Row Per Program)
   const filteredPrograms = useMemo(() => {
     return allUniversityPrograms.filter((item) => {
@@ -1390,145 +1420,205 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         <DeadlineBanner currentSession={currentSession} semesterFilter={selectedSemesterFilter} isVC={true} />
       </div>
 
-      {/* 4. High-Level Executive KPIs: Overall, Active Departments, Degree Programs, Critical Bottleneck */}
+      {/* 4. High-Level Executive Summary Cards: Key Institutional Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Card 1: Total Pending Departments */}
         <div
           onClick={() => {
-            setDashboardViewMode('COMMAND_CENTER');
+            setSelectedDeptFilter('ALL');
+            setStatusFilter('PENDING');
+            setDashboardViewMode('ROSTER');
             setTimeout(() => {
-              document.getElementById('university-completion-radar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 100);
           }}
-          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all flex flex-col justify-between"
-          title="Click to navigate directly to the Completion Radar"
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-amber-200 dark:border-amber-900/40 shadow-xs cursor-pointer hover:border-amber-500 hover:shadow-md transition-all flex flex-col justify-between group"
+          title="Click to view all pending departments and cohorts"
         >
           <div>
             <div className="flex items-center justify-between gap-1">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Submitted Data Completion
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                Total Pending Departments
               </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
-                From Entered Forms
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                {executiveSummaryMetrics.totalPendingDepts === 0 ? 'All Complete' : 'Action Due'}
               </span>
             </div>
-            <div className="flex items-baseline justify-between gap-1 mt-2">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                  {hierarchy.submittedUploadedPct}%
-                </span>
-                <span className="text-xs font-bold text-emerald-600">Uploaded</span>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">
-                  {hierarchy.submittedPendingPct}%
-                </span>
-                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Pending</span>
-              </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-slate-900 dark:text-white font-mono group-hover:text-amber-700 transition-colors">
+                {executiveSummaryMetrics.totalPendingDepts}
+              </span>
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                / {executiveSummaryMetrics.totalDepts} Departments
+              </span>
             </div>
           </div>
           <div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-2 overflow-hidden flex">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-2.5 overflow-hidden">
               <div
-                className="bg-emerald-600 h-full transition-all"
-                style={{ width: `${hierarchy.submittedUploadedPct}%` }}
-                title={`Uploaded: ${hierarchy.submittedUploadedPct}%`}
-              />
-              <div
-                className="bg-amber-500 h-full transition-all"
-                style={{ width: `${hierarchy.submittedPendingPct}%` }}
-                title={`Pending: ${hierarchy.submittedPendingPct}%`}
+                className="bg-amber-500 h-full transition-all duration-500"
+                style={{
+                  width: `${
+                    executiveSummaryMetrics.totalDepts > 0
+                      ? ((executiveSummaryMetrics.totalDepts - executiveSummaryMetrics.totalPendingDepts) /
+                          executiveSummaryMetrics.totalDepts) *
+                        100
+                      : 0
+                  }%`,
+                }}
               />
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 flex items-center justify-between">
-              <span>
-                {hierarchy.totalCourses > 0
-                  ? `${hierarchy.uploadedCourses} uploaded, ${hierarchy.pendingCourses} pending`
-                  : 'No submitted data logged yet'}
-              </span>
-              <span className="text-[10px] font-bold text-slate-400">
-                {hierarchy.totalCourses} courses
-              </span>
+              <span>{executiveSummaryMetrics.totalPendingCourses} courses pending upload</span>
+              <span className="text-amber-700 dark:text-amber-400 font-bold group-hover:underline">Filter →</span>
             </p>
           </div>
         </div>
 
+        {/* Card 2: Completed Uploads */}
         <div
           onClick={() => {
+            setSelectedDeptFilter('ALL');
+            setStatusFilter('SUBMITTED');
             setDashboardViewMode('ROSTER');
             setTimeout(() => {
               document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 100);
           }}
-          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-indigo-500 transition-all"
-          title="Click to view department compliance roster"
+          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 shadow-xs cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between group"
+          title="Click to view verified completed course uploads"
         >
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Active Departments
-          </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
-              {hierarchy.completedDepartments} / {hierarchy.totalDepartments}
-            </span>
-            <span className="text-xs font-bold text-indigo-600">
-              {hierarchy.completedDepartments === hierarchy.totalDepartments
-                ? '100% Done'
-                : `${hierarchy.departments.filter((d) => d.uploadedCourses > 0).length} In Progress`}
-            </span>
+          <div>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                Completed Uploads
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                {executiveSummaryMetrics.totalCompletedDepts} Depts 100%
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-emerald-700 dark:text-emerald-400 font-mono group-hover:text-emerald-900 transition-colors">
+                {executiveSummaryMetrics.totalUploadedCourses}
+              </span>
+              <span className="text-xs font-bold text-emerald-600">
+                ({executiveSummaryMetrics.overallPercentage}% Verified)
+              </span>
+            </div>
           </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-            {hierarchy.completedDepartments} fully complete, {hierarchy.totalDepartments - hierarchy.completedDepartments} pending completion
-          </p>
+          <div>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-2.5 overflow-hidden">
+              <div
+                className="bg-emerald-600 h-full transition-all duration-500"
+                style={{ width: `${executiveSummaryMetrics.overallPercentage}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-2 flex items-center justify-between">
+              <span>{executiveSummaryMetrics.totalCompletedDepts} of {executiveSummaryMetrics.totalDepts} depts fully verified</span>
+              <span className="font-bold group-hover:underline">Inspect →</span>
+            </p>
+          </div>
         </div>
 
+        {/* Card 3: Departments Requiring Attention */}
         <div
           onClick={() => {
+            if (executiveSummaryMetrics.attentionDeptsList.length > 0) {
+              setSelectedDeptFilter(executiveSummaryMetrics.attentionDeptsList[0].deptName);
+            } else {
+              setSelectedDeptFilter('ALL');
+            }
             setDashboardViewMode('ROSTER');
             setTimeout(() => {
               document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 100);
           }}
-          className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all"
-          title="Click to inspect all active degree programs"
+          className={`p-4 rounded-xl border shadow-xs cursor-pointer hover:shadow-md transition-all flex flex-col justify-between group ${
+            executiveSummaryMetrics.totalAttentionDepts > 0
+              ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 hover:border-rose-500'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-500'
+          }`}
+          title="Departments with 0% submissions or severe delays requiring immediate VC directive"
         >
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Degree Programs
-          </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-3xl font-black text-slate-900 dark:text-white font-mono">
-              {hierarchy.activePrograms} / {hierarchy.totalPrograms}
-            </span>
-            <span className="text-xs font-bold text-emerald-600">Submitting</span>
+          <div>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-400 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                Departments Requiring Attention
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                {executiveSummaryMetrics.totalAttentionDepts > 0 ? 'VC Directive Needed' : 'Nominal'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-rose-700 dark:text-rose-400 font-mono">
+                {executiveSummaryMetrics.totalAttentionDepts}
+              </span>
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                Departments (&lt;50% Rate)
+              </span>
+            </div>
           </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-            Across {hierarchy.totalDepartments} university departments
-          </p>
+          <div>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {executiveSummaryMetrics.attentionDeptsList.slice(0, 4).map((d) => (
+                <span
+                  key={d.deptCode}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedDeptFilter(d.deptName);
+                    setTimeout(() => {
+                      document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-300 hover:bg-rose-200"
+                >
+                  {d.deptCode} ({d.percentage}%)
+                </span>
+              ))}
+              {executiveSummaryMetrics.attentionDeptsList.length > 4 && (
+                <span className="text-[9px] font-bold px-1 py-0.5 text-rose-600">
+                  +{executiveSummaryMetrics.attentionDeptsList.length - 4} more
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-1.5 flex items-center justify-between">
+              <span>{executiveSummaryMetrics.totalAttentionDepts > 0 ? 'Zero or critical backlog' : 'No severe bottlenecks detected'}</span>
+              <span className="font-bold group-hover:underline">Directives →</span>
+            </p>
+          </div>
         </div>
 
-        {/* Bottleneck Indicator */}
+        {/* Card 4: Critical Bottleneck Indicator */}
         <div
           onClick={handleFindBottleneck}
-          className="bg-gradient-to-br from-rose-950/30 to-slate-900 p-4 rounded-xl border border-rose-500/50 shadow-xs cursor-pointer hover:border-rose-400 transition-all group relative overflow-hidden"
+          className="bg-gradient-to-br from-slate-900 to-slate-950 p-4 rounded-xl border border-slate-800 shadow-xs cursor-pointer hover:border-emerald-500 transition-all group relative overflow-hidden flex flex-col justify-between"
           title="Click to locate this bottleneck in the Completion Radar"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
-              Critical Bottleneck
-            </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 font-mono">
-              Auto-Detect
-            </span>
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-amber-400" />
+                Critical Bottleneck
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-mono">
+                Auto-Detect
+              </span>
+            </div>
+            <div className="mt-2">
+              <span className="text-xs font-black text-white group-hover:text-emerald-300 transition-colors block truncate">
+                {institutionalBottleneck.primary.program}
+              </span>
+              <span className="text-[11px] font-bold text-amber-400 block mt-0.5">
+                {institutionalBottleneck.primary.shift || 'Morning'} Shift • {institutionalBottleneck.primary.semesterLabel} • Sec {institutionalBottleneck.primary.section}
+              </span>
+            </div>
           </div>
-          <div className="mt-2">
-            <span className="text-xs font-black text-white group-hover:text-rose-300 transition-colors block truncate">
-              {institutionalBottleneck.primary.program}
-            </span>
-            <span className="text-xs font-bold text-amber-400">
-              {institutionalBottleneck.primary.shift || 'Morning'} Shift • {institutionalBottleneck.primary.semesterLabel} • {institutionalBottleneck.primary.section}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-2 flex items-center justify-between">
-            <span>{institutionalBottleneck.primary.pendingCourses} courses pending</span>
-            <span className="text-rose-400 font-bold group-hover:underline">Inspect →</span>
+          <p className="text-[11px] text-slate-400 mt-2 flex items-center justify-between border-t border-slate-800 pt-2">
+            <span>{institutionalBottleneck.primary.pendingCourses} pending course(s)</span>
+            <span className="text-emerald-400 font-bold group-hover:underline">Inspect Radar →</span>
           </p>
         </div>
       </div>
