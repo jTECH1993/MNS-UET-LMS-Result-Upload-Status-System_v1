@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DepartmentGroup,
   UNIVERSITY_DEPARTMENTS,
@@ -72,6 +72,8 @@ import {
   AlertTriangle,
   XCircle,
   History as HistoryIcon,
+  Cloud,
+  Loader2,
 } from 'lucide-react';
 
 // Standard institutional delay reasons for academic compliance
@@ -349,6 +351,18 @@ export const HODEntryForm: React.FC<Props> = ({
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [conflictRecord, setConflictRecord] = useState<SubmissionRecord | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Auto-Save Real-Time State & Feedback
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string | null>(null);
+  const [autoSaveToast, setAutoSaveToast] = useState<{
+    message: string;
+    timestamp: string;
+    detail?: string;
+  } | null>(null);
+
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Dynamic status change chronological audit logs for this specific section
   const currentRecordLogs = useMemo(() => {
@@ -955,6 +969,123 @@ export const HODEntryForm: React.FC<Props> = ({
     });
   }, [subjects, courseFilterQuery]);
 
+  // Clean up auto-save timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+      if (autoSaveToastTimeoutRef.current) clearTimeout(autoSaveToastTimeoutRef.current);
+    };
+  }, []);
+
+  // Real-Time Auto-Save Function
+  const triggerAutoSave = useCallback(
+    (
+      updatedSubjects: SubjectRow[],
+      changeDescription?: string,
+      detailInfo?: string
+    ) => {
+      // Do not auto-save if in read-only mode, or missing essential routing info
+      if (effectiveReadOnly || !department || !program) return;
+
+      // Update state to saving
+      setAutoSaveStatus('saving');
+
+      // Clear previous debounce timer
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+
+      autoSaveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const isHodOrAdmin = currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN';
+          const activeRows = updatedSubjects.filter(
+            (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.uploadedBy.trim() || s.status
+          );
+          const today = new Date().toISOString().split('T')[0];
+          const resolvedRows = activeRows.map((s) => ({
+            ...s,
+            dateUploaded:
+              s.status === 'Uploaded'
+                ? s.dateUploaded || submissionDate || today
+                : s.dateUploaded || '',
+          }));
+
+          const recordToSave: SubmissionRecord = {
+            id: '',
+            department,
+            program,
+            degreeLevel,
+            shift,
+            section,
+            session,
+            semester,
+            hodCoordinator,
+            submissionDate,
+            subjects: resolvedRows,
+            accessedBy: currentUser?.name || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+            userDesignation: currentUser?.designation || (isHodOrAdmin ? 'Head of Department (HOD)' : 'Program Coordinator'),
+            lastUpdatedByRole: currentUser?.role || (isHodOrAdmin ? 'HOD' : 'COORDINATOR'),
+            lastUpdatedByName: currentUser?.name || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+            lastUpdatedByDesignation: currentUser?.designation || (isHodOrAdmin ? 'Head of Department (HOD)' : 'Program Coordinator'),
+            hodLastModifiedAt: isHodOrAdmin ? new Date().toISOString() : loadedRecord?.hodLastModifiedAt,
+            hodLastModifiedBy: isHodOrAdmin ? (currentUser?.name || 'Head of Department') : loadedRecord?.hodLastModifiedBy,
+            createdAt: loadedRecord?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          const result = await StorageService.saveSubmission(recordToSave);
+          if (result.success) {
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            setAutoSaveStatus('saved');
+            setLastSavedTime(recordToSave.updatedAt);
+            setLastAutoSavedTime(timeStr);
+            setIsExistingRecord(true);
+            setLoadedUpdatedAt(recordToSave.updatedAt);
+            setLoadedRecord(recordToSave);
+
+            // Trigger auto-save toast feedback
+            if (autoSaveToastTimeoutRef.current) {
+              clearTimeout(autoSaveToastTimeoutRef.current);
+            }
+            setAutoSaveToast({
+              message: changeDescription || 'Auto-saved to database',
+              timestamp: timeStr,
+              detail: detailInfo || `${program} • Sem ${semester} • Sec ${section}`,
+            });
+
+            autoSaveToastTimeoutRef.current = setTimeout(() => {
+              setAutoSaveToast(null);
+            }, 3500);
+
+            if (onRecordSavedOrDeleted) {
+              onRecordSavedOrDeleted();
+            }
+          } else {
+            setAutoSaveStatus('error');
+          }
+        } catch (err) {
+          console.error('Auto-save error:', err);
+          setAutoSaveStatus('error');
+        }
+      }, 750);
+    },
+    [
+      effectiveReadOnly,
+      department,
+      program,
+      degreeLevel,
+      shift,
+      section,
+      session,
+      semester,
+      hodCoordinator,
+      submissionDate,
+      currentUser,
+      loadedRecord,
+      onRecordSavedOrDeleted,
+    ]
+  );
+
   // Field change handler by index
   const handleRowChange = (index: number, field: keyof SubjectRow, value: string) => {
     setSubjects((prev) => {
@@ -963,6 +1094,8 @@ export const HODEntryForm: React.FC<Props> = ({
         ...next[index],
         [field]: value,
       };
+      const courseLabel = next[index].courseCode || next[index].subjectTitle || `Row #${index + 1}`;
+      triggerAutoSave(next, `Updated ${String(field)} for ${courseLabel}`);
       return next;
     });
   };
@@ -970,8 +1103,10 @@ export const HODEntryForm: React.FC<Props> = ({
   // Field change handler by Row ID (immune to search/filter order)
   const handleRowChangeById = (rowId: string, field: keyof SubjectRow, value: string) => {
     setSubjects((prev) => {
-      return prev.map((item) => {
+      let targetCourseLabel = 'Course';
+      const next = prev.map((item) => {
         if (item.id === rowId) {
+          targetCourseLabel = item.courseCode || item.subjectTitle || 'Course';
           const updated = { ...item, [field]: value };
           if (field === 'status' && value === 'Uploaded' && !item.dateUploaded) {
             updated.dateUploaded = submissionDate || new Date().toISOString().split('T')[0];
@@ -980,6 +1115,18 @@ export const HODEntryForm: React.FC<Props> = ({
         }
         return item;
       });
+      
+      const fieldDesc =
+        field === 'status'
+          ? `LMS Status set to "${value}"`
+          : field === 'remarks'
+          ? 'Delay remarks updated'
+          : field === 'uploadedBy'
+          ? 'Teacher/Instructor updated'
+          : `${String(field)} updated`;
+
+      triggerAutoSave(next, `Auto-Saved: ${targetCourseLabel} (${fieldDesc})`);
+      return next;
     });
   };
 
@@ -990,8 +1137,10 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
     const newRow = createEmptySubjectRow(subjects.length + 1, shift, semester, section);
-    setSubjects((prev) => [...prev, newRow]);
+    const updated = [...subjects, newRow];
+    setSubjects(updated);
     showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester} (Section ${section}).`);
+    triggerAutoSave(updated, `Added Course Row #${subjects.length + 1}`);
   };
 
   // Remove last course row (allows deleting down to 0 rows)
@@ -1000,8 +1149,10 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('info', 'Table has no course rows left (0 rows).');
       return;
     }
-    setSubjects((prev) => prev.slice(0, -1));
+    const updated = subjects.slice(0, -1);
+    setSubjects(updated);
     showFeedback('info', 'Last course row removed.');
+    triggerAutoSave(updated, 'Removed last course row');
   };
 
   // Clear all course rows (allows wiping all rows to save empty state)
@@ -1016,26 +1167,29 @@ export const HODEntryForm: React.FC<Props> = ({
       'info',
       'All course rows removed from the table. Click "Update Record in Database" to save this cleared state or "Delete Record" to delete the record entirely.'
     );
+    triggerAutoSave([], 'Cleared all course rows from table');
   };
 
   // Delete a specific row
   const handleDeleteRow = (index: number) => {
-    setSubjects((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      return next;
-    });
+    const updated = subjects.filter((_, i) => i !== index);
+    setSubjects(updated);
     showFeedback('info', `Removed row #${index + 1}.`);
+    triggerAutoSave(updated, `Removed Course Row #${index + 1}`);
   };
 
   // Delete row by ID
   const handleDeleteRowById = (rowId: string) => {
-    setSubjects((prev) => prev.filter((item) => item.id !== rowId));
+    const target = subjects.find((s) => s.id === rowId);
+    const updated = subjects.filter((item) => item.id !== rowId);
+    setSubjects(updated);
     setSelectedRowIds((prev) => {
       const next = new Set(prev);
       next.delete(rowId);
       return next;
     });
     showFeedback('info', 'Course row removed.');
+    triggerAutoSave(updated, `Removed course ${target?.courseCode || target?.subjectTitle || ''}`);
   };
 
   // Batch delete selected rows
@@ -1045,9 +1199,11 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
     const count = selectedRowIds.size;
-    setSubjects((prev) => prev.filter((item) => !selectedRowIds.has(item.id)));
+    const updated = subjects.filter((item) => !selectedRowIds.has(item.id));
+    setSubjects(updated);
     setSelectedRowIds(new Set());
     showFeedback('info', `Removed ${count} selected course row(s).`);
+    triggerAutoSave(updated, `Removed ${count} selected courses`);
   };
 
   // Duplicate row by ID
@@ -1059,8 +1215,10 @@ export const HODEntryForm: React.FC<Props> = ({
       id: `row_${Date.now()}_dup_${Math.random().toString(36).substring(2, 6)}`,
       subjectTitle: existing.subjectTitle ? `${existing.subjectTitle} (Copy)` : '',
     };
-    setSubjects((prev) => [...prev, duplicated]);
+    const updated = [...subjects, duplicated];
+    setSubjects(updated);
     showFeedback('success', `Duplicated course ${existing.courseCode || existing.subjectTitle}.`);
+    triggerAutoSave(updated, `Duplicated course ${existing.courseCode || existing.subjectTitle}`);
   };
 
   // Row Selection Helpers
@@ -1147,20 +1305,21 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
-    setSubjects((prev) =>
-      prev.map((s) => {
-        if (!targetIds.has(s.id)) return s;
-        return {
-          ...s,
-          status: newStatus,
-          dateUploaded: newStatus === 'Uploaded' ? (s.dateUploaded || today) : s.dateUploaded,
-          uploadedBy: s.uploadedBy || '',
-        };
-      })
-    );
+    const updated = subjects.map((s) => {
+      if (!targetIds.has(s.id)) return s;
+      return {
+        ...s,
+        status: newStatus,
+        dateUploaded: newStatus === 'Uploaded' ? (s.dateUploaded || today) : s.dateUploaded,
+        uploadedBy: s.uploadedBy || '',
+      };
+    });
+
+    setSubjects(updated);
 
     const scopeLabel = isSelection ? `${count} selected course(s)` : `all ${count} courses`;
     showFeedback('info', `Quick Tool: Marked ${scopeLabel} as "${newStatus}".`);
+    triggerAutoSave(updated, `Marked ${scopeLabel} as "${newStatus}"`);
   };
 
   const handleBatchSetTodayDate = () => {
@@ -1172,18 +1331,19 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
-    setSubjects((prev) =>
-      prev.map((s) => {
-        if (!targetIds.has(s.id)) return s;
-        return {
-          ...s,
-          dateUploaded: today,
-        };
-      })
-    );
+    const updated = subjects.map((s) => {
+      if (!targetIds.has(s.id)) return s;
+      return {
+        ...s,
+        dateUploaded: today,
+      };
+    });
+
+    setSubjects(updated);
 
     const scopeLabel = isSelection ? `${count} selected course(s)` : `all courses`;
     showFeedback('info', `Quick Tool: Set today's date (${today}) for ${scopeLabel}.`);
+    triggerAutoSave(updated, `Set today's date for ${scopeLabel}`);
   };
 
   const handleBatchFillUploader = () => {
@@ -1195,18 +1355,19 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
-    setSubjects((prev) =>
-      prev.map((s) => {
-        if (!targetIds.has(s.id)) return s;
-        return {
-          ...s,
-          uploadedBy: s.uploadedBy?.trim() ? s.uploadedBy : defaultName,
-        };
-      })
-    );
+    const updated = subjects.map((s) => {
+      if (!targetIds.has(s.id)) return s;
+      return {
+        ...s,
+        uploadedBy: s.uploadedBy?.trim() ? s.uploadedBy : defaultName,
+      };
+    });
+
+    setSubjects(updated);
 
     const scopeLabel = isSelection ? `${count} selected course(s)` : `empty course rows`;
     showFeedback('info', `Quick Tool: Applied "${defaultName}" as instructor/uploader to ${scopeLabel}.`);
+    triggerAutoSave(updated, `Assigned "${defaultName}" to ${scopeLabel}`);
   };
 
   const handleBatchApplyDelayReason = (reason: string) => {
@@ -1230,23 +1391,23 @@ export const HODEntryForm: React.FC<Props> = ({
     const { targetIds, count, isSelection } = getTargetSubjectRows();
     let updatedCount = 0;
 
-    setSubjects((prev) =>
-      prev.map((s) => {
-        if (isSelection) {
-          if (targetIds.has(s.id)) {
-            updatedCount++;
-            return { ...s, remarks: trimmed };
-          }
-          return s;
-        }
-        // If applying globally: apply to Pending, In Progress, or rows without remarks
-        if (s.status === 'Pending' || s.status === 'In Progress' || !s.remarks?.trim()) {
+    const updated = subjects.map((s) => {
+      if (isSelection) {
+        if (targetIds.has(s.id)) {
           updatedCount++;
           return { ...s, remarks: trimmed };
         }
         return s;
-      })
-    );
+      }
+      // If applying globally: apply to Pending, In Progress, or rows without remarks
+      if (s.status === 'Pending' || s.status === 'In Progress' || !s.remarks?.trim()) {
+        updatedCount++;
+        return { ...s, remarks: trimmed };
+      }
+      return s;
+    });
+
+    setSubjects(updated);
 
     setIsCustomReasonOpen(false);
     setCustomReasonInput('');
@@ -1255,6 +1416,7 @@ export const HODEntryForm: React.FC<Props> = ({
       ? `${count} selected course(s)`
       : `all pending/in-progress courses (${updatedCount} updated)`;
     showFeedback('info', `Quick Tool: Applied delay remark "${trimmed}" to ${scopeLabel}.`);
+    triggerAutoSave(updated, `Applied delay remarks to ${scopeLabel}`);
   };
 
   const handleImportCourses = (
@@ -1291,12 +1453,15 @@ export const HODEntryForm: React.FC<Props> = ({
         'success',
         `Imported ${newRows.length} course(s) for Section ${effectiveSection} (Replaced table). Remember to click 'Submit Result Status' or Save.`
       );
+      triggerAutoSave(filledRows, `Imported ${newRows.length} courses for Section ${effectiveSection}`);
     } else {
-      setSubjects((prev) => [...prev, ...newRows]);
+      const updated = [...subjects, ...newRows];
+      setSubjects(updated);
       showFeedback(
         'success',
         `Appended ${newRows.length} course(s) to Section ${effectiveSection} sheet.`
       );
+      triggerAutoSave(updated, `Appended ${newRows.length} courses to Section ${effectiveSection}`);
     }
   };
 
@@ -1768,18 +1933,52 @@ export const HODEntryForm: React.FC<Props> = ({
 
   return (
     <div id="hod-entry-interface" className="space-y-6">
-      {/* Toast Notification */}
-      {feedbackMessage && (
-        <div className="fixed bottom-6 right-6 z-[100] flex animate-in slide-in-from-bottom-5 fade-in duration-300">
+      {/* Toast Notification Stack (Floating Bottom-Right) */}
+      <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+        {/* Real-Time Auto-Save Toast Notification */}
+        {autoSaveToast && (
+          <div
+            id="autosave-toast-notification"
+            className="pointer-events-auto px-4 py-3 rounded-xl bg-slate-900/95 border border-emerald-500/60 text-white shadow-2xl backdrop-blur-md flex items-start gap-3 animate-in slide-in-from-bottom-4 fade-in duration-200"
+          >
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-400/40">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                  <Cloud className="w-3 h-3" />
+                  Auto-Saved to Database
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">{autoSaveToast.timestamp}</span>
+              </div>
+              <p className="text-xs font-semibold text-slate-100 truncate">{autoSaveToast.message}</p>
+              {autoSaveToast.detail && (
+                <p className="text-[10px] text-emerald-300/80 font-medium truncate mt-0.5">{autoSaveToast.detail}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAutoSaveToast(null)}
+              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* General Feedback Message */}
+        {feedbackMessage && (
           <div
             id="status-feedback-banner"
-            className={`px-4 py-3 rounded-xl border flex items-center gap-3 shadow-xl max-w-sm ${
+            className={`pointer-events-auto px-4 py-3 rounded-xl border flex items-center gap-3 shadow-xl ${
               feedbackMessage.type === 'success'
                 ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-emerald-500/20'
                 : feedbackMessage.type === 'warning'
                 ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-amber-500/20'
                 : 'bg-blue-50 border-blue-400 text-blue-950 shadow-blue-500/20'
-            }`}
+            } animate-in slide-in-from-bottom-5 fade-in duration-300`}
           >
             {feedbackMessage.type === 'success' && <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />}
             {feedbackMessage.type === 'warning' && <Info className="w-6 h-6 text-amber-600 shrink-0" />}
@@ -1788,14 +1987,15 @@ export const HODEntryForm: React.FC<Props> = ({
             <span className="font-bold text-sm leading-snug flex-1">{feedbackMessage.text}</span>
             
             <button
+              type="button"
               onClick={() => setFeedbackMessage(null)}
-              className="p-1 rounded-md hover:bg-black/5 transition-colors shrink-0"
+              className="p-1 rounded-md hover:bg-black/5 transition-colors shrink-0 cursor-pointer"
             >
               <X className="w-4 h-4 opacity-50 hover:opacity-100" />
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* EXECUTIVE READ-ONLY INSPECTION BANNER (FOR VICE CHANCELLOR) */}
       {isReadOnly && (
@@ -1968,29 +2168,41 @@ export const HODEntryForm: React.FC<Props> = ({
             </button>
           )}
 
-          {/* Database Saved Status Badge */}
-          {isExistingRecord ? (
-            <span
-              id="record-status-badge"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-300"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-              Saved Record
-              {lastSavedTime && (
-                <span className="text-emerald-700 font-normal hidden lg:inline">
-                  ({new Date(lastSavedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                </span>
-              )}
-            </span>
-          ) : (
-            <span
-              id="record-status-badge"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-medium border border-slate-300"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              New Record
-            </span>
-          )}
+          {/* Database Saved & Real-Time Auto-Save Status Badge */}
+          <div className="flex items-center gap-2">
+            {autoSaveStatus === 'saving' ? (
+              <span
+                id="autosave-status-badge"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 text-xs font-semibold border border-amber-300 animate-pulse"
+                title="Writing changes to database..."
+              >
+                <Loader2 className="w-3.5 h-3.5 text-amber-700 animate-spin shrink-0" />
+                <span>Saving changes...</span>
+              </span>
+            ) : autoSaveStatus === 'saved' || isExistingRecord ? (
+              <span
+                id="record-status-badge"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-300"
+                title="All changes are persisted to the database in real time"
+              >
+                <Cloud className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Auto-Saved</span>
+                {(lastAutoSavedTime || lastSavedTime) && (
+                  <span className="text-emerald-700 font-normal hidden sm:inline">
+                    ({lastAutoSavedTime || new Date(lastSavedTime!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span
+                id="record-status-badge"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-medium border border-slate-300"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>New Sheet</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -3161,6 +3373,47 @@ export const HODEntryForm: React.FC<Props> = ({
               </>
             ) : (
               <>
+                {/* Real-time Auto-Save status indicator pill */}
+                <div
+                  id="autosave-realtime-pill"
+                  className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    autoSaveStatus === 'saving'
+                      ? 'bg-amber-50 border-amber-300 text-amber-900 animate-pulse'
+                      : autoSaveStatus === 'saved' || isExistingRecord
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-500'
+                  }`}
+                  title={
+                    autoSaveStatus === 'saving'
+                      ? 'Saving field changes in the background...'
+                      : autoSaveStatus === 'saved'
+                      ? 'All modifications automatically saved to database'
+                      : 'Auto-save active on every keystroke/change'
+                  }
+                >
+                  {autoSaveStatus === 'saving' ? (
+                    <>
+                      <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : autoSaveStatus === 'saved' || isExistingRecord ? (
+                    <>
+                      <Cloud className="w-3 h-3 text-emerald-600" />
+                      <span>Auto-Saved</span>
+                      {lastAutoSavedTime && (
+                        <span className="text-[10px] text-emerald-700 font-mono font-normal">
+                          {lastAutoSavedTime}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="w-3 h-3 text-slate-400" />
+                      <span>Auto-Save On</span>
+                    </>
+                  )}
+                </div>
+
                 {/* Bulk Paste from Excel/LMS */}
                 <button
                   id="btn-open-bulk-import"
