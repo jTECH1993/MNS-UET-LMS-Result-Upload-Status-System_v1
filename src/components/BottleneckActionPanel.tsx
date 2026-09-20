@@ -158,7 +158,7 @@ export const BottleneckActionPanel: React.FC<Props> = ({
                     <span className="font-bold text-slate-100 block truncate max-w-[150px]" title={currentItem.hodName}>
                       {currentItem.hodName}
                     </span>
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full font-mono ${
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full font-mono ${
                       currentItem.hodStatus === 'Registered' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-slate-900 text-slate-400'
                     }`}>
                       {currentItem.hodStatus === 'Registered' ? 'Registered' : 'Not Registered'}
@@ -171,7 +171,7 @@ export const BottleneckActionPanel: React.FC<Props> = ({
                     <span className="font-bold text-slate-100 block truncate max-w-[150px]" title={currentItem.coordinatorName}>
                       {currentItem.coordinatorName}
                     </span>
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full font-mono ${
+                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full font-mono ${
                       currentItem.coordinatorStatus === 'Assigned' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-rose-950 text-rose-300 border border-rose-800/50'
                     }`}>
                       {currentItem.coordinatorStatus === 'Assigned' ? 'Assigned' : 'Not Assigned'}

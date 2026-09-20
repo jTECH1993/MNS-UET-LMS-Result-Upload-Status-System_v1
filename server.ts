@@ -358,6 +358,33 @@ app.delete('/api/submissions/:id', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
+app.delete('/api/submissions/program/:department/:program', asyncHandler(async (req, res) => {
+  const { department, program } = req.params;
+  const matching = await db.select().from(submissions).where(
+    and(
+      eq(submissions.department, department),
+      eq(submissions.program, program)
+    )
+  );
+  for (const s of matching) {
+    await db.delete(subjects).where(eq(subjects.submissionId, s.id));
+    await db.delete(submissions).where(eq(submissions.id, s.id));
+  }
+  res.json({ success: true, deletedCount: matching.length });
+}));
+
+app.delete('/api/submissions/department/:department', asyncHandler(async (req, res) => {
+  const { department } = req.params;
+  const matching = await db.select().from(submissions).where(
+    eq(submissions.department, department)
+  );
+  for (const s of matching) {
+    await db.delete(subjects).where(eq(subjects.submissionId, s.id));
+    await db.delete(submissions).where(eq(submissions.id, s.id));
+  }
+  res.json({ success: true, deletedCount: matching.length });
+}));
+
 // -----------------------------------------------------------------------------
 // SYSTEM WIPE (PURGE SAVED SUBMISSION DATA, KEEP USER ACCOUNTS INTACT)
 // -----------------------------------------------------------------------------

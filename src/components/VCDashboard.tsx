@@ -2267,17 +2267,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       {dept.deptCode}
                     </span>
                     {isFull ? (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-1 border border-emerald-300">
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-300">
                         <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
                         100% Complete
                       </span>
                     ) : isPartial ? (
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded flex items-center gap-1 border border-amber-300">
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-amber-300">
                         <Clock className="w-2.5 h-2.5 text-amber-700" />
                         {dept.totalPending} Pending
                       </span>
                     ) : (
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                         {dept.programsCount} Programs
                       </span>
                     )}

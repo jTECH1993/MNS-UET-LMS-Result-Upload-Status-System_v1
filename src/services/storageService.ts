@@ -1076,6 +1076,165 @@ export class StorageService {
     }
   }
 
+  public static async deleteProgramSubmissions(
+    department: string,
+    program: string
+  ): Promise<{ success: boolean; count: number }> {
+    try {
+      const store = this.getStore();
+      let deletedCount = 0;
+      const deletePromises: Promise<void>[] = [];
+
+      Object.keys(store).forEach((k) => {
+        const rec = store[k];
+        if (!rec) return;
+        const matchDept = !department || department === 'ALL' || this._isDeptMatch(department, rec.department);
+        const matchProg = this._isProgMatch(program, rec.program);
+
+        if (matchDept && matchProg) {
+          delete store[k];
+          deletedCount++;
+          const docId = rec.id || k;
+          deletePromises.push(FirebaseStore.deleteSubmission(docId).catch(() => {}));
+          if (typeof window !== 'undefined') {
+            fetch(`/api/submissions/${encodeURIComponent(docId)}`, { method: 'DELETE' }).catch(() => {});
+          }
+        }
+      });
+
+      // Also trigger backend endpoint
+      if (typeof window !== 'undefined' && department && program) {
+        fetch(`/api/submissions/program/${encodeURIComponent(department)}/${encodeURIComponent(program)}`, {
+          method: 'DELETE',
+        }).catch(() => {});
+      }
+
+      this.setStore(store);
+      await Promise.all(deletePromises);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+      this.logAccess(`Permanently deleted all LMS records for program: ${program} (${deletedCount} slots cleared)`, department, program);
+      return { success: true, count: deletedCount };
+    } catch (e) {
+      console.error('Failed to delete program submissions', e);
+      return { success: false, count: 0 };
+    }
+  }
+
+  public static async deleteDepartmentSubmissions(
+    department: string
+  ): Promise<{ success: boolean; count: number }> {
+    try {
+      const store = this.getStore();
+      let deletedCount = 0;
+      const deletePromises: Promise<void>[] = [];
+
+      Object.keys(store).forEach((k) => {
+        const rec = store[k];
+        if (!rec) return;
+        const matchDept = this._isDeptMatch(department, rec.department);
+
+        if (matchDept) {
+          delete store[k];
+          deletedCount++;
+          const docId = rec.id || k;
+          deletePromises.push(FirebaseStore.deleteSubmission(docId).catch(() => {}));
+          if (typeof window !== 'undefined') {
+            fetch(`/api/submissions/${encodeURIComponent(docId)}`, { method: 'DELETE' }).catch(() => {});
+          }
+        }
+      });
+
+      if (typeof window !== 'undefined' && department) {
+        fetch(`/api/submissions/department/${encodeURIComponent(department)}`, {
+          method: 'DELETE',
+        }).catch(() => {});
+      }
+
+      this.setStore(store);
+      await Promise.all(deletePromises);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+      this.logAccess(`Permanently deleted all LMS records for department: ${department} (${deletedCount} records removed)`, department);
+      return { success: true, count: deletedCount };
+    } catch (e) {
+      console.error('Failed to delete department submissions', e);
+      return { success: false, count: 0 };
+    }
+  }
+
+  /**
+   * Logic gate for data-fetching layer:
+   * Restricts record visibility so coordinators only receive records for programs they are assigned to.
+   * HODs retain full visibility for their department.
+   * VC and Admins have university-wide visibility.
+   */
+  public static getSubmissionsForUser(user: ActiveUserSession | null): SubmissionRecord[] {
+    const all = this.getAllSubmissions();
+    if (!user) return all;
+
+    if (user.role === 'VC' || user.role === 'ADMIN') {
+      return all;
+    }
+
+    if (user.role === 'HOD') {
+      return all.filter((r) => this._isDeptMatch(user.department || '', r.department));
+    }
+
+    // Role is COORDINATOR / FACULTY: restrict strictly to assigned programs in their department
+    const userPrograms: string[] = [];
+    if (user.assignedPrograms && user.assignedPrograms.length > 0) {
+      userPrograms.push(...user.assignedPrograms);
+    } else if (user.program) {
+      userPrograms.push(user.program);
+    }
+    if (user.programShiftAssignments) {
+      Object.keys(user.programShiftAssignments).forEach((p) => {
+        if (!userPrograms.includes(p)) userPrograms.push(p);
+      });
+    }
+
+    return all.filter((r) => {
+      const matchDept = this._isDeptMatch(user.department || '', r.department);
+      const matchProg = userPrograms.some((up) => this._isProgMatch(up, r.program));
+      return matchDept && matchProg;
+    });
+  }
+
+  /**
+   * Logic gate for program options:
+   * Returns list of visible program names based on user role and permissions.
+   */
+  public static getVisibleProgramsForUser(user: ActiveUserSession | null, department: string): string[] {
+    const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => this._isDeptMatch(department, d.name));
+    const deptPrograms: string[] = deptObj ? deptObj.programs.map((p) => p.name) : [];
+    if (!user) return deptPrograms;
+
+    if (user.role === 'VC' || user.role === 'ADMIN' || user.role === 'HOD') {
+      return deptPrograms;
+    }
+
+    // Role is COORDINATOR: filter only programs assigned to coordinator
+    const userPrograms: string[] = [];
+    if (user.assignedPrograms && user.assignedPrograms.length > 0) {
+      userPrograms.push(...user.assignedPrograms);
+    } else if (user.program) {
+      userPrograms.push(user.program);
+    }
+    if (user.programShiftAssignments) {
+      Object.keys(user.programShiftAssignments).forEach((p) => {
+        if (!userPrograms.includes(p)) userPrograms.push(p);
+      });
+    }
+
+    const matched = deptPrograms.filter((dp) =>
+      userPrograms.some((up) => this._isProgMatch(up, dp))
+    );
+    return matched.length > 0 ? matched : userPrograms;
+  }
+
   public static getCohortSectionsMap(): Record<string, string[]> {
     try {
       const raw = localStorage.getItem('mnsuet_cohort_sections_v99');

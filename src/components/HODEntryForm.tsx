@@ -18,7 +18,7 @@ import { CompletionRadarService } from '../services/completionRadarService';
 import { dispatchSyncEvidence } from './SyncEvidenceToast';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeadlineBanner } from './DeadlineBanner';
-import { DeleteModal } from './DeleteModal';
+import { DeleteModal, DeleteScope } from './DeleteModal';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { BulkCourseImportModal } from './BulkCourseImportModal';
@@ -1634,8 +1634,8 @@ export const HODEntryForm: React.FC<Props> = ({
     );
   };
 
-  // Delete Record (Requirement 10: Prompts confirmation, then deletes only that shift/section record)
-  const handleDeleteConfirm = async () => {
+  // Delete Record (Supports single cohort section or entire program deletion with safe audit trail)
+  const handleDeleteConfirm = async (scope: DeleteScope = 'CURRENT_SECTION') => {
     // Strict Department Authorization Check for HOD
     if (currentUser?.role === 'HOD' && currentUser.department && !isVC && !isAdmin) {
       if (department.trim().toLowerCase() !== currentUser.department.trim().toLowerCase()) {
@@ -1643,6 +1643,49 @@ export const HODEntryForm: React.FC<Props> = ({
         setIsDeleteModalOpen(false);
         return;
       }
+    }
+
+    const isHodOrAdmin = currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN' || isVC;
+    setIsDeleteModalOpen(false);
+
+    if (scope === 'ENTIRE_PROGRAM') {
+      const res = await StorageService.deleteProgramSubmissions(department, program);
+      if (res.success && res.count > 0) {
+        setIsExistingRecord(false);
+        setLoadedRecord(null);
+        setLastSavedTime(null);
+        setSubjects(createInitialBlankRows(1, shift, semester, section));
+        showFeedback('success', `All records for ${program} (${res.count} slots) were deleted successfully.`);
+
+        // Audit Trail Logging
+        AuditTrailService.logChange({
+          action: 'DELETED',
+          actorId: currentUser?.id,
+          actorName: currentUser?.name || hodCoordinator || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+          actorRole: isHodOrAdmin ? 'Head of Department (HOD)' : (currentUser?.role || 'COORDINATOR'),
+          department,
+          program,
+          shift,
+          semester,
+          section,
+          summary: isHodOrAdmin
+            ? `[HOD DELETION] Head of Department (${currentUser?.name || 'HOD'}) deleted all submission records for program: ${program} (${res.count} slots cleared)`
+            : `Deleted all submission records for ${program} (${res.count} slots) by ${currentUser?.name || hodCoordinator}`,
+        });
+
+        dispatchSyncEvidence(
+          'DELETE',
+          'Program Records Deleted & Synced',
+          `Successfully deleted all ${res.count} submission record(s) for ${program} from university cloud database.`,
+          program,
+          currentUser?.name || hodCoordinator
+        );
+
+        if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+      } else {
+        showFeedback('info', `No active saved database records found for ${program} to delete.`);
+      }
+      return;
     }
 
     const success = await StorageService.deleteSubmission(
@@ -1655,8 +1698,6 @@ export const HODEntryForm: React.FC<Props> = ({
       section
     );
 
-    setIsDeleteModalOpen(false);
-
     if (success) {
       setIsExistingRecord(false);
       setLoadedRecord(null);
@@ -1665,7 +1706,6 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('success', 'Record deleted successfully.');
 
       // Audit Trail Logging with explicit HOD Attribution
-      const isHodOrAdmin = currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN';
       AuditTrailService.logChange({
         action: 'DELETED',
         actorId: currentUser?.id,
@@ -4487,6 +4527,7 @@ export const HODEntryForm: React.FC<Props> = ({
         section={section}
         session={session}
         semester={semester}
+        isHodOrAdmin={currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN' || isVC}
         onCancel={() => setIsDeleteModalOpen(false)}
         onConfirm={handleDeleteConfirm}
       />

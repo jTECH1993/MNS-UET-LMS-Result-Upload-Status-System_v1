@@ -1137,7 +1137,7 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                           <span className="font-extrabold text-teal-950 flex items-center gap-1.5 flex-wrap">
                             <span>Selected Programs ({regAssignedPrograms.length}):</span>
                             {regAssignedPrograms.length > 1 && (
-                              <span className="text-[10px] bg-teal-100 text-teal-900 px-1.5 py-0.2 rounded font-bold">
+                              <span className="text-[10px] bg-teal-100 text-teal-900 px-1.5 py-0.5 rounded font-bold">
                                 Multi-Program Coordinator
                               </span>
                             )}

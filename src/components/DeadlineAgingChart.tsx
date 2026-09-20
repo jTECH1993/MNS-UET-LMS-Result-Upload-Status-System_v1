@@ -43,7 +43,7 @@ export const DeadlineAgingChart: React.FC<Props> = ({ risk, onFilterAging }) => 
               <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
               Overdue
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-rose-200/80 dark:bg-rose-900">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-rose-200/80 dark:bg-rose-900">
               Critical
             </span>
           </div>
@@ -65,7 +65,7 @@ export const DeadlineAgingChart: React.FC<Props> = ({ risk, onFilterAging }) => 
               <Clock className="w-3.5 h-3.5 text-amber-600" />
               Due Today
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-amber-200/80 dark:bg-amber-900">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900">
               Urgent
             </span>
           </div>
@@ -87,7 +87,7 @@ export const DeadlineAgingChart: React.FC<Props> = ({ risk, onFilterAging }) => 
               <AlertTriangle className="w-3.5 h-3.5 text-blue-600" />
               Due &lt; 3 Days
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-blue-200/80 dark:bg-blue-900">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-blue-200/80 dark:bg-blue-900">
               Warning
             </span>
           </div>
@@ -109,7 +109,7 @@ export const DeadlineAgingChart: React.FC<Props> = ({ risk, onFilterAging }) => 
               <CalendarCheck className="w-3.5 h-3.5 text-slate-500" />
               Due &gt; 3 Days
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700">
               Standard
             </span>
           </div>

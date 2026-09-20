@@ -798,7 +798,7 @@ export default function App() {
                                             <span className={`truncate font-semibold ${isSelected ? 'text-emerald-950 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-200'}`}>
                                               {prog.name}
                                             </span>
-                                            <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold shrink-0">
+                                            <span className="text-[9px] uppercase px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold shrink-0">
                                               {prog.degreeLevel}
                                             </span>
                                           </div>
@@ -861,7 +861,7 @@ export default function App() {
                                                 {prog.degreeLevel}
                                               </span>
                                               {detail.hasUploadedRecords && (
-                                                <span className="text-[9px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1 py-0.2 rounded font-bold shrink-0">
+                                                <span className="text-[9px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">
                                                   LMS Active
                                                 </span>
                                               )}
