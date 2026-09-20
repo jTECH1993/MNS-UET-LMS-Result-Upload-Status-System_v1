@@ -2579,12 +2579,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       )}
 
       {/* Advanced Filters and Genuine Submissions Toggle */}
-      <div className="bg-white p-4 rounded-lg border border-slate-300 shadow-2xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white p-3.5 sm:p-4 rounded-lg border border-slate-300 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-3.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
 
           {/* Session Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-            <Calendar className="w-4 h-4 text-slate-400" />
+            <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               id="filter-session"
               value={currentSession}
@@ -2607,7 +2607,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
           {/* Department Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-            <Building2 className="w-4 h-4 text-slate-400" />
+            <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               id="filter-department"
               value={selectedDeptFilter}
@@ -2625,14 +2625,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
           {/* Shift Filter (Morning / Evening) */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-            <span className="text-slate-400 font-semibold">Global Shift:</span>
+            <span className="text-slate-400 font-semibold">Shift:</span>
             <select
               id="filter-shift"
               value={selectedShiftFilter}
               onChange={(e) => setSelectedShiftFilter(e.target.value as any)}
               className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="ALL">All Shifts (Unified Program Rows)</option>
+              <option value="ALL">All Shifts</option>
               <option value="Morning">Morning Shift Only</option>
               <option value="Evening">Evening Shift Only</option>
             </select>
@@ -2647,7 +2647,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               onChange={(e) => setSelectedSectionFilter(e.target.value)}
               className="bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="ALL">All Sections (Combined)</option>
+              <option value="ALL">All Sections</option>
               {availableSectionsInDb.map((sec) => (
                 <option key={sec} value={sec}>
                   Section {sec} Only
@@ -2658,7 +2658,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
           {/* Submission Status Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-            <Filter className="w-4 h-4 text-slate-400" />
+            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               id="filter-status"
               value={statusFilter}
@@ -2682,7 +2682,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             }`}
             title="Click to view only departments and programs that have genuinely submitted LMS result data"
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>Genuine Submissions Only ({stats.totalGenuineSubmissionsCount})</span>
           </button>
 
@@ -2699,14 +2699,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
 
         {/* Search Input */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        <div className="relative w-full lg:w-72">
+          <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             id="input-search-vc"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search program, dept, course code, HOD..."
+            placeholder="Search program, dept, course code..."
             className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
           />
           {searchQuery && (

@@ -1887,20 +1887,20 @@ export const HODEntryForm: React.FC<Props> = ({
       {/* CARD 1: TOP BANNER (Matching Screenshot 1) */}
       <div
         id="hod-header-banner"
-        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4"
       >
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs shrink-0">
-            <FileText className="w-6 h-6" />
+        <div className="flex items-center gap-3 sm:gap-3.5">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs shrink-0">
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5">
               <span className="text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-300">
                 Central Monitoring Portal
               </span>
               <span className="text-[10px] font-bold text-slate-500">• Task #1</span>
             </div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
               {isReadOnly ? 'Executive LMS Result Inspection' : 'LMS Result Upload Status'}
             </h2>
             <p className="text-xs text-slate-500 font-medium">
@@ -1911,7 +1911,7 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
           {/* Academic Session Switcher */}
           <button
             id="btn-switch-session"
@@ -1920,7 +1920,7 @@ export const HODEntryForm: React.FC<Props> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
             title="Switch or create Academic Session"
           >
-            <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+            <Calendar className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
             <span>SESSION {session}</span>
             <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-semibold">
               Change
@@ -1929,7 +1929,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
           {/* Current Semester Badge */}
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold">
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
+            <Layers className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span>SEMESTER {semester}</span>
           </span>
 
@@ -1941,7 +1941,7 @@ export const HODEntryForm: React.FC<Props> = ({
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
             title="Generate official signed PDF reports or CSV archives of department and program results"
           >
-            <FileText className="w-3.5 h-3.5" />
+            <FileText className="w-3.5 h-3.5 shrink-0" />
             <span>Export Official PDF Report</span>
           </button>
 
@@ -1956,12 +1956,12 @@ export const HODEntryForm: React.FC<Props> = ({
             >
               {isReadOnly ? (
                 <>
-                  <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+                  <ArrowLeft className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span>Return to VC Dashboard</span>
                 </>
               ) : (
                 <>
-                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                  <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span>VC View (Read Only) &gt;</span>
                 </>
               )}
@@ -1974,7 +1974,7 @@ export const HODEntryForm: React.FC<Props> = ({
               id="record-status-badge"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-300"
             >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
               Saved Record
               {lastSavedTime && (
                 <span className="text-emerald-700 font-normal hidden lg:inline">
@@ -1987,7 +1987,7 @@ export const HODEntryForm: React.FC<Props> = ({
               id="record-status-badge"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-medium border border-slate-300"
             >
-              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+              <Sparkles className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               New Record
             </span>
           )}
@@ -2286,7 +2286,7 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
 
         {/* 6 Form Fields Grid: Dept, Program, Level, Semester, Shift, and Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4 lg:gap-5">
           {/* Department */}
           <div className="">
             <label
@@ -2677,7 +2677,7 @@ export const HODEntryForm: React.FC<Props> = ({
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Shift <span className="text-rose-600">*</span>
             </label>
-            <div className={`grid ${allowedShiftsForProgram.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200`}>
+            <div className={`grid ${allowedShiftsForProgram.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200`}>
               {allowedShiftsForProgram.includes('Morning') && (
                 <button
                   id="btn-shift-morning"
@@ -2788,7 +2788,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
         {/* Isolated Section Selector Tabs (Section A, Section B, etc.) */}
         <div className="pt-3 border-t border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                 Class Section:
@@ -2797,11 +2797,11 @@ export const HODEntryForm: React.FC<Props> = ({
                 (Data is strictly isolated per section — Section A &amp; B never overlap)
               </span>
             </div>
-            <div className="text-[11px] text-indigo-900 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+            <div className="text-[11px] text-indigo-900 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded self-start sm:self-auto">
               Active: {shift} Shift • Sem {semester} • Section {section}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {sectionStatuses.map((sec) => {
               const isSelected = sec.id === section;
               const isDeletable = sec.id !== 'A';
@@ -2928,7 +2928,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
         {/* Quick Semester Selection Tabs (Semesters 1-8) */}
         <div className="pt-3 border-t border-slate-100">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
             <span className="text-xs font-semibold text-slate-600">
               Quick Semester Jump:
             </span>
@@ -2936,7 +2936,7 @@ export const HODEntryForm: React.FC<Props> = ({
               Active: <strong>Semester {semester}</strong> for <strong>{shift} Shift – Section {section}</strong>
             </span>
           </div>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 sm:gap-2">
             {semesterStatuses.map((sem) => {
               const isSelected = sem.id === semester;
               return (
@@ -2964,16 +2964,16 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
 
         {/* Submission Metadata Row (Head of Department, Program Coordinator & Submission Date) */}
-        <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           {/* Head of Department (HOD) - Official Designation Display */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               Head of Department (HOD):
             </label>
             <div className="w-full bg-emerald-50/80 border border-emerald-200 rounded-lg px-3 py-1.5 text-xs text-emerald-950 font-semibold flex items-center justify-between">
               <span className="truncate">{CompletionRadarService.resolveHOD(department).name}</span>
-              <span className="text-[9px] bg-emerald-200/90 text-emerald-900 font-bold px-1.5 py-0.5 rounded uppercase">HOD</span>
+              <span className="text-[9px] bg-emerald-200/90 text-emerald-900 font-bold px-1.5 py-0.5 rounded uppercase shrink-0">HOD</span>
             </div>
           </div>
 
@@ -2984,7 +2984,7 @@ export const HODEntryForm: React.FC<Props> = ({
                 htmlFor="input-hod-coordinator"
                 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
               >
-                <User className="w-3.5 h-3.5 text-teal-600" />
+                <User className="w-3.5 h-3.5 text-teal-600 shrink-0" />
                 Program Coordinator Name:
               </label>
               {onOpenUserModal && (
@@ -3014,7 +3014,7 @@ export const HODEntryForm: React.FC<Props> = ({
               htmlFor="input-submission-date"
               className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5"
             >
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               Date of Submission:
             </label>
             <input
@@ -3038,7 +3038,7 @@ export const HODEntryForm: React.FC<Props> = ({
         className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
       >
         {/* Card Header matching Screenshot 1 */}
-        <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4 bg-white">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-bold text-slate-900 tracking-tight">
@@ -3059,7 +3059,7 @@ export const HODEntryForm: React.FC<Props> = ({
             {/* Quick Section Switcher Bar */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
               <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mr-1">
-                <Layers className="w-3.5 h-3.5 text-indigo-700" />
+                <Layers className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
                 Section View:
               </span>
               {sectionStatuses.map((sec) => {
@@ -3097,9 +3097,9 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
 
           {/* Course Search & Actions toolbar */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
             {/* Search courses input */}
-            <div className="relative min-w-[220px]">
+            <div className="relative flex-1 sm:flex-none sm:min-w-[220px] w-full sm:w-auto">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="input-course-filter"
@@ -4266,59 +4266,59 @@ export const HODEntryForm: React.FC<Props> = ({
       {/* CARD 4: ACTIONS & SUBMISSION BAR */}
       <div
         id="hod-action-bar"
-        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-wrap items-center justify-between gap-4"
+        className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 sm:p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 sm:gap-4"
       >
         {effectiveReadOnly ? (
           <>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               {onSwitchToVC && (
                 <button
                   type="button"
                   onClick={onSwitchToVC}
-                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+                  className="px-4 sm:px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <ArrowLeft className="w-4 h-4" />
+                  <ArrowLeft className="w-4 h-4 shrink-0" />
                   <span>RETURN TO VC DASHBOARD</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-lg border border-slate-800 flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+                className="px-3.5 sm:px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm rounded-lg border border-slate-800 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
               >
-                <Printer className="w-4 h-4 text-emerald-400" />
+                <Printer className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>PRINT VERIFIED AUDIT SHEET</span>
               </button>
               <button
                 type="button"
                 onClick={handleExportCurrent}
-                className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+                className="px-3.5 sm:px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm rounded-lg border border-slate-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
               >
-                <Download className="w-4 h-4 text-emerald-600" />
+                <Download className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>EXPORT CSV (EXCEL)</span>
               </button>
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 self-start lg:self-auto">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
-    {isDeadlineExpired && !isVC && !isAdmin 
-      ? 'Deadline Expired • Form is Locked (Contact VC to Edit)'
-      : 'Vice Chancellor Academic Oversight • Read-Only Inspection Mode'}
-  </span>
+                {isDeadlineExpired && !isVC && !isAdmin 
+                  ? 'Deadline Expired • Form is Locked (Contact VC to Edit)'
+                  : 'Vice Chancellor Academic Oversight • Read-Only Inspection Mode'}
+              </span>
             </div>
           </>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               {/* SAVE / UPDATE BUTTON */}
               <button
                 id="btn-save-record"
                 type="button"
                 onClick={() => handleSave()}
                 disabled={isSaving}
-                className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-lg shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+                className="px-5 sm:px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs sm:text-sm rounded-lg shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <Save className="w-4 h-4" />
+                <Save className="w-4 h-4 shrink-0" />
                 <span>{isExistingRecord ? 'UPDATE RECORD IN DATABASE' : 'SAVE RECORD TO DATABASE'}</span>
               </button>
 
@@ -4327,10 +4327,10 @@ export const HODEntryForm: React.FC<Props> = ({
                 id="btn-clear-form"
                 type="button"
                 onClick={handleClearForm}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-lg border border-slate-300 flex items-center gap-2 transition-all cursor-pointer"
+                className="px-3.5 sm:px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-lg border border-slate-300 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 title="Reset active form fields without deleting database records"
               >
-                <RotateCcw className="w-4 h-4 text-slate-500" />
+                <RotateCcw className="w-4 h-4 text-slate-500 shrink-0" />
                 <span>RESET FORM</span>
               </button>
 
@@ -4340,28 +4340,28 @@ export const HODEntryForm: React.FC<Props> = ({
                 type="button"
                 onClick={() => setIsDeleteModalOpen(true)}
                 disabled={!isExistingRecord}
-                className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all border cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-2.5 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border cursor-pointer ${
                   isExistingRecord
                     ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
                     : 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
                 }`}
                 title="Permanently remove saved record for this program from database"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 shrink-0" />
                 <span>DELETE RECORD</span>
               </button>
             </div>
 
             {/* Export options for this department & program */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
               <button
                 id="btn-export-department-report-bottom"
                 type="button"
                 onClick={() => setIsExportModalOpen(true)}
-                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                className="px-3.5 sm:px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
                 title="Open official department PDF and CSV export modal"
               >
-                <Printer className="w-3.5 h-3.5" />
+                <Printer className="w-3.5 h-3.5 shrink-0" />
                 <span>Export Official PDF Report</span>
               </button>
 
@@ -4369,10 +4369,10 @@ export const HODEntryForm: React.FC<Props> = ({
                 id="btn-export-program-csv"
                 type="button"
                 onClick={handleExportCurrent}
-                className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                className="px-3 sm:px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                 title="Quick download CSV for current section"
               >
-                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <Download className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span>Download CSV</span>
               </button>
             </div>
