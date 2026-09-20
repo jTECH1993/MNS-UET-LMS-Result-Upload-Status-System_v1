@@ -24,6 +24,7 @@ import { AcademicSessionModal } from './AcademicSessionModal';
 import { BulkCourseImportModal } from './BulkCourseImportModal';
 import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
 import { RequestAdditionalProgramModal } from './RequestAdditionalProgramModal';
+import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import {
@@ -69,6 +70,7 @@ import {
   Square,
   AlertTriangle,
   XCircle,
+  History as HistoryIcon,
 } from 'lucide-react';
 
 // Standard institutional delay reasons for academic compliance
@@ -221,6 +223,8 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [currentUser?.role]);
 
   // Determine programs allowed for the active user:
+  // Coordinators ONLY see programs explicitly assigned to them during registration or by HOD.
+  // Only HOD, ADMIN, and VC have access to all programs.
   const coordinatorAllowedPrograms = useMemo(() => {
     if (isPrivilegedUser) {
       return allDeptPrograms;
@@ -241,8 +245,18 @@ export const HODEntryForm: React.FC<Props> = ({
       userPrograms.some((up) => up.trim().toLowerCase() === p.name.trim().toLowerCase())
     );
 
-    return filtered.length > 0 ? filtered : allDeptPrograms;
-  }, [isPrivilegedUser, allDeptPrograms, currentUser]);
+    if (filtered.length > 0) return filtered;
+    if (userPrograms.length > 0) {
+      return userPrograms.map((name) => ({
+        name,
+        degreeLevel: 'BS (4 Years)',
+        department,
+        session2023: true,
+      }));
+    }
+    // Strict isolation: if coordinator has no assigned programs, return empty array (do NOT expose other coordinators' programs)
+    return [];
+  }, [isPrivilegedUser, allDeptPrograms, currentUser, department]);
 
   const initialProgram = useMemo(() => {
     if (selectedProgramProp) {
@@ -252,7 +266,10 @@ export const HODEntryForm: React.FC<Props> = ({
       );
       if (match) return match.name;
     }
-    return coordinatorAllowedPrograms[0]?.name || (currentDeptPrograms[0]?.name || '');
+    if (!isPrivilegedUser) {
+      return coordinatorAllowedPrograms[0]?.name || '';
+    }
+    return currentDeptPrograms[0]?.name || '';
   }, [selectedProgramProp, isPrivilegedUser, coordinatorAllowedPrograms, currentDeptPrograms]);
 
   const [program, setProgram] = useState<string>(initialProgram);
@@ -326,6 +343,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // State flags
   const [isExistingRecord, setIsExistingRecord] = useState<boolean>(false);
+  const [loadedRecord, setLoadedRecord] = useState<SubmissionRecord | null>(null);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [conflictRecord, setConflictRecord] = useState<SubmissionRecord | null>(null);
@@ -362,6 +380,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [pendingProgRequests, setPendingProgRequests] = useState<ProgramAccessRequest[]>([]);
   const [userProgramRequests, setUserProgramRequests] = useState<ProgramAccessRequest[]>([]);
   const [isReqProgModalOpen, setIsReqProgModalOpen] = useState<boolean>(false);
+  const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
   const isPendingCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'PENDING';
   const isRejectedCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'REJECTED';
 
@@ -766,18 +785,18 @@ export const HODEntryForm: React.FC<Props> = ({
       return;
     }
 
-    const isProgramActiveInSession = activeNames.includes(program);
-    if (!isProgramInDept || !isProgramActiveInSession) {
-      const enrolled = dept.programs.filter((p) => activeNames.includes(p.name));
-      if (enrolled.length > 0) {
-        setProgram(enrolled[0].name);
-        if (onProgramChangedProp) onProgramChangedProp(enrolled[0].name);
-      } else if (dept.programs.length > 0) {
-        setProgram(dept.programs[0].name);
-        if (onProgramChangedProp) onProgramChangedProp(dept.programs[0].name);
+    // Strict Coordinator Isolation: Only fall back to allowed assigned programs
+    const isProgramAllowed = coordinatorAllowedPrograms.some(
+      (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+    );
+    if (!isProgramAllowed) {
+      const fallback = coordinatorAllowedPrograms[0]?.name || '';
+      if (fallback !== program) {
+        setProgram(fallback);
+        if (onProgramChangedProp) onProgramChangedProp(fallback);
       }
     }
-  }, [department, session, storageVersion, rosterVersion, allDeptPrograms, program, isPrivilegedUser, onProgramChangedProp]);
+  }, [department, session, storageVersion, rosterVersion, allDeptPrograms, program, isPrivilegedUser, coordinatorAllowedPrograms, onProgramChangedProp]);
 
   // When department changes, update program to the first program of that department
   const handleDepartmentChange = (newDept: string) => {
@@ -870,20 +889,17 @@ export const HODEntryForm: React.FC<Props> = ({
     if (existing) {
       // Existing record exists -> LOAD EXACT SAVED ROWS ONLY
       setIsExistingRecord(true);
+      setLoadedRecord(existing);
       setLastSavedTime(existing.updatedAt);
       setLoadedUpdatedAt(existing.updatedAt);
       setHodCoordinator(resolveProgramCoordinatorName(department, program, shift, existing.hodCoordinator));
       if (existing.submissionDate) setSubmissionDate(existing.submissionDate);
 
-      // Filter to existing non-empty rows, pad up to 8 for fast entry
-      const validRows = existing.subjects.filter(
+      // Filter to existing non-empty rows; if empty (0 courses remaining), preserve empty state
+      const validRows = (existing.subjects || []).filter(
         (r) => r.courseCode.trim() || r.subjectTitle.trim() || r.status
       );
-      const rows = [...validRows];
-      while (rows.length < 1) {
-        rows.push(createEmptySubjectRow(rows.length + 1, shift, semester, section));
-      }
-      setSubjects(rows);
+      setSubjects(validRows);
       setSelectedRowIds(new Set());
 
       showFeedback(
@@ -892,8 +908,9 @@ export const HODEntryForm: React.FC<Props> = ({
       );
     } else {
       
-      // No record exists -> Start with 8 clean rows
+      // No record exists -> Start with 1 clean row
       setIsExistingRecord(false);
+      setLoadedRecord(null);
       setLastSavedTime(null);
       setLoadedUpdatedAt(null);
       setHodCoordinator(resolveProgramCoordinatorName(department, program, shift));
@@ -975,14 +992,28 @@ export const HODEntryForm: React.FC<Props> = ({
     showFeedback('info', `Added subject row #${subjects.length + 1} for Semester ${semester} (Section ${section}).`);
   };
 
-  // Remove last course row
+  // Remove last course row (allows deleting down to 0 rows)
   const handleRemoveRow = () => {
-    if (subjects.length <= 1) {
-      showFeedback('warning', 'At least one row must be kept in the table.');
+    if (subjects.length === 0) {
+      showFeedback('info', 'Table has no course rows left (0 rows).');
       return;
     }
     setSubjects((prev) => prev.slice(0, -1));
     showFeedback('info', 'Last course row removed.');
+  };
+
+  // Clear all course rows (allows wiping all rows to save empty state)
+  const handleClearAllRows = () => {
+    if (subjects.length === 0) {
+      showFeedback('info', 'Course table is already empty (0 courses).');
+      return;
+    }
+    setSubjects([]);
+    setSelectedRowIds(new Set());
+    showFeedback(
+      'info',
+      'All course rows removed from the table. Click "Update Record in Database" to save this cleared state or "Delete Record" to delete the record entirely.'
+    );
   };
 
   // Delete a specific row
@@ -1003,6 +1034,18 @@ export const HODEntryForm: React.FC<Props> = ({
       return next;
     });
     showFeedback('info', 'Course row removed.');
+  };
+
+  // Batch delete selected rows
+  const handleBatchDeleteSelected = () => {
+    if (selectedRowIds.size === 0) {
+      showFeedback('info', 'No courses selected to remove.');
+      return;
+    }
+    const count = selectedRowIds.size;
+    setSubjects((prev) => prev.filter((item) => !selectedRowIds.has(item.id)));
+    setSelectedRowIds(new Set());
+    showFeedback('info', `Removed ${count} selected course row(s).`);
   };
 
   // Duplicate row by ID
@@ -1430,11 +1473,6 @@ export const HODEntryForm: React.FC<Props> = ({
       (s) => s.courseCode.trim() || s.subjectTitle.trim() || s.uploadedBy.trim() || s.status
     );
 
-    if (activeRows.length === 0) {
-      showFeedback('warning', 'Please add and fill at least one course before saving.');
-      return;
-    }
-
     // Conflict detection check (unless forced)
     if (!forceOverwrite) {
       const dbRecord = StorageService.getSubmission(
@@ -1452,41 +1490,45 @@ export const HODEntryForm: React.FC<Props> = ({
       }
     }
 
-    // Mandatory Field Validation Engine
-    const newMissingFields: Record<string, boolean> = {};
-    let missingCount = 0;
+    // Mandatory Field Validation Engine - only runs if there are active rows
+    if (activeRows.length > 0) {
+      const newMissingFields: Record<string, boolean> = {};
+      let missingCount = 0;
 
-    activeRows.forEach((row, idx) => {
-      if (!row.courseCode || !row.courseCode.trim()) {
-        newMissingFields[`${row.id}_courseCode`] = true;
-        missingCount++;
-      }
-      if (!row.subjectTitle || !row.subjectTitle.trim()) {
-        newMissingFields[`${row.id}_subjectTitle`] = true;
-        missingCount++;
-      }
-      if (!row.creditHours || String(row.creditHours).trim() === '') {
-        newMissingFields[`${row.id}_creditHours`] = true;
-        missingCount++;
-      }
-      if (!row.uploadedBy || !row.uploadedBy.trim()) {
-        newMissingFields[`${row.id}_uploadedBy`] = true;
-        missingCount++;
-      }
-      if (!row.status) {
-        newMissingFields[`${row.id}_status`] = true;
-        missingCount++;
-      }
-    });
+      activeRows.forEach((row) => {
+        if (!row.courseCode || !row.courseCode.trim()) {
+          newMissingFields[`${row.id}_courseCode`] = true;
+          missingCount++;
+        }
+        if (!row.subjectTitle || !row.subjectTitle.trim()) {
+          newMissingFields[`${row.id}_subjectTitle`] = true;
+          missingCount++;
+        }
+        if (!row.creditHours || String(row.creditHours).trim() === '') {
+          newMissingFields[`${row.id}_creditHours`] = true;
+          missingCount++;
+        }
+        if (!row.uploadedBy || !row.uploadedBy.trim()) {
+          newMissingFields[`${row.id}_uploadedBy`] = true;
+          missingCount++;
+        }
+        if (!row.status) {
+          newMissingFields[`${row.id}_status`] = true;
+          missingCount++;
+        }
+      });
 
-    setMissingFields(newMissingFields);
+      setMissingFields(newMissingFields);
 
-    if (missingCount > 0) {
-      showFeedback(
-        'warning',
-        `⚠️ Validation Blocked: ${missingCount} mandatory field(s) are missing across ${activeRows.length} course record(s). Highlighted in red below. Please complete Course Code, Title, Credit Hours, Instructor Name, and LMS Status.`
-      );
-      return;
+      if (missingCount > 0) {
+        showFeedback(
+          'warning',
+          `⚠️ Validation Blocked: ${missingCount} mandatory field(s) are missing across ${activeRows.length} course record(s). Highlighted in red below. Please complete Course Code, Title, Credit Hours, Instructor Name, and LMS Status.`
+        );
+        return;
+      }
+    } else {
+      setMissingFields({});
     }
 
     setIsSaving(true);
@@ -1495,6 +1537,8 @@ export const HODEntryForm: React.FC<Props> = ({
       ...s,
       dateUploaded: s.status === 'Uploaded' ? (s.dateUploaded || submissionDate || today) : (s.dateUploaded || ''),
     }));
+
+    const isHodOrAdmin = currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN';
 
     const recordToSave: SubmissionRecord = {
       id: '', // Generated in service
@@ -1508,9 +1552,14 @@ export const HODEntryForm: React.FC<Props> = ({
       hodCoordinator,
       submissionDate,
       subjects: resolvedRows,
-      accessedBy: currentUser?.name || 'University HOD',
-      userDesignation: currentUser?.designation || 'HOD / Coordinator',
-      createdAt: new Date().toISOString(),
+      accessedBy: currentUser?.name || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+      userDesignation: currentUser?.designation || (isHodOrAdmin ? 'Head of Department (HOD)' : 'Program Coordinator'),
+      lastUpdatedByRole: currentUser?.role || (isHodOrAdmin ? 'HOD' : 'COORDINATOR'),
+      lastUpdatedByName: currentUser?.name || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+      lastUpdatedByDesignation: currentUser?.designation || (isHodOrAdmin ? 'Head of Department (HOD)' : 'Program Coordinator'),
+      hodLastModifiedAt: isHodOrAdmin ? new Date().toISOString() : loadedRecord?.hodLastModifiedAt,
+      hodLastModifiedBy: isHodOrAdmin ? (currentUser?.name || 'Head of Department') : loadedRecord?.hodLastModifiedBy,
+      createdAt: loadedRecord?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -1522,37 +1571,52 @@ export const HODEntryForm: React.FC<Props> = ({
       const savedTime = new Date().toISOString();
       setLastSavedTime(savedTime);
       setLoadedUpdatedAt(savedTime);
+      setLoadedRecord(recordToSave);
       setSubjects(activeRows);
       setMissingFields({});
       showFeedback(
         'success',
-        result.isUpdate ? "Record updated successfully." : "Record created successfully."
+        activeRows.length === 0
+          ? 'Record updated in database. All course records have been removed (0 courses remaining).'
+          : (result.isUpdate ? "Record updated successfully." : "Record created successfully.")
       );
 
-      // Audit Trail Logging
+      // Audit Trail Logging with explicit HOD Attribution
       AuditTrailService.logChange({
         action: result.isUpdate ? 'UPDATED' : 'CREATED',
         actorId: currentUser?.id,
-        actorName: currentUser?.name || hodCoordinator || 'HOD / Coordinator',
-        actorRole: currentUser?.role || 'COORDINATOR',
+        actorName: currentUser?.name || hodCoordinator || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+        actorRole: isHodOrAdmin ? 'Head of Department (HOD)' : (currentUser?.role || 'COORDINATOR'),
         department,
         program,
         shift,
         semester,
         section,
-        summary: `${result.isUpdate ? 'Updated' : 'Created'} ${activeRows.length} course result record(s) for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`,
-        details: activeRows.map((r) => ({
-          field: `${r.courseCode} - ${r.subjectTitle}`,
-          oldValue: 'N/A',
-          newValue: `Status: ${r.status} | Instructor: ${r.uploadedBy} | Cr.Hrs: ${r.creditHours}`,
-        })),
+        summary: isHodOrAdmin
+          ? `[HOD UPDATE] Head of Department (${currentUser?.name || 'HOD'}) ${result.isUpdate ? 'updated' : 'saved'} ${activeRows.length} course record(s) for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`
+          : (activeRows.length === 0
+              ? `Cleared and removed all course records (0 courses left) for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`
+              : `${result.isUpdate ? 'Updated' : 'Created'} ${activeRows.length} course result record(s) for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`),
+        details: activeRows.length > 0
+          ? activeRows.map((r) => ({
+              field: `${r.courseCode} - ${r.subjectTitle}`,
+              oldValue: 'N/A',
+              newValue: `Status: ${r.status} | Instructor: ${r.uploadedBy} | Cr.Hrs: ${r.creditHours}`,
+            }))
+          : [{
+              field: 'ALL_COURSES',
+              oldValue: 'Previous courses',
+              newValue: 'All courses removed/cleared (0 courses in database)',
+            }],
       });
 
       // Global Evidence Toast Notification
       dispatchSyncEvidence(
         result.isUpdate ? 'UPDATE' : 'SAVE',
         result.isUpdate ? 'Database Record Updated & Synced' : 'Database Record Saved & Synced',
-        `Successfully ${result.isUpdate ? 'updated' : 'saved'} ${activeRows.length} course entry(s) to university database. Data is persistent and mathematically aggregated across all executive monitors.`,
+        isHodOrAdmin
+          ? `[HOD Update] Head of Department saved ${activeRows.length} course entry(s) to university database. Synced across all coordinator pages.`
+          : `Successfully ${result.isUpdate ? 'updated' : 'saved'} ${activeRows.length} course entry(s) to university database. Data is persistent and mathematically aggregated across all executive monitors.`,
         `${program} • ${shift} Shift • Sem ${semester} (Sec ${section})`,
         currentUser?.name || hodCoordinator
       );
@@ -1595,22 +1659,26 @@ export const HODEntryForm: React.FC<Props> = ({
 
     if (success) {
       setIsExistingRecord(false);
+      setLoadedRecord(null);
       setLastSavedTime(null);
       setSubjects(createInitialBlankRows(1, shift, semester, section));
       showFeedback('success', 'Record deleted successfully.');
 
-      // Audit Trail Logging
+      // Audit Trail Logging with explicit HOD Attribution
+      const isHodOrAdmin = currentUser?.role === 'HOD' || currentUser?.role === 'ADMIN';
       AuditTrailService.logChange({
         action: 'DELETED',
         actorId: currentUser?.id,
-        actorName: currentUser?.name || hodCoordinator || 'HOD / Coordinator',
-        actorRole: currentUser?.role || 'COORDINATOR',
+        actorName: currentUser?.name || hodCoordinator || (isHodOrAdmin ? 'Head of Department' : 'Program Coordinator'),
+        actorRole: isHodOrAdmin ? 'Head of Department (HOD)' : (currentUser?.role || 'COORDINATOR'),
         department,
         program,
         shift,
         semester,
         section,
-        summary: `Deleted submission record for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`,
+        summary: isHodOrAdmin
+          ? `[HOD DELETION] Head of Department (${currentUser?.name || 'HOD'}) deleted submission record for ${program} (${shift} Shift - Semester ${semester} Sec ${section})`
+          : `Deleted submission record for ${program} (${shift} Shift - Semester ${semester} Sec ${section}) by ${currentUser?.name || hodCoordinator}`,
       });
 
       // Global Evidence Toast Notification
@@ -3060,6 +3128,43 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Official HOD Update Notice Banner for Coordinators and Viewers */}
+        {(loadedRecord?.hodLastModifiedBy || currentRecordLogs.some((l) => l.actorRole?.toUpperCase().includes('HOD') || l.summary?.includes('[HOD UPDATE]'))) && (
+          <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 text-white p-3.5 border-b border-purple-800/60 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-600/50 border border-purple-400/50 flex items-center justify-center text-white shrink-0 shadow-inner">
+                <ShieldCheck className="w-5 h-5 text-purple-200" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="bg-purple-500/40 text-purple-200 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-purple-400/40 tracking-wider">
+                    UPDATED BY HEAD OF DEPARTMENT
+                  </span>
+                  <span className="text-xs font-bold text-white">
+                    {loadedRecord?.hodLastModifiedBy || currentRecordLogs.find((l) => l.actorRole?.toUpperCase().includes('HOD'))?.actorName || 'Head of Department'}
+                  </span>
+                  {loadedRecord?.hodLastModifiedAt && (
+                    <span className="text-[11px] text-purple-300 font-mono">
+                      • {new Date(loadedRecord.hodLastModifiedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-purple-200/90 mt-0.5">
+                  This section was updated directly by the Head of Department. All recent modifications are recorded in the institutional audit logs.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsChangeHistoryOpen(true)}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg border border-purple-400/40 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+            >
+              <HistoryIcon className="w-3.5 h-3.5 text-purple-200" />
+              <span>View HOD Audit Logs</span>
+            </button>
+          </div>
+        )}
+
         {/* Enterprise Quick-Fill & Selective Operations Toolbar (Editable Mode Only) */}
         {!isReadOnly && (
           <div className="bg-emerald-950/95 text-white px-4 py-2.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-xs border-b border-emerald-800 shadow-inner">
@@ -3171,6 +3276,18 @@ export const HODEntryForm: React.FC<Props> = ({
                   title={`Set instructor/uploader to "${currentUser.name}"`}
                 >
                   <span>Fill My Name</span>
+                </button>
+              )}
+
+              {isAnySelected && (
+                <button
+                  type="button"
+                  onClick={handleBatchDeleteSelected}
+                  className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-200 text-[11px] font-bold rounded border border-rose-700/70 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                  title={`Remove ${selectedCount} selected course row(s)`}
+                >
+                  <Trash2 className="w-3 h-3 text-rose-300" />
+                  <span>Delete Selected ({selectedCount})</span>
                 </button>
               )}
             </div>
@@ -4050,11 +4167,22 @@ export const HODEntryForm: React.FC<Props> = ({
                 type="button"
                 onClick={handleRemoveRow}
                 className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 font-medium rounded-lg border border-slate-300 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                title="Remove the last empty row"
+                title="Remove the last row"
               >
                 <Minus className="w-3.5 h-3.5 text-slate-500" />
                 <span>Remove Last Row</span>
               </button>
+              {subjects.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllRows}
+                  className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 font-medium rounded-lg border border-rose-200 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Remove all course rows so you can save 0 courses"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Clear All Courses ({subjects.length})</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2 text-slate-700 font-semibold">
@@ -4513,6 +4641,15 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Audit Trail & Change History Modal */}
+      <ChangeHistoryModal
+        isOpen={isChangeHistoryOpen}
+        onClose={() => setIsChangeHistoryOpen(false)}
+        initialDepartment={department}
+        initialProgram={program}
+        initialShift={shift}
+      />
 
       {/* Post-Login Request Additional Program Modal */}
       {currentUser && (

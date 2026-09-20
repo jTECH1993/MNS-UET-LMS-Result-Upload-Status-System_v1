@@ -257,14 +257,19 @@ export const ChangeHistoryModal: React.FC<Props> = ({
               const isUpdate = log.action === 'UPDATED';
               const isDelete = log.action === 'DELETED';
               const isApprove = log.action === 'APPROVED';
+              const isHOD = log.actorRole?.toUpperCase().includes('HOD') || log.summary?.includes('[HOD');
 
               return (
                 <div
                   key={log.id}
-                  className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 transition space-y-2"
+                  className={`p-4 rounded-2xl transition space-y-2 ${
+                    isHOD
+                      ? 'bg-purple-950/40 border border-purple-600/40 hover:border-purple-500 shadow-xs'
+                      : 'bg-slate-950/60 border border-slate-800/80 hover:border-slate-700'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
                           isCreate
@@ -278,6 +283,14 @@ export const ChangeHistoryModal: React.FC<Props> = ({
                       >
                         {log.action}
                       </span>
+
+                      {isHOD && (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 tracking-wider shadow-xs">
+                          <ShieldCheck className="w-3 h-3 text-purple-300" />
+                          Official HOD Update
+                        </span>
+                      )}
+
                       <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-slate-400" />
                         {log.actorName}
@@ -286,7 +299,7 @@ export const ChangeHistoryModal: React.FC<Props> = ({
                         </span>
                       </span>
                     </div>
-                    <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                    <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 shrink-0">
                       <Clock className="w-3 h-3 text-slate-500" />
                       {new Date(log.timestamp).toLocaleString()}
                     </span>

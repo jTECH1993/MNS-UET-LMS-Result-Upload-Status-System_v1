@@ -164,6 +164,13 @@ export interface SubmissionRecord {
   referenceNumber?: string; // e.g. "MNSUET-CS-BSCS-S1-M-7F4K92"
   editPin?: string; // e.g. "58392174"
   auditTrail?: AuditLogEntry[];
+
+  // HOD vs Coordinator update tracking & audit markers
+  lastUpdatedByRole?: string; // 'HOD' | 'COORDINATOR' | 'ADMIN' | 'VC'
+  lastUpdatedByName?: string;
+  lastUpdatedByDesignation?: string;
+  hodLastModifiedAt?: string;
+  hodLastModifiedBy?: string;
 }
 
 export interface ExecutiveSummary {

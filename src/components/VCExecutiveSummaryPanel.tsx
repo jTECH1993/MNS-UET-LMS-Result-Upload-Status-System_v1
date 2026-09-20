@@ -32,6 +32,15 @@ interface Props {
 export type SummaryStyle = 'DETAILED' | 'EXECUTIVE' | 'PENDING_ONLY';
 export type SummaryView = 'TEXT' | 'DASHBOARD';
 
+// Helper to clean coordinator designations from names
+const cleanCoordinatorName = (name: string): string => {
+  if (!name || name.trim() === '' || name.includes('HOD / Coordinator')) return 'Not Assigned';
+  let cleaned = name.trim();
+  // Strip nested or trailing designation parens e.g. "Zaid Sarfraz (Program Coordinator (BS Computer Science))" -> "Zaid Sarfraz"
+  cleaned = cleaned.replace(/\s*\((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*\)/g, '').trim();
+  return cleaned || name.trim();
+};
+
 export function VCExecutiveSummaryPanel({
   allRecords,
   currentSession = '2023',
@@ -207,16 +216,16 @@ export function VCExecutiveSummaryPanel({
           let shiftTotal = 0;
           let shiftLabMissing = false;
 
-          let coordName = 'Not Assigned';
+          let rawCoordName = 'Not Assigned';
           const resolved = CompletionRadarService.resolveCoordinator(dept.name, prog.name, sh as AcademicShift);
           if (resolved.isAssigned) {
-            coordName = resolved.name;
+            rawCoordName = resolved.name;
           }
 
           if (shiftRecords.length > 0) {
             shiftRecords.forEach((r) => {
               if (r.hodCoordinator && r.hodCoordinator.trim() && !r.hodCoordinator.includes('HOD / Coordinator')) {
-                coordName = r.hodCoordinator.trim();
+                rawCoordName = r.hodCoordinator.trim();
               }
               if (r.subjects && Array.isArray(r.subjects)) {
                 const uploaded = r.subjects.filter((s: any) => s.status === 'Uploaded').length;
@@ -231,8 +240,10 @@ export function VCExecutiveSummaryPanel({
             });
           }
 
+          const coordName = cleanCoordinatorName(rawCoordName);
+
           let shiftStatus: 'COMPLETE' | 'PARTIAL' | 'NOT_SUBMITTED' = 'NOT_SUBMITTED';
-          if (shiftTotal === 0) {
+          if (shiftTotal === 0 || (shiftTotal > 0 && shiftUploaded === 0)) {
             shiftStatus = 'NOT_SUBMITTED';
           } else if (shiftUploaded >= shiftTotal) {
             shiftStatus = 'COMPLETE';
@@ -254,13 +265,18 @@ export function VCExecutiveSummaryPanel({
           if (shiftLabMissing) hasProgLabMissing = true;
         });
 
+        // Determine program status strictly from its active shifts
+        const shiftStatusList = Object.values(shiftsDetail).map((s) => s.status);
         let progStatus: 'COMPLETE' | 'PARTIAL' | 'INCOMPLETE' | 'NOT_SUBMITTED' = 'NOT_SUBMITTED';
-        if (totalProgExpected === 0) {
-          progStatus = 'NOT_SUBMITTED';
-        } else if (totalProgUploaded >= totalProgExpected) {
+
+        if (shiftStatusList.length > 0 && shiftStatusList.every((st) => st === 'COMPLETE')) {
           progStatus = 'COMPLETE';
-        } else if (totalProgUploaded > 0) {
-          progStatus = totalProgExpected - totalProgUploaded === 1 || hasProgLabMissing ? 'INCOMPLETE' : 'PARTIAL';
+        } else if (shiftStatusList.every((st) => st === 'NOT_SUBMITTED')) {
+          progStatus = 'NOT_SUBMITTED';
+        } else if (hasProgLabMissing) {
+          progStatus = 'INCOMPLETE';
+        } else {
+          progStatus = 'PARTIAL';
         }
 
         return {
@@ -280,13 +296,16 @@ export function VCExecutiveSummaryPanel({
       const deptUploaded = programSummaries.reduce((acc, p) => acc + (p?.uploadedCount || 0), 0);
       const deptTotal = programSummaries.reduce((acc, p) => acc + (p?.totalExpected || 0), 0);
 
+      // Department status: COMPLETE only if EVERY active program is complete!
+      const progStatusList = programSummaries.map((p) => p?.status);
       let deptStatus: 'COMPLETE' | 'PARTIAL' | 'INCOMPLETE' | 'NOT_SUBMITTED' = 'NOT_SUBMITTED';
-      if (deptTotal > 0 && deptUploaded >= deptTotal) {
+
+      if (progStatusList.length > 0 && progStatusList.every((st) => st === 'COMPLETE')) {
         deptStatus = 'COMPLETE';
-      } else if (deptUploaded > 0 && deptUploaded < deptTotal) {
-        deptStatus = 'PARTIAL';
-      } else if (deptTotal > 0 && deptUploaded === 0) {
+      } else if (progStatusList.every((st) => st === 'NOT_SUBMITTED')) {
         deptStatus = 'NOT_SUBMITTED';
+      } else {
+        deptStatus = 'PARTIAL';
       }
 
       if (statusFilter !== 'ALL' && deptStatus !== statusFilter) {
@@ -306,14 +325,10 @@ export function VCExecutiveSummaryPanel({
     }).filter(Boolean) as any[];
   }, [allRecords, sessionFilter, semesterFilter, deptFilter, shiftFilter, statusFilter, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter]);
 
-  // Generate Full Summary Text
+  // Generate Full Summary Text with elegant, spacious, clean formatting
   const fullSummaryText = useMemo(() => {
-    let headerSession = sessionFilter === 'All' ? `Session ${currentSession}` : `Session ${sessionFilter}`;
-    if (semesterFilter !== 'ALL' && semesterFilter !== 'All') {
-      headerSession += ` (Semester ${semesterFilter})`;
-    } else {
-      headerSession += ` (All Semesters)`;
-    }
+    const headerSession = sessionFilter === 'All' ? `Session ${currentSession}` : `Session ${sessionFilter}`;
+    const semLabel = semesterFilter !== 'ALL' && semesterFilter !== 'All' ? `Semester ${semesterFilter}` : 'All Semesters';
 
     const shiftLabel =
       shiftFilter === 'ALL'
@@ -322,11 +337,17 @@ export function VCExecutiveSummaryPanel({
         ? 'Morning Shift Only'
         : 'Evening Shift Only';
 
-    let text = `EXAMINATION RESULT UPLOAD SUMMARY\n`;
-    text += `${headerSession}\n`;
-    text += `Academic Shift Scope: ${shiftLabel}\n`;
-    text += `Last updated: ${lastUpdated || 'Recently'}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    const totalUploadedOverall = summaryData.reduce((acc, d) => acc + (d?.deptUploaded || 0), 0);
+    const totalExpectedOverall = summaryData.reduce((acc, d) => acc + (d?.deptTotal || 0), 0);
+
+    let text = `══════════════════════════════════════════════════════════════════════\n`;
+    text += `             MNS-UET EXAMINATION RESULT UPLOAD SUMMARY\n`;
+    text += `══════════════════════════════════════════════════════════════════════\n`;
+    text += `Academic Session : ${headerSession} (${semLabel})\n`;
+    text += `Shift Scope      : ${shiftLabel}\n`;
+    text += `Last Updated     : ${lastUpdated || 'Recently'}\n`;
+    text += `Total Uploads    : ${totalUploadedOverall} Results Uploaded across University\n`;
+    text += `══════════════════════════════════════════════════════════════════════\n\n`;
 
     if (!summaryData || summaryData.length === 0) {
       text += `No department records match the selected filter criteria.\n`;
@@ -336,94 +357,103 @@ export function VCExecutiveSummaryPanel({
     if (summaryStyle === 'DETAILED') {
       summaryData.forEach((dept, idx) => {
         if (!dept) return;
-        text += `${idx + 1}. ${dept.shortName}\n`;
 
-        dept.programs.forEach((prog: any, pIdx: number) => {
+        const completeProgs = dept.programs.filter((p: any) => p.status === 'COMPLETE').length;
+        const totalProgs = dept.programs.length;
+        const pendingProgs = totalProgs - completeProgs;
+
+        let deptBadge = '🟡 PARTIAL';
+        if (dept.deptStatus === 'COMPLETE') {
+          deptBadge = '✓ COMPLETE';
+        } else if (dept.deptStatus === 'NOT_SUBMITTED') {
+          deptBadge = '🔴 NOT SUBMITTED';
+        }
+
+        const deptSubtitle =
+          dept.deptStatus === 'COMPLETE'
+            ? `(${completeProgs}/${totalProgs} Programs 100% Cleared)`
+            : dept.deptStatus === 'NOT_SUBMITTED'
+            ? `(0/${totalProgs} Programs Submitted)`
+            : `(${completeProgs} Complete, ${pendingProgs} Pending)`;
+
+        text += `${idx + 1}. DEPARTMENT OF ${dept.shortName.toUpperCase()}\n`;
+        text += `   Overall Status: ${deptBadge} ${deptSubtitle}\n\n`;
+
+        dept.programs.forEach((prog: any) => {
           if (!prog) return;
-          const isLastProg = pIdx === dept.programs.length - 1;
-          const branch = isLastProg ? '   └─ ' : '   ├─ ';
-          const pipe = isLastProg ? '      ' : '   │  ';
-
-          text += `${branch}${prog.programName}\n`;
+          text += `   • ${prog.programName}\n`;
 
           const shifts = Object.keys(prog.shiftsDetail || {});
           if (shifts.length > 0) {
             shifts.forEach((shift, sIdx) => {
               const details = prog.shiftsDetail[shift];
               const isLastShift = sIdx === shifts.length - 1;
-              const subBranch = isLastShift ? `${pipe}└─ ` : `${pipe}├─ `;
-              
-              if (details.total === 0 && details.uploaded === 0) {
-                text += `${subBranch}[${shift} Shift]: No results submitted yet 🔴 (Coordinator: ${details.coordinator})\n`;
+              const branch = isLastShift ? `     └─ ` : `     ├─ `;
+
+              if (details.status === 'NOT_SUBMITTED' || details.total === 0) {
+                text += `${branch}[${shift} Shift] : No results submitted yet  🔴 PENDING  (Lead: ${details.coordinator})\n`;
+              } else if (details.missingLab) {
+                text += `${branch}[${shift} Shift] : ${details.uploaded} of ${details.total} Uploaded  ⚠ LAB PENDING  (Lead: ${details.coordinator})\n`;
+              } else if (details.uploaded >= details.total) {
+                text += `${branch}[${shift} Shift] : ${details.uploaded} of ${details.total} Uploaded  ✓ COMPLETE  (Lead: ${details.coordinator})\n`;
               } else {
-                const icon = details.uploaded >= details.total && details.total > 0 ? '✓' : '⚠';
-                const statusTag = details.uploaded >= details.total ? 'Complete' : `${details.total - details.uploaded} pending`;
-                text += `${subBranch}[${shift} Shift]: ${details.uploaded} of ${details.total} results uploaded ${icon} (Coord: ${details.coordinator} — ${statusTag})\n`;
-                if (details.missingLab) {
-                  text += `${pipe}   ⚠ Possible missing laboratory result — verification required\n`;
-                }
+                const remaining = details.total - details.uploaded;
+                text += `${branch}[${shift} Shift] : ${details.uploaded} of ${details.total} Uploaded  🟡 ${remaining} PENDING  (Lead: ${details.coordinator})\n`;
               }
             });
           } else {
-            const icon = prog.status === 'COMPLETE' ? '✓' : prog.status === 'NOT_SUBMITTED' ? '🔴' : '⚠';
-            if (prog.status === 'NOT_SUBMITTED') {
-              text += `${pipe}└─ No results submitted yet ${icon}\n`;
-            } else if (prog.hasLabMissing) {
-              text += `${pipe}└─ ${prog.uploadedCount} of ${prog.totalExpected} uploaded — Possible missing laboratory result ${icon}\n`;
-            } else {
-              text += `${pipe}└─ ${prog.uploadedCount} of ${prog.totalExpected} results uploaded ${icon}\n`;
-            }
+            text += `     └─ No active shifts configured for this session\n`;
           }
+
+          text += `\n`;
         });
 
-        const statusBadge =
-          dept.deptStatus === 'COMPLETE'
-            ? 'COMPLETE ✓'
-            : dept.deptStatus === 'NOT_SUBMITTED'
-            ? 'NOT SUBMITTED 🔴'
-            : `PARTIAL (${dept.deptUploaded}/${dept.deptTotal} uploaded) 🟡`;
-
-        text += `   Status: ${statusBadge}\n\n`;
+        text += `──────────────────────────────────────────────────────────────────────\n\n`;
       });
     } else if (summaryStyle === 'EXECUTIVE') {
-      const totalAll = summaryData.reduce((a, b) => a + (b?.deptTotal || 0), 0);
-      const uploadedAll = summaryData.reduce((a, b) => a + (b?.deptUploaded || 0), 0);
+      const totalAll = totalExpectedOverall;
+      const uploadedAll = totalUploadedOverall;
       const pctAll = totalAll > 0 ? Math.round((uploadedAll / totalAll) * 100) : 0;
 
       const completeDepts = summaryData.filter((d) => d?.deptStatus === 'COMPLETE');
       const partialDepts = summaryData.filter((d) => d?.deptStatus === 'PARTIAL' || (d?.deptStatus as string) === 'INCOMPLETE');
       const notSubmittedDepts = summaryData.filter((d) => d?.deptStatus === 'NOT_SUBMITTED');
 
-      text += `EXECUTIVE OVERVIEW:\n`;
-      text += `Overall Clearance Rate: ${pctAll}% (${uploadedAll} / ${totalAll} results uploaded)\n`;
-      text += `Program Shift Scope: ${shiftLabel}\n\n`;
+      text += `EXECUTIVE CLEARANCE OVERVIEW:\n`;
+      text += `Overall Institutional Clearance: ${pctAll}% (${uploadedAll} of ${totalAll} results uploaded)\n\n`;
 
       if (completeDepts.length > 0) {
-        text += `• COMPLETED DEPARTMENTS (${completeDepts.length}):\n`;
+        text += `• FULLY COMPLETED DEPARTMENTS (${completeDepts.length}):\n`;
         completeDepts.forEach((d) => {
-          text += `  ✓ ${d?.shortName} (100% complete — ${d?.deptUploaded} results uploaded across active shifts)\n`;
+          text += `  ✓ ${d?.shortName} (100% complete — ${d?.deptUploaded} results cleared across all active shifts)\n`;
         });
         text += `\n`;
+      } else {
+        text += `• FULLY COMPLETED DEPARTMENTS: None (Verification pending across all units)\n\n`;
       }
 
       if (partialDepts.length > 0) {
-        text += `• IN PROGRESS / PARTIAL DEPARTMENTS (${partialDepts.length}):\n`;
+        text += `• PARTIALLY COMPLETED DEPARTMENTS (${partialDepts.length}):\n`;
         partialDepts.forEach((d) => {
-          text += `  🟡 ${d?.shortName}: ${d?.deptUploaded} of ${d?.deptTotal} results uploaded (${(d?.deptTotal || 0) - (d?.deptUploaded || 0)} pending)\n`;
+          text += `  🟡 ${d?.shortName} (${d?.deptUploaded} results uploaded)\n`;
           d?.programs?.forEach((p: any) => {
             if (p.status !== 'COMPLETE') {
               const pendingShifts = Object.values(p.shiftsDetail || {}).filter((sh: any) => sh.status !== 'COMPLETE');
               if (pendingShifts.length > 0) {
                 pendingShifts.forEach((sh: any) => {
-                  text += `     - ${p.programName} [${sh.shift} Shift]: ${sh.uploaded}/${sh.total} uploaded (Coord: ${sh.coordinator})\n`;
+                  if (sh.status === 'NOT_SUBMITTED' || sh.total === 0) {
+                    text += `     - ${p.programName} [${sh.shift} Shift]: No results submitted yet (Lead: ${sh.coordinator})\n`;
+                  } else {
+                    text += `     - ${p.programName} [${sh.shift} Shift]: ${sh.uploaded}/${sh.total} uploaded (Lead: ${sh.coordinator})\n`;
+                  }
                 });
               } else {
                 text += `     - ${p.programName}: ${p.uploadedCount}/${p.totalExpected} uploaded\n`;
               }
             }
           });
+          text += `\n`;
         });
-        text += `\n`;
       }
 
       if (notSubmittedDepts.length > 0) {
@@ -439,38 +469,40 @@ export function VCExecutiveSummaryPanel({
       if (pendingDepts.length === 0) {
         text += `ALL DEPARTMENTS ARE 100% COMPLETE! No pending results require attention.\n`;
       } else {
-        text += `PENDING EXAMINATION RESULTS & ACTION REQUIRED:\n`;
-        text += `Shift Scope: ${shiftLabel}\n\n`;
+        text += `PENDING EXAMINATION RESULTS & ACTION REQUIRED:\n\n`;
 
         pendingDepts.forEach((dept, idx) => {
           if (!dept) return;
-          text += `${idx + 1}. ${dept.shortName}\n`;
+          text += `${idx + 1}. DEPARTMENT OF ${dept.shortName.toUpperCase()}\n`;
 
           dept.programs.forEach((prog: any) => {
             if (!prog || prog.status === 'COMPLETE') return;
+            text += `   • ${prog.programName}\n`;
+
             const shifts = Object.values(prog.shiftsDetail || {}) as any[];
             const pendingShifts = shifts.filter((sh: any) => sh.status !== 'COMPLETE');
 
             if (pendingShifts.length > 0) {
-              pendingShifts.forEach((sh: any) => {
+              pendingShifts.forEach((sh: any, sIdx: number) => {
+                const isLast = sIdx === pendingShifts.length - 1;
+                const branch = isLast ? `     └─ ` : `     ├─ `;
+
                 if (sh.status === 'NOT_SUBMITTED' || sh.total === 0) {
-                  text += `   └─ ${prog.programName} [${sh.shift} Shift]: No results submitted yet 🔴 (Coord: ${sh.coordinator})\n`;
+                  text += `${branch}[${sh.shift} Shift] : No results submitted yet 🔴  (Coordinator: ${sh.coordinator})\n`;
                 } else if (sh.missingLab) {
-                  text += `   └─ ${prog.programName} [${sh.shift} Shift]: ${sh.uploaded} of ${sh.total} uploaded — Laboratory result pending ⚠ (Coord: ${sh.coordinator})\n`;
+                  text += `${branch}[${sh.shift} Shift] : ${sh.uploaded} of ${sh.total} uploaded — Laboratory pending ⚠  (Coordinator: ${sh.coordinator})\n`;
                 } else {
-                  text += `   └─ ${prog.programName} [${sh.shift} Shift]: ${sh.uploaded} of ${sh.total} uploaded — ${sh.total - sh.uploaded} pending 🟡 (Coord: ${sh.coordinator})\n`;
+                  const rem = sh.total - sh.uploaded;
+                  text += `${branch}[${sh.shift} Shift] : ${sh.uploaded} of ${sh.total} uploaded — ${rem} pending 🟡  (Coordinator: ${sh.coordinator})\n`;
                 }
               });
             } else {
-              if (prog.status === 'NOT_SUBMITTED') {
-                text += `   └─ ${prog.programName}: No results submitted yet 🔴\n`;
-              } else {
-                text += `   └─ ${prog.programName}: ${prog.uploadedCount} of ${prog.totalExpected} uploaded — ${prog.totalExpected - prog.uploadedCount} result(s) pending 🟡\n`;
-              }
+              text += `     └─ Status pending review\n`;
             }
+            text += `\n`;
           });
 
-          text += `   Status: ${dept.deptStatus === 'NOT_SUBMITTED' ? 'NOT SUBMITTED 🔴' : 'PARTIAL 🟡'}\n\n`;
+          text += `──────────────────────────────────────────────────────────────────────\n\n`;
         });
       }
     }
@@ -489,11 +521,13 @@ export function VCExecutiveSummaryPanel({
         ? 'Morning Shift Only'
         : 'Evening Shift Only';
 
-    let text = `PENDING EXAMINATION RESULTS SUMMARY\n`;
-    text += `Session: ${headerSession} | ${semLabel}\n`;
-    text += `Academic Shift: ${shiftLabel}\n`;
-    text += `Last updated: ${lastUpdated || 'Recently'}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let text = `══════════════════════════════════════════════════════════════════════\n`;
+    text += `              PENDING EXAMINATION RESULTS & ACTION REQUIRED\n`;
+    text += `══════════════════════════════════════════════════════════════════════\n`;
+    text += `Academic Session : ${headerSession} (${semLabel})\n`;
+    text += `Academic Shift   : ${shiftLabel}\n`;
+    text += `Report Timestamp : ${lastUpdated || 'Recently'}\n`;
+    text += `══════════════════════════════════════════════════════════════════════\n\n`;
 
     const pendingDepts = (summaryData || []).filter((d) => d && d.deptStatus !== 'COMPLETE');
 
@@ -502,33 +536,36 @@ export function VCExecutiveSummaryPanel({
     } else {
       pendingDepts.forEach((dept, idx) => {
         if (!dept) return;
-        text += `${idx + 1}. ${dept.shortName}\n`;
+        text += `${idx + 1}. DEPARTMENT OF ${dept.shortName.toUpperCase()}\n`;
 
         dept.programs.forEach((prog: any) => {
           if (!prog || prog.status === 'COMPLETE') return;
+          text += `   • ${prog.programName}\n`;
+
           const shifts = Object.values(prog.shiftsDetail || {}) as any[];
           const pendingShifts = shifts.filter((sh: any) => sh.status !== 'COMPLETE');
 
           if (pendingShifts.length > 0) {
-            pendingShifts.forEach((sh: any) => {
+            pendingShifts.forEach((sh: any, sIdx: number) => {
+              const isLast = sIdx === pendingShifts.length - 1;
+              const branch = isLast ? `     └─ ` : `     ├─ `;
+
               if (sh.status === 'NOT_SUBMITTED' || sh.total === 0) {
-                text += `   └─ ${prog.programName} [${sh.shift} Shift]: No results submitted yet 🔴 (Coord: ${sh.coordinator})\n`;
+                text += `${branch}[${sh.shift} Shift] : No results submitted yet 🔴  (Coordinator: ${sh.coordinator})\n`;
               } else if (sh.missingLab) {
-                text += `   └─ ${prog.programName} [${sh.shift} Shift]: ${sh.uploaded} of ${sh.total} uploaded — Laboratory result pending ⚠ (Coord: ${sh.coordinator})\n`;
+                text += `${branch}[${sh.shift} Shift] : ${sh.uploaded} of ${sh.total} uploaded — Laboratory pending ⚠  (Coordinator: ${sh.coordinator})\n`;
               } else {
-                text += `   └─ ${prog.programName} [${sh.shift} Shift]: ${sh.uploaded} of ${sh.total} uploaded — ${sh.total - sh.uploaded} pending 🟡 (Coord: ${sh.coordinator})\n`;
+                const rem = sh.total - sh.uploaded;
+                text += `${branch}[${sh.shift} Shift] : ${sh.uploaded} of ${sh.total} uploaded — ${rem} pending 🟡  (Coordinator: ${sh.coordinator})\n`;
               }
             });
           } else {
-            if (prog.status === 'NOT_SUBMITTED') {
-              text += `   └─ ${prog.programName}: No results submitted yet 🔴\n`;
-            } else {
-              text += `   └─ ${prog.programName}: ${prog.uploadedCount} of ${prog.totalExpected} uploaded — ${prog.totalExpected - prog.uploadedCount} pending 🟡\n`;
-            }
+            text += `     └─ No submissions recorded\n`;
           }
+          text += `\n`;
         });
 
-        text += `   Action Required: Immediate upload & HOD verification\n\n`;
+        text += `──────────────────────────────────────────────────────────────────────\n\n`;
       });
     }
 
@@ -826,7 +863,7 @@ export function VCExecutiveSummaryPanel({
             </button>
           </div>
 
-          <pre className="w-full bg-slate-950 p-5 rounded-xl border border-slate-800 text-xs text-emerald-400 font-mono overflow-x-auto leading-relaxed whitespace-pre-wrap select-all max-h-96">
+          <pre className="w-full bg-slate-950/90 p-5 rounded-xl border border-slate-800 text-xs text-slate-200 font-mono overflow-x-auto leading-relaxed whitespace-pre-wrap select-all max-h-[520px] shadow-inner selection:bg-indigo-600 selection:text-white">
             {fullSummaryText}
           </pre>
         </div>
