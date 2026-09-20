@@ -199,7 +199,10 @@ export class VCAnalyticsService {
       const registeredProgramNames = new Set<string>();
       sessionList.forEach((sess) => {
         const sessionRoster = StorageService.getSessionPrograms(dept.name, sess, allRecords);
-        sessionRoster.forEach((p) => registeredProgramNames.add(p));
+        sessionRoster.forEach((p) => {
+          const canonical = StorageService.normalizeProgramName(p, dept.name);
+          if (canonical) registeredProgramNames.add(canonical);
+        });
       });
 
       // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
@@ -212,7 +215,8 @@ export class VCAnalyticsService {
           r.program &&
           r.program.trim()
         ) {
-          registeredProgramNames.add(r.program.trim());
+          const canonical = StorageService.normalizeProgramName(r.program, dept.name);
+          if (canonical) registeredProgramNames.add(canonical);
         }
       });
 

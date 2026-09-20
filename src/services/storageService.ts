@@ -325,7 +325,7 @@ export class StorageService {
     if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
       isConfigured = true;
       // Preserve all programs explicitly selected in the roster
-      activePrograms = [...roster[configuredKey]];
+      activePrograms = roster[configuredKey].map((p) => this.normalizeProgramName(p, departmentName));
     } else {
       // 2. Default coordinator template: Include all official programs of the department
       activePrograms = dept.programs.map((p) => p.name);
@@ -342,14 +342,17 @@ export class StorageService {
             r.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) &&
           (r.session || '2023').trim() === sessionName.trim()
         ) {
-          if (r.program && !activePrograms.includes(r.program.trim())) {
-            activePrograms.push(r.program.trim());
+          if (r.program) {
+            const canonical = this.normalizeProgramName(r.program, departmentName);
+            if (canonical && !activePrograms.includes(canonical)) {
+              activePrograms.push(canonical);
+            }
           }
         }
       });
     } catch (e) {}
 
-    return activePrograms;
+    return Array.from(new Set(activePrograms.filter(Boolean)));
   }
 
   public static getSession2023Programs(departmentName: string): string[] {
@@ -840,6 +843,27 @@ export class StorageService {
 
   public static _isMatch(a: string, b: string): boolean {
     return this._isDeptMatch(a, b) || this._isProgMatch(a, b);
+  }
+
+  public static normalizeProgramName(programStr: string, departmentName?: string): string {
+    if (!programStr) return '';
+    const cleanInput = programStr.trim();
+    if (!cleanInput) return '';
+
+    const baseProg = cleanInput.replace(/\s*\((morning|evening)\)/i, '').trim();
+
+    for (const dept of UNIVERSITY_DEPARTMENTS) {
+      if (departmentName && !this._isDeptMatch(departmentName, dept.name)) {
+        continue;
+      }
+      for (const prog of dept.programs) {
+        if (this._isProgMatch(baseProg, prog.name) || this._isProgMatch(cleanInput, prog.name)) {
+          return prog.name;
+        }
+      }
+    }
+
+    return baseProg || cleanInput;
   }
 
   public static getSubmission(

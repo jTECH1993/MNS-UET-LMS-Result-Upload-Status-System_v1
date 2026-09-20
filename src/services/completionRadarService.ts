@@ -245,7 +245,10 @@ export class CompletionRadarService {
 
     sessionList.forEach((sess) => {
       const sessionRoster = StorageService.getSessionPrograms(deptName, sess, allRecords);
-      sessionRoster.forEach((p) => set.add(p));
+      sessionRoster.forEach((p) => {
+        const canonical = StorageService.normalizeProgramName(p, deptName);
+        if (canonical) set.add(canonical);
+      });
     });
 
     // Add any programs with authentic submissions in these sessions
@@ -258,7 +261,8 @@ export class CompletionRadarService {
         r.program &&
         r.program.trim()
       ) {
-        set.add(r.program.trim());
+        const canonical = StorageService.normalizeProgramName(r.program, deptName);
+        if (canonical) set.add(canonical);
       }
     });
 
@@ -626,7 +630,9 @@ export class CompletionRadarService {
         });
       });
     } else {
-      pending = 0;
+      // WHEN NO RECORD IS SUBMITTED FOR THIS SECTION:
+      // Default expected curriculum course count is 5 courses per section (pending upload)
+      pending = 5;
     }
 
     const total = submitted + pending + inProgress;
