@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ProgramDimension, SectionBreakdown, CourseDetail } from '../services/vcAnalyticsService';
+import { AcademicShift } from '../types';
 import {
   X,
   GraduationCap,
@@ -24,7 +25,10 @@ interface Props {
   onEditProgramSubmission?: (
     department: string,
     program: string,
-    section: string
+    shift?: AcademicShift,
+    session?: string,
+    semester?: string,
+    section?: string
   ) => void;
 }
 
@@ -258,13 +262,21 @@ export const ProgramSectionDrillDownModal: React.FC<Props> = ({
               {onEditProgramSubmission && (
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    const subRec = currentSection.submissionRecord;
+                    const targetShift = subRec?.shift || (program.coordinator.shiftLabel?.includes('Evening') && !program.coordinator.shiftLabel?.includes('Morning') ? 'Evening' : 'Morning') as AcademicShift;
+                    const targetSession = subRec?.session;
+                    const targetSemester = subRec?.semester;
+                    onClose();
                     onEditProgramSubmission(
                       program.department,
                       program.program,
+                      targetShift,
+                      targetSession,
+                      targetSemester,
                       currentSection.section
-                    )
-                  }
+                    );
+                  }}
                   className="px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Edit3 className="w-3 h-3" />

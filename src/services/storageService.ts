@@ -879,12 +879,21 @@ export class StorageService {
     const sec = (section || 'A').trim().toUpperCase();
     const cleanShift = (shift || 'Morning').trim().toLowerCase();
     const cleanSem = String(semester || '1').trim();
+    const cleanSemNum = cleanSem.replace(/\D/g, '');
     const cleanSess = (session || '2023').trim();
+
+    const normProg = this.normalizeProgramName(program, department);
 
     // 1. Direct canonical key match
     const canonicalKey = getRecordKey(department, program, degreeLevel, shift as AcademicShift, session, semester, sec);
     if (store[canonicalKey]) {
       return store[canonicalKey];
+    }
+    if (normProg && normProg !== program) {
+      const normKey = getRecordKey(department, normProg, degreeLevel, shift as AcademicShift, session, semester, sec);
+      if (store[normKey]) {
+        return store[normKey];
+      }
     }
 
     // 2. Legacy key format match if Section A
@@ -893,6 +902,12 @@ export class StorageService {
       if (store[legKey]) {
         return store[legKey];
       }
+      if (normProg && normProg !== program) {
+        const normLegKey = getLegacyRecordKey(department, normProg, degreeLevel, shift as AcademicShift, session, semester);
+        if (store[normLegKey]) {
+          return store[normLegKey];
+        }
+      }
     }
 
     // 3. Fallback: robust field-level search through all store records
@@ -900,13 +915,14 @@ export class StorageService {
     for (const rec of records) {
       if (!rec) continue;
       const matchDept = this._isDeptMatch(department, rec.department);
-      const matchProg = this._isProgMatch(program, rec.program);
+      const matchProg = this._isProgMatch(program, rec.program) || (normProg ? this._isProgMatch(normProg, rec.program) : false);
       const rShift = (rec.shift || 'Morning').trim().toLowerCase();
       const matchShift = !cleanShift || rShift === cleanShift;
       const rSem = String(rec.semester || '1').trim();
-      const matchSem = !cleanSem || rSem === cleanSem;
+      const rSemNum = rSem.replace(/\D/g, '');
+      const matchSem = !cleanSem || rSem === cleanSem || (rSemNum === cleanSemNum && cleanSemNum !== '');
       const rSec = (rec.section || 'A').trim().toUpperCase();
-      const matchSec = rSec === sec;
+      const matchSec = !sec || rSec === sec;
       const rSess = (rec.session || '2023').trim();
       const matchSess = !cleanSess || rSess === cleanSess || rSess.startsWith(cleanSess) || cleanSess.startsWith(rSess);
 

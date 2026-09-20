@@ -790,7 +790,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
     const activeNames = StorageService.getSessionPrograms(department, session);
     const isProgramInDept = dept.programs.some(
-      (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+      (p) => StorageService._isProgMatch(p.name, program)
     );
 
     if (isPrivilegedUser) {
@@ -803,7 +803,7 @@ export const HODEntryForm: React.FC<Props> = ({
 
     // Strict Coordinator Isolation: Only fall back to allowed assigned programs
     const isProgramAllowed = coordinatorAllowedPrograms.some(
-      (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+      (p) => StorageService._isProgMatch(p.name, program)
     );
     if (!isProgramAllowed) {
       const fallback = coordinatorAllowedPrograms[0]?.name || '';
@@ -860,7 +860,7 @@ export const HODEntryForm: React.FC<Props> = ({
     if (!isPrivilegedUser) {
       const activeAllowed = coordinatorAllowedPrograms.filter((p) => activeNames.includes(p.name));
       const isAllowed = activeAllowed.some(
-        (p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase()
+        (p) => StorageService._isProgMatch(p.name, program)
       );
       if (!isAllowed && activeAllowed.length > 0) {
         const fallback = activeAllowed[0].name;
@@ -874,7 +874,7 @@ export const HODEntryForm: React.FC<Props> = ({
       (d) => d.name.trim().toLowerCase() === department.trim().toLowerCase() || d.code.trim().toLowerCase() === department.trim().toLowerCase()
     );
     if (targetDept) {
-      const isValid = targetDept.programs.some((p) => p.name.trim().toLowerCase() === (program || '').trim().toLowerCase());
+      const isValid = targetDept.programs.some((p) => StorageService._isProgMatch(p.name, program));
       if (!isValid && targetDept.programs.length > 0) {
         const fallback = targetDept.programs[0].name;
         setProgram(fallback);

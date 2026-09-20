@@ -3542,15 +3542,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         isOpen={isProgramDrillDownOpen}
         onClose={() => setIsProgramDrillDownOpen(false)}
         program={selectedDrillDownProgram}
-        onEditProgramSubmission={(dept, prog, sec) => {
+        onEditProgramSubmission={(dept, prog, shift, session, semester, sec) => {
           setIsProgramDrillDownOpen(false);
           setIsDeptDrillDownOpen(false);
           onSelectProgramToEdit(
             dept,
             prog,
-            selectedShiftFilter === 'ALL' ? 'Morning' : selectedShiftFilter,
-            currentSession,
-            selectedSemesterFilter === 'ALL' ? '1' : selectedSemesterFilter,
+            shift || (selectedShiftFilter === 'ALL' ? undefined : selectedShiftFilter),
+            session || currentSession,
+            semester || (selectedSemesterFilter === 'ALL' ? undefined : selectedSemesterFilter),
             sec
           );
         }}

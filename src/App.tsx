@@ -308,29 +308,31 @@ export default function App() {
       }
     }
 
+    const normProg = StorageService.normalizeProgramName(prog, dept) || prog;
     setTargetDept(dept);
-    setTargetProg(prog);
+    setTargetProg(normProg);
 
     // Intelligently find matching record to inspect if shift/semester/section are not specific or are 'ALL'
     const matchingRecords = StorageService.getAllSubmissions().filter(
-      (r) => StorageService._isDeptMatch(r.department, dept) && StorageService._isProgMatch(r.program, prog)
+      (r) => StorageService._isDeptMatch(r.department, dept) && StorageService._isProgMatch(r.program, normProg)
     );
 
-    const validShift = shift && shift !== ('ALL' as any) ? shift : (matchingRecords[0]?.shift || 'Morning');
+    const recWithSubjects = matchingRecords.find((r) => r.subjects && r.subjects.some(s => s.courseCode || s.subjectTitle || s.status) && (!shift || shift === ('ALL' as any) || r.shift === shift));
+
+    const validShift = shift && shift !== ('ALL' as any) ? shift : (recWithSubjects?.shift || matchingRecords[0]?.shift || 'Morning');
     setTargetShift(validShift);
 
-    const validSession = session && session !== 'ALL' ? session : (matchingRecords[0]?.session || StorageService.getSelectedSession());
+    const validSession = session && session !== 'ALL' ? session : (recWithSubjects?.session || matchingRecords[0]?.session || StorageService.getSelectedSession());
     setTargetSession(validSession);
 
     // If semester was passed as 'ALL' or undefined, select the semester that has actual course rows or default to '1'
     let targetSem = semester && semester !== 'ALL' ? semester : '';
     if (!targetSem) {
-      const recWithSubjects = matchingRecords.find((r) => r.subjects && r.subjects.length > 0 && (!validShift || r.shift === validShift));
       targetSem = recWithSubjects?.semester || matchingRecords[0]?.semester || '1';
     }
     setTargetSemester(targetSem);
 
-    const validSection = section && section !== 'ALL' ? section.trim().toUpperCase() : (matchingRecords[0]?.section || 'A');
+    const validSection = section && section !== 'ALL' ? section.trim().toUpperCase() : (recWithSubjects?.section || matchingRecords[0]?.section || 'A');
     setTargetAcademicSection(validSection);
 
     setIsInspectionMode(true);
