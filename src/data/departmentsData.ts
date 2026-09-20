@@ -62,7 +62,7 @@ export const UNIVERSITY_DEPARTMENTS: DepartmentGroup[] = [
       { name: 'BS Information Technology', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Cyber Security', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'BS Data Science', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
-      { name: 'B.Sc. Software Engineering Technology (B.Tech)', degreeLevel: 'B.Tech', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
+      { name: 'B.Sc. Software Engineering Technology (B.Tech)', degreeLevel: 'B.Tech', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Evening'] },
       { name: 'BS Internet of Things (IoT)', degreeLevel: 'BS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'MS Computer Science', degreeLevel: 'MS', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },
       { name: 'PhD Computer Science', degreeLevel: 'PhD', department: 'Department of Computer Science', session2023: true, supportedShifts: ['Morning', 'Evening'] },

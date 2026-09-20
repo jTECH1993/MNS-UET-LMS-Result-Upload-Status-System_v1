@@ -533,32 +533,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         // Dynamically activate program if it has submissions, overriding static cache
         const isSessionActive = activeProgNames.includes(prog.name) || hasAny;
 
-        // Determine dynamic supported shifts based strictly on coordinator selection / submitted records:
+        // Determine dynamic supported shifts based strictly on configured program shifts in StorageService:
+        const configuredProgramShifts = StorageService.getProgramShifts(dept.name, prog.name);
+        
         let dynamicSupportedShifts: AcademicShift[] = [];
         if (hasMorning && hasEvening) {
-          dynamicSupportedShifts = ['Morning', 'Evening'];
+          dynamicSupportedShifts = ['Morning', 'Evening'].filter((s) => configuredProgramShifts.includes(s as AcademicShift)) as AcademicShift[];
         } else if (hasMorning) {
-          dynamicSupportedShifts = ['Morning'];
+          dynamicSupportedShifts = configuredProgramShifts.includes('Morning') ? ['Morning'] : configuredProgramShifts;
         } else if (hasEvening) {
-          dynamicSupportedShifts = ['Evening'];
+          dynamicSupportedShifts = configuredProgramShifts.includes('Evening') ? ['Evening'] : configuredProgramShifts;
         } else {
-          // Check if any records exist in allRecords for this program across any session/semester
-          const progRecords = allRecords.filter((r) =>
-            StorageService._isDeptMatch(dept.name, r.department) &&
-            StorageService._isProgMatch(prog.name, r.program)
-          );
-          const morningRec = progRecords.some((r) => (r.shift || 'Morning').trim().toLowerCase() === 'morning');
-          const eveningRec = progRecords.some((r) => (r.shift || 'Morning').trim().toLowerCase() === 'evening');
+          dynamicSupportedShifts = configuredProgramShifts;
+        }
 
-          if (morningRec && eveningRec) {
-            dynamicSupportedShifts = ['Morning', 'Evening'];
-          } else if (eveningRec) {
-            dynamicSupportedShifts = ['Evening'];
-          } else if (morningRec) {
-            dynamicSupportedShifts = ['Morning'];
-          } else {
-            dynamicSupportedShifts = ['Morning'];
-          }
+        if (dynamicSupportedShifts.length === 0) {
+          dynamicSupportedShifts = configuredProgramShifts.length > 0 ? configuredProgramShifts : ['Evening'];
         }
 
         // If department coordinator entered Evening, automatically prioritize Evening!

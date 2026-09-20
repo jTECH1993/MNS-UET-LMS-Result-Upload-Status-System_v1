@@ -253,7 +253,7 @@ export class VCAnalyticsService {
         });
 
         // Determine target shifts for this program strictly matching supportedShifts
-        const progSupported = prog.supportedShifts || ['Morning', 'Evening'];
+        const progSupported = StorageService.getProgramShifts(dept.name, prog.name);
         let targetShifts: AcademicShift[] = [];
 
         if (shiftFilter !== 'ALL') {

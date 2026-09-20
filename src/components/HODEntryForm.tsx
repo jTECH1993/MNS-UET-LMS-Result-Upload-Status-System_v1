@@ -291,18 +291,16 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Allowed shifts for current selected program
   const allowedShiftsForProgram = useMemo<AcademicShift[]>(() => {
-    if (isPrivilegedUser) {
-      return ['Morning', 'Evening'];
-    }
-    if (currentUser?.programShiftAssignments && program && currentUser.programShiftAssignments[program]) {
+    const configuredShifts = StorageService.getProgramShifts(department, program);
+    if (!isPrivilegedUser && currentUser?.programShiftAssignments && program && currentUser.programShiftAssignments[program]) {
       const shs = currentUser.programShiftAssignments[program];
-      if (shs && shs.length > 0) return shs;
+      if (shs && shs.length > 0) {
+        const filtered = shs.filter((s) => configuredShifts.includes(s));
+        if (filtered.length > 0) return filtered;
+      }
     }
-    if (currentUser?.assignedShifts && currentUser.assignedShifts.length > 0) {
-      return currentUser.assignedShifts;
-    }
-    return ['Morning', 'Evening'];
-  }, [isPrivilegedUser, currentUser, program]);
+    return configuredShifts.length > 0 ? configuredShifts : ['Evening'];
+  }, [department, program, isPrivilegedUser, currentUser, rosterVersion]);
 
   // Shift selection (Morning vs Evening) - strictly isolated hierarchy level
   const initialShift = useMemo<AcademicShift>(() => {
@@ -315,6 +313,12 @@ export const HODEntryForm: React.FC<Props> = ({
   }, [selectedShiftProp, isPrivilegedUser, allowedShiftsForProgram]);
 
   const [shift, setShift] = useState<AcademicShift>(initialShift);
+
+  useEffect(() => {
+    if (allowedShiftsForProgram.length > 0 && !allowedShiftsForProgram.includes(shift)) {
+      setShift(allowedShiftsForProgram[0]);
+    }
+  }, [allowedShiftsForProgram, shift]);
 
   // Section selection (Section A, Section B, Section C, etc.) - strictly isolated data partition
   const [section, setSection] = useState<string>((selectedSectionProp || 'A').trim().toUpperCase());
@@ -2886,9 +2890,52 @@ export const HODEntryForm: React.FC<Props> = ({
 
           {/* Shift (Morning / Evening toggle) */}
           <div className="">
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Shift <span className="text-rose-600">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">
+                Shift <span className="text-rose-600">*</span>
+              </label>
+              {(isPrivilegedUser || currentUser?.role === 'HOD') && (
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="text-slate-500 font-semibold">Program Shifts:</span>
+                  <label className="inline-flex items-center gap-1 cursor-pointer font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded transition-colors" title="Check or uncheck Morning shift for this program">
+                    <input
+                      type="checkbox"
+                      checked={StorageService.getProgramShifts(department, program).includes('Morning')}
+                      onChange={(e) => {
+                        const curr = StorageService.getProgramShifts(department, program);
+                        let updated = e.target.checked
+                          ? Array.from(new Set([...curr, 'Morning']))
+                          : curr.filter((s) => s !== 'Morning');
+                        if (updated.length === 0) updated = ['Evening'];
+                        StorageService.setProgramShifts(department, program, updated as AcademicShift[]);
+                        setRosterVersion((v) => v + 1);
+                        showFeedback('success', `Updated active shifts for ${program}: ${updated.join(', ')}`);
+                      }}
+                      className="rounded text-amber-600 focus:ring-amber-500 w-3 h-3 cursor-pointer"
+                    />
+                    <span>Morning</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1 cursor-pointer font-bold text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded transition-colors" title="Check or uncheck Evening shift for this program">
+                    <input
+                      type="checkbox"
+                      checked={StorageService.getProgramShifts(department, program).includes('Evening')}
+                      onChange={(e) => {
+                        const curr = StorageService.getProgramShifts(department, program);
+                        let updated = e.target.checked
+                          ? Array.from(new Set([...curr, 'Evening']))
+                          : curr.filter((s) => s !== 'Evening');
+                        if (updated.length === 0) updated = ['Morning'];
+                        StorageService.setProgramShifts(department, program, updated as AcademicShift[]);
+                        setRosterVersion((v) => v + 1);
+                        showFeedback('success', `Updated active shifts for ${program}: ${updated.join(', ')}`);
+                      }}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-3 h-3 cursor-pointer"
+                    />
+                    <span>Evening</span>
+                  </label>
+                </div>
+              )}
+            </div>
             <div className={`grid ${allowedShiftsForProgram.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200`}>
               {allowedShiftsForProgram.includes('Morning') && (
                 <button

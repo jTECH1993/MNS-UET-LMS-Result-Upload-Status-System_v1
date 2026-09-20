@@ -29,6 +29,7 @@ const CURRENT_SESSION_KEY = 'mnsuet_current_active_session_v99';
 const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v99';
 const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v99';
 const SYSTEM_DEADLINE_KEY = 'mnsuet_system_deadline_v99';
+const PROGRAM_SHIFTS_KEY = 'mnsuet_program_active_shifts_v99';
 
 export class StorageService {
   
@@ -353,6 +354,60 @@ export class StorageService {
     } catch (e) {}
 
     return Array.from(new Set(activePrograms.filter(Boolean)));
+  }
+
+  public static getProgramShifts(departmentName: string, programName: string): AcademicShift[] {
+    let savedMap: Record<string, AcademicShift[]> = {};
+    try {
+      const raw = localStorage.getItem(PROGRAM_SHIFTS_KEY);
+      if (raw) savedMap = JSON.parse(raw);
+    } catch (e) {}
+
+    const normProg = this.normalizeProgramName(programName, departmentName) || programName;
+    const lookupKey = `${(departmentName || '').trim().toLowerCase()}__${normProg.trim().toLowerCase()}`;
+
+    if (savedMap[lookupKey] && Array.isArray(savedMap[lookupKey]) && savedMap[lookupKey].length > 0) {
+      return savedMap[lookupKey];
+    }
+
+    // Default configuration from UNIVERSITY_DEPARTMENTS
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) =>
+        d.name.trim().toLowerCase() === (departmentName || '').trim().toLowerCase() ||
+        d.code.trim().toLowerCase() === (departmentName || '').trim().toLowerCase()
+    );
+    const progObj = dept?.programs.find((p) => this._isProgMatch(p.name, programName));
+
+    if (progObj && progObj.supportedShifts && progObj.supportedShifts.length > 0) {
+      return progObj.supportedShifts;
+    }
+
+    if (programName.includes('(B.Tech)') || progObj?.degreeLevel === 'B.Tech') {
+      return ['Evening'];
+    }
+
+    return ['Morning', 'Evening'];
+  }
+
+  public static setProgramShifts(departmentName: string, programName: string, shifts: AcademicShift[]): void {
+    let savedMap: Record<string, AcademicShift[]> = {};
+    try {
+      const raw = localStorage.getItem(PROGRAM_SHIFTS_KEY);
+      if (raw) savedMap = JSON.parse(raw);
+    } catch (e) {}
+
+    const normProg = this.normalizeProgramName(programName, departmentName) || programName;
+    const lookupKey = `${(departmentName || '').trim().toLowerCase()}__${normProg.trim().toLowerCase()}`;
+
+    const cleanShifts = Array.from(new Set(shifts.filter((s) => s === 'Morning' || s === 'Evening'))) as AcademicShift[];
+    savedMap[lookupKey] = cleanShifts.length > 0 ? cleanShifts : ['Evening'];
+
+    try {
+      localStorage.setItem(PROGRAM_SHIFTS_KEY, JSON.stringify(savedMap));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+    } catch (e) {}
   }
 
   public static getSession2023Programs(departmentName: string): string[] {
