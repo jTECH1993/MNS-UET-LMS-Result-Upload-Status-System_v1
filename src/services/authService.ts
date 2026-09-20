@@ -1350,7 +1350,7 @@ export class AuthService {
     });
   }
 
-  // Self-service program removal: Coordinator can remove any of their assigned programs if they coordinate > 1 program
+  // Self-service program removal: Coordinator can remove any or all of their assigned programs
   public static removeCoordinatorProgram(
     userId: string,
     programToRemove: string
@@ -1361,13 +1361,6 @@ export class AuthService {
 
     const cleanProg = programToRemove.trim();
     const currentAssigned = account.assignedPrograms || (account.program ? [account.program] : []);
-
-    if (currentAssigned.length <= 1) {
-      return {
-        success: false,
-        message: 'You must maintain at least one assigned program. To switch or change your program, please submit a request to your Head of Department (HOD).',
-      };
-    }
 
     if (!currentAssigned.some((p) => p.trim().toLowerCase() === cleanProg.toLowerCase())) {
       return {
@@ -1382,7 +1375,7 @@ export class AuthService {
 
     account.assignedPrograms = updatedAssigned;
     if (account.program && account.program.trim().toLowerCase() === cleanProg.toLowerCase()) {
-      account.program = updatedAssigned[0];
+      account.program = updatedAssigned.length > 0 ? updatedAssigned[0] : '';
     }
 
     if (account.programShiftAssignments && account.programShiftAssignments[cleanProg]) {
@@ -1416,7 +1409,7 @@ export class AuthService {
       severity: 'INFO',
       actor: account.username,
       targetAccount: account.username,
-      details: `Coordinator ${account.name} self-removed program "${cleanProg}" from assigned programs list. Remaining programs: ${updatedAssigned.join(', ')}.`,
+      details: `Coordinator ${account.name} self-removed program "${cleanProg}" from assigned programs list. Remaining programs: ${updatedAssigned.length > 0 ? updatedAssigned.join(', ') : 'None'}.`,
     });
 
     if (typeof window !== 'undefined') {
@@ -1426,7 +1419,63 @@ export class AuthService {
 
     return {
       success: true,
-      message: `Program "${cleanProg}" has been removed from your active coordinated programs list.`,
+      message: updatedAssigned.length > 0
+        ? `Program "${cleanProg}" has been removed from your active coordinated programs list.`
+        : `Program "${cleanProg}" has been removed. You have no active assigned programs left. You can request a new program from your HOD at any time.`,
+      session: updatedSession,
+    };
+  }
+
+  // Remove all assigned programs for coordinator
+  public static removeAllCoordinatorPrograms(
+    userId: string
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'User account not found.' };
+
+    account.assignedPrograms = [];
+    account.program = '';
+    account.programShiftAssignments = {};
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined;
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        assignedPrograms: [],
+        program: '',
+        programShiftAssignments: {},
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    SecurityService.logSecurityEvent({
+      type: 'SECURITY_ALERT',
+      severity: 'INFO',
+      actor: account.username,
+      targetAccount: account.username,
+      details: `Coordinator ${account.name} self-removed all assigned programs.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: 'All assigned programs have been removed from your portfolio. You can request programs from your HOD at any time.',
       session: updatedSession,
     };
   }

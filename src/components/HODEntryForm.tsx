@@ -2410,19 +2410,23 @@ export const HODEntryForm: React.FC<Props> = ({
                                     `Program "${p.name}" removed from active portfolio.`,
                                     p.name,
                                     currentUser.name
-                                );
-                              } else {
-                                showFeedback('warning', res.message);
-                              }
-                            }}
-                            className={`p-0.5 rounded hover:bg-rose-600 hover:text-white transition-colors ${
-                              isSelected ? 'text-emerald-100' : 'text-slate-400 hover:text-rose-600'
-                            }`}
-                            title={`Remove ${p.name} from your active coordination list`}
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
+                                  );
+                                  const remaining = res.session?.assignedPrograms || [];
+                                  if (program === p.name) {
+                                    handleProgramChange(remaining.length > 0 ? remaining[0] : '');
+                                  }
+                                } else {
+                                  showFeedback('warning', res.message);
+                                }
+                              }}
+                              className={`p-0.5 rounded hover:bg-rose-600 hover:text-white transition-colors ${
+                                isSelected ? 'text-emerald-100' : 'text-slate-400 hover:text-rose-600'
+                              }`}
+                              title={`Remove ${p.name} from your active coordination list`}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
                       </div>
                     );
                   })}
@@ -2464,6 +2468,8 @@ export const HODEntryForm: React.FC<Props> = ({
                             program,
                             currentUser.name
                           );
+                          const remaining = res.session?.assignedPrograms || [];
+                          handleProgramChange(remaining.length > 0 ? remaining[0] : '');
                         } else {
                           showFeedback('warning', res.message);
                         }

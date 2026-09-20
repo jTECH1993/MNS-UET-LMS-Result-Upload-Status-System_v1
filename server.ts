@@ -283,53 +283,66 @@ app.get('/api/submissions', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/submissions', asyncHandler(async (req, res) => {
-  const data = req.body;
-  const id = `${data.department}__${data.program}__${data.degreeLevel}__${data.shift}__${data.session}__${data.semester}__${data.section || 'A'}`;
+  const data = req.body || {};
+  const department = data.department || 'General';
+  const program = data.program || 'General Program';
+  const degreeLevel = data.degreeLevel || 'BS';
+  const shift = data.shift || 'Morning';
+  const session = String(data.session || '2023').trim();
+  const semester = String(data.semester || '1').trim();
+  const section = (data.section || 'A').trim().toUpperCase();
+
+  const id = data.id || `${department}__${program}__${degreeLevel}__${shift}__${session}__${semester}__${section}`;
+  const now = new Date().toISOString();
+  const hodCoordinator = data.hodCoordinator || data.coordinatorName || 'Department Coordinator';
+  const submissionDate = data.submissionDate || now.split('T')[0];
+  const accessedBy = data.accessedBy || hodCoordinator || 'System User';
+  const userDesignation = data.userDesignation || 'Coordinator';
 
   await db.transaction(async (tx) => {
     const existing = await tx.select().from(submissions).where(eq(submissions.id, id));
 
     if (existing.length > 0) {
       await tx.update(submissions).set({
-        hodCoordinator: data.hodCoordinator,
-        submissionDate: data.submissionDate,
-        accessedBy: data.accessedBy,
-        userDesignation: data.userDesignation,
-        updatedAt: new Date().toISOString(),
+        hodCoordinator,
+        submissionDate,
+        accessedBy,
+        userDesignation,
+        updatedAt: now,
       }).where(eq(submissions.id, id));
 
       await tx.delete(subjects).where(eq(subjects.submissionId, id));
     } else {
       await tx.insert(submissions).values({
         id,
-        department: data.department,
-        program: data.program,
-        degreeLevel: data.degreeLevel,
-        shift: data.shift,
-        section: data.section || 'A',
-        session: data.session,
-        semester: data.semester,
-        hodCoordinator: data.hodCoordinator,
-        submissionDate: data.submissionDate,
-        accessedBy: data.accessedBy,
-        userDesignation: data.userDesignation,
-        updatedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
+        department,
+        program,
+        degreeLevel,
+        shift,
+        section,
+        session,
+        semester,
+        hodCoordinator,
+        submissionDate,
+        accessedBy,
+        userDesignation,
+        updatedAt: now,
+        createdAt: data.createdAt || now,
       });
     }
 
-    if (data.subjects && data.subjects.length > 0) {
+    if (Array.isArray(data.subjects) && data.subjects.length > 0) {
       const subjectsToInsert = data.subjects.map((s: any) => ({
-        id: Math.random().toString(36).substring(7),
+        id: s.id || Math.random().toString(36).substring(2, 11),
         submissionId: id,
-        courseCode: s.courseCode,
-        subjectTitle: s.subjectTitle,
-        creditHours: s.creditHours,
-        sectionShift: s.sectionShift,
-        status: s.status,
-        dateUploaded: s.dateUploaded,
-        uploadedBy: s.uploadedBy,
-        remarks: s.remarks,
+        courseCode: s.courseCode || '',
+        subjectTitle: s.subjectTitle || '',
+        creditHours: String(s.creditHours || '3(3-0)'),
+        sectionShift: s.sectionShift || shift,
+        status: s.status || 'Pending',
+        dateUploaded: s.dateUploaded || '',
+        uploadedBy: s.uploadedBy || '',
+        remarks: s.remarks || '',
       }));
       await tx.insert(subjects).values(subjectsToInsert);
     }
