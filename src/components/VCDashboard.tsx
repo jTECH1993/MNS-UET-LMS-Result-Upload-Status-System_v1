@@ -18,6 +18,7 @@ import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
 import { ExecutiveReportModal } from './ExecutiveReportModal';
 import { VCAnalyticsCharts } from './VCAnalyticsCharts';
+import { DepartmentSubmissionSummaryWidget } from './DepartmentSubmissionSummaryWidget';
 import { VCAuditFeed } from './VCAuditFeed';
 import { MnsUetLogo } from './MnsUetLogo';
 import { DeadlineBanner } from './DeadlineBanner';
@@ -1612,6 +1613,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </p>
         </div>
       </div>
+
+      {/* Recharts Department Submission Summary Widget (Percentage Uploaded vs Pending per Department) */}
+      <DepartmentSubmissionSummaryWidget
+        allRecords={allRecords}
+        currentSession={currentSession}
+        activeSessions={activeSessions}
+        selectedSemesterFilter={selectedSemesterFilter}
+        selectedShiftFilter={selectedShiftFilter}
+        onSelectDepartment={(deptName) => {
+          setSelectedDeptFilter(deptName);
+          setDashboardViewMode('ROSTER');
+          setTimeout(() => {
+            document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }}
+      />
 
       {/* 5. Summary Metric Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

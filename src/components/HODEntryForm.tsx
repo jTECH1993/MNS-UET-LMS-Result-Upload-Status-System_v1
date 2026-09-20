@@ -2487,6 +2487,68 @@ export const HODEntryForm: React.FC<Props> = ({
         id="select-program-details-card"
         className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5"
       >
+        {/* Global Active Shifts Configuration Settings Banner */}
+        <div className="bg-slate-900 text-white rounded-xl p-3.5 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+              <Sun className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                <span>Global Active Shifts Configuration</span>
+                <span className="text-[10px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.2 rounded">
+                  System Settings
+                </span>
+              </h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Enable or disable university offering shifts. Inactive shifts are filtered from HOD forms and Vice Chancellor dashboards.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-lg border border-slate-700/80 shrink-0">
+            <label className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-200 bg-amber-950/80 hover:bg-amber-900/90 border border-amber-700/80 px-2.5 py-1.5 rounded cursor-pointer transition-colors" title="Toggle Morning shift university-wide">
+              <input
+                type="checkbox"
+                checked={StorageService.getGlobalActiveShifts().includes('Morning')}
+                onChange={(e) => {
+                  const curr = StorageService.getGlobalActiveShifts();
+                  let updated = e.target.checked
+                    ? Array.from(new Set([...curr, 'Morning']))
+                    : curr.filter((s) => s !== 'Morning');
+                  if (updated.length === 0) updated = ['Evening'];
+                  StorageService.setGlobalActiveShifts(updated as AcademicShift[]);
+                  setRosterVersion((v) => v + 1);
+                  showFeedback('success', `Global Active Shifts updated: ${updated.join(', ')}`);
+                }}
+                className="rounded text-amber-500 focus:ring-amber-400 w-3.5 h-3.5 cursor-pointer"
+              />
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span>Morning Shift</span>
+            </label>
+
+            <label className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-200 bg-indigo-950/80 hover:bg-indigo-900/90 border border-indigo-700/80 px-2.5 py-1.5 rounded cursor-pointer transition-colors" title="Toggle Evening shift university-wide">
+              <input
+                type="checkbox"
+                checked={StorageService.getGlobalActiveShifts().includes('Evening')}
+                onChange={(e) => {
+                  const curr = StorageService.getGlobalActiveShifts();
+                  let updated = e.target.checked
+                    ? Array.from(new Set([...curr, 'Evening']))
+                    : curr.filter((s) => s !== 'Evening');
+                  if (updated.length === 0) updated = ['Morning'];
+                  StorageService.setGlobalActiveShifts(updated as AcademicShift[]);
+                  setRosterVersion((v) => v + 1);
+                  showFeedback('success', `Global Active Shifts updated: ${updated.join(', ')}`);
+                }}
+                className="rounded text-indigo-400 focus:ring-indigo-400 w-3.5 h-3.5 cursor-pointer"
+              />
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Evening Shift</span>
+            </label>
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">

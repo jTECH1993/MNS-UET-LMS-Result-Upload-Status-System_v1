@@ -30,6 +30,7 @@ const ACTIVE_SESSIONS_KEY = 'mnsuet_active_sessions_list_v99';
 const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v99';
 const SYSTEM_DEADLINE_KEY = 'mnsuet_system_deadline_v99';
 const PROGRAM_SHIFTS_KEY = 'mnsuet_program_active_shifts_v99';
+const GLOBAL_ACTIVE_SHIFTS_KEY = 'mnsuet_global_active_shifts_v99';
 
 export class StorageService {
   
@@ -408,6 +409,131 @@ export class StorageService {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
     } catch (e) {}
+  }
+
+  // --- Global Active Shifts Management ---
+  public static getGlobalActiveShifts(): AcademicShift[] {
+    try {
+      const raw = localStorage.getItem(GLOBAL_ACTIVE_SHIFTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((s) => s === 'Morning' || s === 'Evening') as AcademicShift[];
+        }
+      }
+    } catch (e) {}
+    return ['Morning', 'Evening'];
+  }
+
+  public static setGlobalActiveShifts(shifts: AcademicShift[]): void {
+    const cleanShifts = Array.from(new Set(shifts.filter((s) => s === 'Morning' || s === 'Evening'))) as AcademicShift[];
+    const validShifts = cleanShifts.length > 0 ? cleanShifts : ['Evening'];
+    try {
+      localStorage.setItem(GLOBAL_ACTIVE_SHIFTS_KEY, JSON.stringify(validShifts));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+      }
+    } catch (e) {}
+  }
+
+  public static isShiftGloballyActive(shift: AcademicShift): boolean {
+    return this.getGlobalActiveShifts().includes(shift);
+  }
+
+  // --- Program Shift Validation Layer ---
+  public static validateAndNormalizeShift(
+    departmentName: string,
+    programName: string,
+    requestedShift: AcademicShift | string
+  ): { isValid: boolean; normalizedShift: AcademicShift; reason?: string } {
+    const req = (requestedShift || 'Morning').toString().trim();
+    const formattedReq: AcademicShift =
+      req.toLowerCase() === 'evening' ? 'Evening' : 'Morning';
+
+    // 1. Check global active shifts
+    const globalShifts = this.getGlobalActiveShifts();
+    if (!globalShifts.includes(formattedReq)) {
+      const altShift = globalShifts[0] || 'Evening';
+      return {
+        isValid: false,
+        normalizedShift: altShift,
+        reason: `Shift '${formattedReq}' is globally disabled in Active Shift settings. Auto-selected '${altShift}'.`,
+      };
+    }
+
+    // 2. Check program active shifts
+    const programShifts = this.getProgramShifts(departmentName, programName);
+    if (!programShifts.includes(formattedReq)) {
+      const validShift = programShifts[0] || 'Evening';
+      return {
+        isValid: false,
+        normalizedShift: validShift,
+        reason: `Program '${programName}' is configured for ${programShifts.join(' / ')} shift(s) only. Shift '${formattedReq}' auto-corrected to '${validShift}'.`,
+      };
+    }
+
+    return {
+      isValid: true,
+      normalizedShift: formattedReq,
+    };
+  }
+
+  // --- Duplicate Course Entry Check ---
+  public static checkDuplicateCourse(
+    department: string,
+    program: string,
+    semester: string,
+    shift: AcademicShift,
+    courseCode: string,
+    courseTitle: string,
+    existingSubjects?: SubjectRow[],
+    session: string = '2023'
+  ): { isDuplicate: boolean; duplicateCourseName?: string; message?: string } {
+    const cleanCode = (courseCode || '').trim().toLowerCase();
+    const cleanTitle = (courseTitle || '').trim().toLowerCase();
+
+    if (!cleanCode && !cleanTitle) {
+      return { isDuplicate: false };
+    }
+
+    // 1. Check inside provided existingSubjects array
+    if (existingSubjects && Array.isArray(existingSubjects)) {
+      const matchInList = existingSubjects.find((s) => {
+        const sCode = (s.courseCode || '').trim().toLowerCase();
+        const sTitle = (s.subjectTitle || '').trim().toLowerCase();
+        return (cleanCode && sCode && sCode === cleanCode) || (cleanTitle && sTitle && sTitle === cleanTitle);
+      });
+
+      if (matchInList) {
+        const matchedName = `${matchInList.courseCode || ''} ${matchInList.subjectTitle || ''}`.trim();
+        return {
+          isDuplicate: true,
+          duplicateCourseName: matchedName,
+          message: `Duplicate Course Detected: Course "${matchedName}" already exists in the list for Semester ${semester} (${shift} Shift).`,
+        };
+      }
+    }
+
+    // 2. Check inside stored submission records for the same department, program, semester, shift, session
+    const record = this.getSubmission(department, program, '', shift, session, semester);
+    if (record && record.subjects && Array.isArray(record.subjects)) {
+      const matchInStore = record.subjects.find((s) => {
+        const sCode = (s.courseCode || '').trim().toLowerCase();
+        const sTitle = (s.subjectTitle || '').trim().toLowerCase();
+        return (cleanCode && sCode && sCode === cleanCode) || (cleanTitle && sTitle && sTitle === cleanTitle);
+      });
+
+      if (matchInStore) {
+        const matchedName = `${matchInStore.courseCode || ''} ${matchInStore.subjectTitle || ''}`.trim();
+        return {
+          isDuplicate: true,
+          duplicateCourseName: matchedName,
+          message: `Duplicate Course Error: Course "${matchedName}" has already been uploaded for ${program} - Semester ${semester} (${shift} Shift).`,
+        };
+      }
+    }
+
+    return { isDuplicate: false };
   }
 
   public static getSession2023Programs(departmentName: string): string[] {
@@ -991,11 +1117,14 @@ export class StorageService {
 
   public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean }> {
     const activeUser = this.getActiveUser();
+    const shiftVal = this.validateAndNormalizeShift(record.department, record.program, record.shift || 'Morning');
+    const safeShift = shiftVal.normalizedShift;
+
     const isUpdate = !!this.getSubmission(
       record.department,
       record.program,
       record.degreeLevel,
-      record.shift || 'Morning',
+      safeShift,
       record.session || '2023',
       record.semester || '1',
       record.section || 'A'
@@ -1008,7 +1137,7 @@ export class StorageService {
         record.department,
         record.program,
         record.degreeLevel,
-        record.shift || 'Morning',
+        safeShift,
         record.session || '2023',
         record.semester || '1',
         sec
@@ -1018,7 +1147,7 @@ export class StorageService {
         ...record,
         id: key,
         section: sec,
-        shift: record.shift || 'Morning',
+        shift: safeShift,
         session: (record.session || '2023').trim(),
         semester: (record.semester || '1').trim(),
         accessedBy: activeUser.name,
