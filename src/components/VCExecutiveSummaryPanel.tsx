@@ -104,18 +104,8 @@ export function VCExecutiveSummaryPanel({
         new Set(StorageService.getSessionPrograms(dept.name, activeSess, allRecords))
       );
 
-      // 2. Filter programs so ONLY programs part of activeSess or with active submissions in activeSess are included
-      const targetPrograms = dept.programs.filter((prog) => {
-        const hasSub = allRecords.some(
-          (r) =>
-            r &&
-            r.department &&
-            StorageService._isDeptMatch(dept.name, r.department) &&
-            StorageService._isProgMatch(prog.name, r.program) &&
-            (r.session || '2023').includes(activeSess)
-        );
-        return activeProgNames.includes(prog.name) || hasSub;
-      });
+      // 2. Filter programs so ONLY programs part of activeSess are included
+      const targetPrograms = dept.programs.filter((prog) => activeProgNames.includes(prog.name));
 
       if (targetPrograms.length === 0) {
         return null;

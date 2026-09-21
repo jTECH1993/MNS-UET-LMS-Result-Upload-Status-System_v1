@@ -212,6 +212,17 @@ export interface ProgramSessionDetail {
   hasUploadedRecords: boolean;
 }
 
+export interface ShiftDetail {
+  shift: AcademicShift;
+  isSupported: boolean;
+  isGlobalActive: boolean;
+  isAvailable: boolean;
+  recordCount: number;
+  hasData: boolean;
+  statusLabel: string;
+  badgeClass: string;
+}
+
 export * from './schema';
 
 

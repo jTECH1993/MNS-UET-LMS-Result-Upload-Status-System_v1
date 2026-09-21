@@ -85,17 +85,7 @@ export function ActionCenterPanel({
         new Set(StorageService.getSessionPrograms(dept.name, currentSession, allRecords))
       );
 
-      const targetPrograms = dept.programs.filter((prog) => {
-        const hasSub = allRecords.some(
-          (r) =>
-            r &&
-            r.department &&
-            StorageService._isDeptMatch(dept.name, r.department) &&
-            StorageService._isProgMatch(prog.name, r.program) &&
-            (r.session || '2023').includes(currentSession)
-        );
-        return activeProgNames.includes(prog.name) || hasSub;
-      });
+      const targetPrograms = dept.programs.filter((prog) => activeProgNames.includes(prog.name));
 
       if (targetPrograms.length === 0) return null;
 

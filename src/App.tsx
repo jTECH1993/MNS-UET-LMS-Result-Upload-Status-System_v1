@@ -117,6 +117,31 @@ export default function App() {
   const [targetSemester, setTargetSemester] = useState<string>('1');
   const [targetAcademicSection, setTargetAcademicSection] = useState<string>('A');
 
+  /**
+   * Helper to set department & program while ensuring targetShift is updated to a valid/available shift.
+   */
+  const selectProgramWithValidShift = (deptName: string, progName: string, preferredShift?: AcademicShift) => {
+    setTargetDept(deptName);
+    setTargetProg(progName);
+
+    const shiftDetails = StorageService.getProgramShiftDetails(deptName, progName, activeSessions, allRecords);
+
+    if (preferredShift && shiftDetails[preferredShift]?.isAvailable) {
+      setTargetShift(preferredShift);
+    } else if (shiftDetails[targetShift]?.isAvailable) {
+      // Current shift is valid & available
+    } else {
+      // Pick first available shift for this session/program
+      const firstAvailable = (['Morning', 'Evening'] as AcademicShift[]).find((s) => shiftDetails[s]?.isAvailable);
+      if (firstAvailable) {
+        setTargetShift(firstAvailable);
+      } else {
+        const firstSupported = StorageService.getProgramShifts(deptName, progName)[0] || 'Morning';
+        setTargetShift(firstSupported);
+      }
+    }
+  };
+
   // Roster configuration modal for coordinators and VC
   const [isRosterModalOpen, setIsRosterModalOpen] = useState<boolean>(false);
   const [rosterModalDept, setRosterModalDept] = useState<string>('Department of Computer Science');
@@ -718,7 +743,6 @@ export default function App() {
                           type="button"
                           id={`btn-dept-${dept.code}`}
                           onClick={() => {
-                            setTargetDept(dept.name);
                             // Auto select first applicable program of clicked department
                             const firstProg =
                               dept.programs.find((p) => {
@@ -731,7 +755,9 @@ export default function App() {
                                 return detail.isApplicableInSelected;
                               }) || dept.programs[0];
                             if (firstProg) {
-                              setTargetProg(firstProg.name);
+                              selectProgramWithValidShift(dept.name, firstProg.name);
+                            } else {
+                              setTargetDept(dept.name);
                             }
                             setOpenDeptDropdown((prev) => (prev === dept.name ? null : dept.name));
                           }}
@@ -750,7 +776,7 @@ export default function App() {
                           />
                         </button>
 
-                        {/* Dropdown Menu showing programs for this department with session-awareness */}
+                        {/* Dropdown Menu showing programs for this department with session and shift awareness */}
                         {isMenuOpen && (() => {
                           const deptProgDetails = dept.programs.map((prog) => ({
                             prog,
@@ -760,9 +786,14 @@ export default function App() {
                               activeSessions,
                               allRecords
                             ),
+                            shiftDetails: StorageService.getProgramShiftDetails(
+                              dept.name,
+                              prog.name,
+                              activeSessions,
+                              allRecords
+                            ),
                           }));
                           const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
-                          const other = deptProgDetails.filter((d) => !d.detail.isApplicableInSelected);
                           const isMulti = activeSessions.length > 1;
 
                           return (
@@ -804,38 +835,36 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* If multi-session: show active programs with their applicable session badges */}
+                              {/* Programs list with interactive Shift Badges */}
                               {isMulti ? (
-                                <div className="space-y-1">
+                                <div className="space-y-2">
                                   <div className="text-[10px] uppercase font-bold text-slate-500 px-2 py-0.5">
                                     Session Applicability Matrix ({deptProgDetails.filter(({ detail }) => detail.isApplicableInSelected).length} Programs)
                                   </div>
-                                  {deptProgDetails.filter(({ detail }) => detail.isApplicableInSelected).map(({ prog, detail }) => {
-                                    const isSelected =
-                                      targetDept === dept.name && targetProg === prog.name;
+                                  {deptProgDetails.filter(({ detail }) => detail.isApplicableInSelected).map(({ prog, detail, shiftDetails }) => {
+                                    const isSelected = targetDept === dept.name && targetProg === prog.name;
 
                                     return (
-                                      <button
+                                      <div
                                         key={prog.name}
-                                        type="button"
-                                        id={`prog-opt-${dept.code}-${prog.name.replace(/\s+/g, '-').toLowerCase()}`}
-                                        onClick={() => {
-                                          setTargetDept(dept.name);
-                                          setTargetProg(prog.name);
-                                          if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
-                                            setIsInspectionMode(true);
-                                          }
-                                          setActiveView('HOD');
-                                          setActiveModule('LMS');
-                                          setOpenDeptDropdown(null);
-                                        }}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex flex-col gap-1 cursor-pointer ${
+                                        className={`p-2.5 rounded-lg text-xs transition-colors flex flex-col gap-1.5 ${
                                           isSelected
-                                            ? 'bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800'
-                                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent'
+                                            ? 'bg-emerald-50/90 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 shadow-2xs'
+                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800'
                                         }`}
                                       >
-                                        <div className="flex items-center justify-between gap-2">
+                                        <div
+                                          onClick={() => {
+                                            selectProgramWithValidShift(dept.name, prog.name);
+                                            if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                              setIsInspectionMode(true);
+                                            }
+                                            setActiveView('HOD');
+                                            setActiveModule('LMS');
+                                            setOpenDeptDropdown(null);
+                                          }}
+                                          className="flex items-center justify-between gap-2 cursor-pointer"
+                                        >
                                           <div className="flex items-center gap-1.5 min-w-0">
                                             <span className={`truncate font-semibold ${isSelected ? 'text-emerald-950 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-200'}`}>
                                               {prog.name}
@@ -848,6 +877,7 @@ export default function App() {
                                             <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                           )}
                                         </div>
+
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${detail.badgeClass}`}>
                                             {detail.statusLabel}
@@ -859,59 +889,166 @@ export default function App() {
                                             </span>
                                           )}
                                         </div>
-                                      </button>
+
+                                        {/* Shift Selector Pills */}
+                                        <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
+                                          <span className="text-[10px] font-bold text-slate-500 shrink-0">Shifts:</span>
+                                          {(['Morning', 'Evening'] as AcademicShift[]).map((s) => {
+                                            const sd = shiftDetails[s];
+                                            const isShiftActive = isSelected && targetShift === s;
+
+                                            if (sd.isAvailable) {
+                                              return (
+                                                <button
+                                                  key={s}
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    selectProgramWithValidShift(dept.name, prog.name, s);
+                                                    if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                                      setIsInspectionMode(true);
+                                                    }
+                                                    setActiveView('HOD');
+                                                    setActiveModule('LMS');
+                                                    setOpenDeptDropdown(null);
+                                                  }}
+                                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                                                    isShiftActive
+                                                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs ring-1 ring-emerald-400'
+                                                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900 border-emerald-300 dark:border-emerald-800'
+                                                  }`}
+                                                  title={`Click to open ${s} shift for ${prog.name} (${sd.statusLabel})`}
+                                                >
+                                                  <span>{s === 'Morning' ? '☀️ Morning' : '🌙 Evening'}</span>
+                                                  {sd.hasData && (
+                                                    <span className={`text-[9px] px-1 rounded ${isShiftActive ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100'}`}>
+                                                      {sd.recordCount}
+                                                    </span>
+                                                  )}
+                                                </button>
+                                              );
+                                            } else {
+                                              return (
+                                                <span
+                                                  key={s}
+                                                  className="text-[10px] px-2 py-0.5 rounded font-medium bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-750 italic flex items-center gap-1 cursor-not-allowed opacity-75"
+                                                  title={`${s} shift unavailable: ${sd.statusLabel}`}
+                                                >
+                                                  <span className="line-through">{s === 'Morning' ? '☀️ Morning' : '🌙 Evening'}</span>
+                                                  <span className="text-[9px] uppercase text-amber-700 dark:text-amber-400 font-semibold">
+                                                    [{sd.isSupported ? 'Off-Cycle' : 'Not Offered'}]
+                                                  </span>
+                                                </span>
+                                              );
+                                            }
+                                          })}
+                                        </div>
+                                      </div>
                                     );
                                   })}
                                 </div>
                               ) : (
-                                /* Single session mode: cleanly group enrolled vs other offerings */
+                                /* Single session mode: cleanly group enrolled vs other offerings with shift awareness */
                                 <div className="space-y-2">
-                                  {/* Section 1: Enrolled in Target Session */}
                                   <div>
-                                    <div className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded mb-1 flex items-center justify-between">
+                                    <div className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded mb-1.5 flex items-center justify-between">
                                       <span>Session {targetSession} Enrolled Offerings</span>
                                       <span className="font-extrabold">{enrolled.length}</span>
                                     </div>
-                                    <div className="space-y-1">
-                                      {enrolled.map(({ prog, detail }) => {
-                                        const isSelected =
-                                          targetDept === dept.name && targetProg === prog.name;
+                                    <div className="space-y-1.5">
+                                      {enrolled.map(({ prog, detail, shiftDetails }) => {
+                                        const isSelected = targetDept === dept.name && targetProg === prog.name;
                                         return (
-                                          <button
+                                          <div
                                             key={prog.name}
-                                            type="button"
-                                            id={`prog-opt-${dept.code}-${prog.name.replace(/\s+/g, '-').toLowerCase()}`}
-                                            onClick={() => {
-                                              setTargetDept(dept.name);
-                                              setTargetProg(prog.name);
-                                              if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
-                                                setIsInspectionMode(true);
-                                              }
-                                              setActiveView('HOD');
-                                              setActiveModule('LMS');
-                                              setOpenDeptDropdown(null);
-                                            }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                            className={`p-2.5 rounded-lg text-xs transition-colors flex flex-col gap-1.5 ${
                                               isSelected
-                                                ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 font-bold border border-emerald-300 dark:border-emerald-800'
-                                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium'
+                                                ? 'bg-emerald-50/90 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 font-bold border border-emerald-300 dark:border-emerald-800 shadow-2xs'
+                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800'
                                             }`}
                                           >
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                              <span className="truncate">{prog.name}</span>
-                                              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-bold shrink-0">
-                                                {prog.degreeLevel}
-                                              </span>
-                                              {detail.hasUploadedRecords && (
-                                                <span className="text-[9px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">
-                                                  LMS Active
+                                            <div
+                                              onClick={() => {
+                                                selectProgramWithValidShift(dept.name, prog.name);
+                                                if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                                  setIsInspectionMode(true);
+                                                }
+                                                setActiveView('HOD');
+                                                setActiveModule('LMS');
+                                                setOpenDeptDropdown(null);
+                                              }}
+                                              className="flex items-center justify-between gap-2 cursor-pointer"
+                                            >
+                                              <div className="flex items-center gap-1.5 min-w-0">
+                                                <span className="truncate">{prog.name}</span>
+                                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-bold shrink-0">
+                                                  {prog.degreeLevel}
                                                 </span>
+                                                {detail.hasUploadedRecords && (
+                                                  <span className="text-[9px] bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                                    LMS Active
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {isSelected && (
+                                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                               )}
                                             </div>
-                                            {isSelected && (
-                                              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                            )}
-                                          </button>
+
+                                            {/* Shift Selector Pills */}
+                                            <div className="flex items-center gap-1.5 mt-0.5 pt-1 border-t border-slate-200/60 dark:border-slate-800">
+                                              <span className="text-[10px] font-bold text-slate-500 shrink-0">Shifts:</span>
+                                              {(['Morning', 'Evening'] as AcademicShift[]).map((s) => {
+                                                const sd = shiftDetails[s];
+                                                const isShiftActive = isSelected && targetShift === s;
+
+                                                if (sd.isAvailable) {
+                                                  return (
+                                                    <button
+                                                      key={s}
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        selectProgramWithValidShift(dept.name, prog.name, s);
+                                                        if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                                                          setIsInspectionMode(true);
+                                                        }
+                                                        setActiveView('HOD');
+                                                        setActiveModule('LMS');
+                                                        setOpenDeptDropdown(null);
+                                                      }}
+                                                      className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                                                        isShiftActive
+                                                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs ring-1 ring-emerald-400'
+                                                          : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900 border-emerald-300 dark:border-emerald-800'
+                                                      }`}
+                                                      title={`Click to open ${s} shift for ${prog.name} (${sd.statusLabel})`}
+                                                    >
+                                                      <span>{s === 'Morning' ? '☀️ Morning' : '🌙 Evening'}</span>
+                                                      {sd.hasData && (
+                                                        <span className={`text-[9px] px-1 rounded ${isShiftActive ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100'}`}>
+                                                          {sd.recordCount}
+                                                        </span>
+                                                      )}
+                                                    </button>
+                                                  );
+                                                } else {
+                                                  return (
+                                                    <span
+                                                      key={s}
+                                                      className="text-[10px] px-2 py-0.5 rounded font-medium bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-750 italic flex items-center gap-1 cursor-not-allowed opacity-75"
+                                                      title={`${s} shift unavailable: ${sd.statusLabel}`}
+                                                    >
+                                                      <span className="line-through">{s === 'Morning' ? '☀️ Morning' : '🌙 Evening'}</span>
+                                                      <span className="text-[9px] uppercase text-amber-700 dark:text-amber-400 font-semibold">
+                                                        [{sd.isSupported ? 'Off-Cycle' : 'Not Offered'}]
+                                                      </span>
+                                                    </span>
+                                                  );
+                                                }
+                                              })}
+                                            </div>
+                                          </div>
                                         );
                                       })}
                                     </div>
@@ -926,7 +1063,7 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Inline Active Department & Program Quick Selector */}
+                {/* Inline Active Department, Program & Shift Quick Selector */}
                 {selectedDeptObj && (() => {
                   const deptProgDetails = selectedDeptObj.programs.map((prog) => ({
                     prog,
@@ -942,7 +1079,7 @@ export default function App() {
                   const isMulti = activeSessions.length > 1;
 
                   return (
-                    <div className="flex items-center gap-1.5 bg-emerald-50/90 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-600/50 rounded-lg px-2.5 py-1 shadow-2xs">
+                    <div className="flex flex-wrap items-center gap-1.5 bg-emerald-50/90 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-600/50 rounded-lg px-2.5 py-1 shadow-2xs">
                       {/* Department Switcher Dropdown */}
                       <div className="flex items-center gap-1 border-r border-emerald-200 dark:border-slate-700 pr-1.5">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
@@ -953,7 +1090,6 @@ export default function App() {
                           value={targetDept}
                           onChange={(e) => {
                             const newDeptName = e.target.value;
-                            setTargetDept(newDeptName);
                             const targetDeptData = UNIVERSITY_DEPARTMENTS.find((d) => d.name === newDeptName);
                             if (targetDeptData) {
                               const firstApplicable =
@@ -967,8 +1103,12 @@ export default function App() {
                                   return detail.isApplicableInSelected;
                                 }) || targetDeptData.programs[0];
                               if (firstApplicable) {
-                                setTargetProg(firstApplicable.name);
+                                selectProgramWithValidShift(newDeptName, firstApplicable.name);
+                              } else {
+                                setTargetDept(newDeptName);
                               }
+                            } else {
+                              setTargetDept(newDeptName);
                             }
                             if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
                               setIsInspectionMode(true);
@@ -990,82 +1130,157 @@ export default function App() {
                       </div>
 
                       {/* Program Selector */}
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
-                        {selectedDeptObj.code} Program:
-                      </span>
-                      <select
-                        id="top-bar-active-program-select"
-                        value={targetProg}
-                        onChange={(e) => {
-                          const newProg = e.target.value;
-                          setTargetProg(newProg);
-                          if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
-                            setIsInspectionMode(true);
-                          }
-                          setActiveView('HOD');
-                          setActiveModule('LMS');
-                        }}
-                        className="text-xs font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[200px] sm:max-w-[320px] truncate"
-                        title={`Select program in ${selectedDeptObj.name}`}
-                      >
-                        {isMulti ? (
-                          deptProgDetails.map(({ prog, detail }) => {
-                            const isApplicable = detail.isApplicableInSelected;
-                            return (
-                              <option
-                                key={prog.name}
-                                value={prog.name}
-                                disabled={!isApplicable}
-                                title={!isApplicable ? `Not applicable in selected sessions (${activeSessions.join(', ')})` : undefined}
-                                className={
-                                  isApplicable
-                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold'
-                                    : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic'
-                                }
-                              >
-                                {prog.name} ({prog.degreeLevel}) — [{detail.statusLabel}]{!isApplicable ? ' (Off-cycle)' : ''}
-                              </option>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
+                          Program:
+                        </span>
+                        <select
+                          id="top-bar-active-program-select"
+                          value={targetProg}
+                          onChange={(e) => {
+                            const newProg = e.target.value;
+                            selectProgramWithValidShift(selectedDeptObj.name, newProg);
+                            if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                              setIsInspectionMode(true);
+                            }
+                            setActiveView('HOD');
+                            setActiveModule('LMS');
+                          }}
+                          className="text-xs font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[180px] sm:max-w-[280px] truncate"
+                          title={`Select program in ${selectedDeptObj.name}`}
+                        >
+                          {isMulti ? (
+                            deptProgDetails.map(({ prog, detail }) => {
+                              const isApplicable = detail.isApplicableInSelected;
+                              return (
+                                <option
+                                  key={prog.name}
+                                  value={prog.name}
+                                  disabled={!isApplicable}
+                                  title={!isApplicable ? `Not applicable in selected sessions (${activeSessions.join(', ')})` : undefined}
+                                  className={
+                                    isApplicable
+                                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold'
+                                      : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic'
+                                  }
+                                >
+                                  {prog.name} ({prog.degreeLevel}) — [{detail.statusLabel}]{!isApplicable ? ' (Off-cycle)' : ''}
+                                </option>
+                              );
+                            })
+                          ) : (
+                            <>
+                              {enrolled.length > 0 && (
+                                <optgroup label={`Session ${targetSession} Active Offerings (${enrolled.length})`}>
+                                  {enrolled.map(({ prog, detail }) => (
+                                    <option
+                                      key={prog.name}
+                                      value={prog.name}
+                                      className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
+                                    >
+                                      {prog.name} ({prog.degreeLevel}) {detail.hasUploadedRecords ? '✓ (LMS Active)' : ''}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {other.length > 0 && (
+                                <optgroup label={`Other Programs (Off-cycle in Session ${targetSession})`}>
+                                  {other.map(({ prog }) => (
+                                    <option
+                                      key={prog.name}
+                                      value={prog.name}
+                                      disabled
+                                      className="bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic"
+                                    >
+                                      {prog.name} ({prog.degreeLevel}) — [Off-cycle in Session {targetSession}]
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      {/* Shift Selector */}
+                      <div className="flex items-center gap-1 border-l border-emerald-200 dark:border-slate-700 pl-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 dark:text-emerald-400 whitespace-nowrap">
+                          Shift:
+                        </span>
+                        <select
+                          id="top-bar-active-shift-select"
+                          value={targetShift}
+                          onChange={(e) => {
+                            const newShift = e.target.value as AcademicShift;
+                            setTargetShift(newShift);
+                            if (currentUser.role === 'VC' || currentUser.role === 'ADMIN') {
+                              setIsInspectionMode(true);
+                            }
+                            setActiveView('HOD');
+                            setActiveModule('LMS');
+                          }}
+                          className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300 bg-transparent focus:outline-none cursor-pointer pr-1 max-w-[150px] truncate"
+                          title={`Select active shift for ${targetProg}`}
+                        >
+                          {(() => {
+                            const currentShiftDetails = StorageService.getProgramShiftDetails(
+                              selectedDeptObj.name,
+                              targetProg,
+                              activeSessions,
+                              allRecords
                             );
-                          })
-                        ) : (
-                          <>
-                            {enrolled.length > 0 && (
-                              <optgroup label={`Session ${targetSession} Active Offerings (${enrolled.length})`}>
-                                {enrolled.map(({ prog, detail }) => (
-                                  <option
-                                    key={prog.name}
-                                    value={prog.name}
-                                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
-                                  >
-                                    {prog.name} ({prog.degreeLevel}) {detail.hasUploadedRecords ? '✓ (LMS Active)' : ''}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                            {other.length > 0 && (
-                              <optgroup label={`Other Programs (Off-cycle in Session ${targetSession})`}>
-                                {other.map(({ prog }) => (
-                                  <option
-                                    key={prog.name}
-                                    value={prog.name}
-                                    disabled
-                                    className="bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic"
-                                  >
-                                    {prog.name} ({prog.degreeLevel}) — [Off-cycle in Session {targetSession}]
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                          </>
-                        )}
-                      </select>
+                            const shifts: AcademicShift[] = ['Morning', 'Evening'];
+                            const available = shifts.filter((s) => currentShiftDetails[s].isAvailable);
+                            const unavailable = shifts.filter((s) => !currentShiftDetails[s].isAvailable);
+
+                            return (
+                              <>
+                                {available.length > 0 && (
+                                  <optgroup label={`Available Shifts (${available.length})`}>
+                                    {available.map((s) => {
+                                      const sd = currentShiftDetails[s];
+                                      return (
+                                        <option
+                                          key={s}
+                                          value={s}
+                                          className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-semibold"
+                                        >
+                                          {s === 'Morning' ? '☀️ Morning' : '🌙 Evening'} — {sd.statusLabel}
+                                        </option>
+                                      );
+                                    })}
+                                  </optgroup>
+                                )}
+                                {unavailable.length > 0 && (
+                                  <optgroup label="Unavailable / Off-Cycle Shifts">
+                                    {unavailable.map((s) => {
+                                      const sd = currentShiftDetails[s];
+                                      return (
+                                        <option
+                                          key={s}
+                                          value={s}
+                                          disabled
+                                          className="bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 italic"
+                                        >
+                                          {s === 'Morning' ? '☀️ Morning' : '🌙 Evening'} — [{sd.statusLabel}]
+                                        </option>
+                                      );
+                                    })}
+                                  </optgroup>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </select>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => {
                           setRosterModalDept(selectedDeptObj.name);
                           setIsRosterModalOpen(true);
                         }}
-                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200 p-0.5 rounded transition-colors cursor-pointer shrink-0"
+                        className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200 p-0.5 rounded transition-colors cursor-pointer shrink-0 ml-0.5"
                         title={`Configure ${selectedDeptObj.code} session roster`}
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />

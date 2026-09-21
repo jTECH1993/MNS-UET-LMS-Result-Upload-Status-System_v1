@@ -424,18 +424,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         new Set(activeSessions.flatMap((s) => StorageService.getSessionPrograms(dept.name, s, allRecords)))
       );
 
-      // Only iterate over programs active in the selected sessions or with genuine submissions in these sessions
-      const targetDeptPrograms = dept.programs.filter((prog) => {
-        const hasSub = allRecords.some(
-          (r) =>
-            r &&
-            r.department &&
-            StorageService._isDeptMatch(dept.name, r.department) &&
-            StorageService._isProgMatch(prog.name, r.program) &&
-            activeSessions.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023'))
-        );
-        return activeProgNames.includes(prog.name) || hasSub;
-      });
+      // Only iterate over programs active in the selected sessions
+      const targetDeptPrograms = dept.programs.filter((prog) => activeProgNames.includes(prog.name));
 
       targetDeptPrograms.forEach((prog) => {
         const buildShiftData = (shiftName: AcademicShift): ShiftCohortData => {
@@ -531,8 +521,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         const hasEvening = eveningData.hasSubmission;
         const hasAny = hasMorning || hasEvening;
 
-        // Dynamically activate program if it has submissions, overriding static cache
-        const isSessionActive = activeProgNames.includes(prog.name) || hasAny;
+        const isSessionActive = activeProgNames.includes(prog.name);
 
         // Determine dynamic supported shifts based strictly on configured program shifts in StorageService:
         const configuredProgramShifts = StorageService.getProgramShifts(dept.name, prog.name);

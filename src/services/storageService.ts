@@ -9,6 +9,7 @@ import {
   AuditChangeDetail,
   WorkOnDemandRequisition,
   ProgramSessionDetail,
+  ShiftDetail,
 } from '../types';
 import {
   UNIVERSITY_DEPARTMENTS,
@@ -85,9 +86,13 @@ export class StorageService {
       CURRENT_SESSION_KEY,
       ACTIVE_SESSIONS_KEY,
       WORK_ON_DEMAND_KEY,
+      PROGRAM_SHIFTS_KEY,
+      GLOBAL_ACTIVE_SHIFTS_KEY,
       'mnsuet_cohort_sections_v99',
       'mnsuet_session_active_roster_v99__2023',
-      'mnsuet_session_active_roster_v99__2024'
+      'mnsuet_session_active_roster_v99__2024',
+      'mnsuet_session_active_roster_v99__2025',
+      'mnsuet_session_active_roster_v99__2026'
     ];
 
     let isReceiving = false;
@@ -351,35 +356,41 @@ export class StorageService {
     );
 
     let isConfigured = false;
-    if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
+    if (configuredKey && Array.isArray(roster[configuredKey])) {
       isConfigured = true;
       // Preserve all programs explicitly selected in the roster
       activePrograms = roster[configuredKey].map((p) => this.normalizeProgramName(p, departmentName));
     } else {
-      // 2. Default coordinator template: Include all official programs of the department
-      activePrograms = dept.programs.map((p) => p.name);
+      // 2. Default coordinator template: Include active programs for this session
+      if (sessionName === '2023') {
+        activePrograms = dept.programs.filter((p) => p.session2023 !== false).map((p) => p.name);
+      } else {
+        activePrograms = dept.programs.map((p) => p.name);
+      }
     }
 
-    // 3. Dynamic Database & Account inclusion: If any submission record or account assignment exists for a program in this session
-    try {
-      const records = customRecords || this.getAllSubmissions();
-      records.forEach((r) => {
-        if (
-          r.department &&
-          (r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
-            r.department.trim().toLowerCase() === dept.code.trim().toLowerCase() ||
-            r.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) &&
-          (r.session || '2023').trim() === sessionName.trim()
-        ) {
-          if (r.program) {
-            const canonical = this.normalizeProgramName(r.program, departmentName);
-            if (canonical && !activePrograms.includes(canonical)) {
-              activePrograms.push(canonical);
+    // 3. Dynamic Database inclusion ONLY IF not explicitly configured by admin/coordinator:
+    if (!isConfigured) {
+      try {
+        const records = customRecords || this.getAllSubmissions();
+        records.forEach((r) => {
+          if (
+            r.department &&
+            (r.department.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+              r.department.trim().toLowerCase() === dept.code.trim().toLowerCase() ||
+              r.department.trim().toLowerCase() === dept.name.trim().toLowerCase()) &&
+            (r.session || '2023').trim() === sessionName.trim()
+          ) {
+            if (r.program) {
+              const canonical = this.normalizeProgramName(r.program, departmentName);
+              if (canonical && !activePrograms.includes(canonical)) {
+                activePrograms.push(canonical);
+              }
             }
           }
-        }
-      });
-    } catch (e) {}
+        });
+      } catch (e) {}
+    }
 
     return Array.from(new Set(activePrograms.filter(Boolean)));
   }
@@ -700,6 +711,76 @@ export class StorageService {
       hasSubmissionsInSelected,
       hasUploadedRecords: hasSubmissionsInSelected,
     };
+  }
+
+  /**
+   * Evaluates availability, data presence, and shift compatibility for a program across active sessions.
+   */
+  public static getProgramShiftDetails(
+    departmentName: string,
+    programName: string,
+    selectedSessions: string[] = ['2023'],
+    allRecords?: SubmissionRecord[]
+  ): Record<AcademicShift, ShiftDetail> {
+    const supportedShifts = this.getProgramShifts(departmentName, programName);
+    const globalActiveShifts = this.getGlobalActiveShifts();
+    const records = allRecords || this.getAllSubmissions();
+
+    const activeSess = selectedSessions.length > 0 ? selectedSessions : ['2023'];
+    const sessionDetail = this.getProgramSessionDetail(departmentName, programName, activeSess, records);
+
+    const shifts: AcademicShift[] = ['Morning', 'Evening'];
+    const result: Record<AcademicShift, ShiftDetail> = {} as any;
+
+    shifts.forEach((s) => {
+      const isSupported = supportedShifts.includes(s);
+      const isGlobalActive = globalActiveShifts.includes(s);
+      const isAvailable = isSupported && isGlobalActive && sessionDetail.isApplicableInSelected;
+
+      // Count uploaded records for this department, program, shift, and selected session(s)
+      const shiftRecords = records.filter(
+        (r) =>
+          this._isDeptMatch(r.department || '', departmentName) &&
+          this._isProgMatch(r.program || '', programName) &&
+          (r.shift || 'Morning') === s &&
+          activeSess.includes(r.session || '2023')
+      );
+      const recordCount = shiftRecords.length;
+      const hasData = recordCount > 0;
+
+      let statusLabel = '';
+      let badgeClass = '';
+
+      if (!isSupported) {
+        statusLabel = 'Not Offered';
+        badgeClass = 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border-slate-200 dark:border-slate-700';
+      } else if (!isGlobalActive) {
+        statusLabel = 'Shift Disabled';
+        badgeClass = 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+      } else if (!sessionDetail.isApplicableInSelected) {
+        statusLabel = 'Off-Cycle Session';
+        badgeClass = 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 border-slate-200 dark:border-slate-700';
+      } else if (hasData) {
+        statusLabel = `Available (${recordCount} Uploads)`;
+        badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold';
+      } else {
+        statusLabel = 'Available (0 Uploads)';
+        badgeClass = 'bg-sky-50 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border-sky-200 font-semibold';
+      }
+
+      result[s] = {
+        shift: s,
+        isSupported,
+        isGlobalActive,
+        isAvailable,
+        recordCount,
+        hasData,
+        statusLabel,
+        badgeClass,
+      };
+    });
+
+    return result;
   }
 
   public static getStore(): Record<string, SubmissionRecord> {

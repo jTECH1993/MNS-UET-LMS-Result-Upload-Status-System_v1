@@ -76,8 +76,18 @@ export const Session2023SelectorModal: React.FC<Props> = ({
 
   const handleToggle = (progName: string) => {
     setSavedSuccess(false);
-    if (selectedPrograms.includes(progName)) {
-      setSelectedPrograms(selectedPrograms.filter((p) => p !== progName));
+    const normTarget = StorageService.normalizeProgramName(progName, selectedDept);
+    const exists = selectedPrograms.some((p) => {
+      const normP = StorageService.normalizeProgramName(p, selectedDept);
+      return normP === normTarget || p.trim().toLowerCase() === progName.trim().toLowerCase();
+    });
+    if (exists) {
+      setSelectedPrograms(
+        selectedPrograms.filter((p) => {
+          const normP = StorageService.normalizeProgramName(p, selectedDept);
+          return normP !== normTarget && p.trim().toLowerCase() !== progName.trim().toLowerCase();
+        })
+      );
     } else {
       setSelectedPrograms([...selectedPrograms, progName]);
     }
@@ -248,7 +258,12 @@ export const Session2023SelectorModal: React.FC<Props> = ({
           {/* Program Checkbox List */}
           <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white overflow-hidden shadow-xs">
             {allDeptPrograms.map((prog) => {
-              const isChecked = selectedPrograms.includes(prog.name);
+              const normProg = StorageService.normalizeProgramName(prog.name, selectedDept);
+              const isChecked = selectedPrograms.some(
+                (p) =>
+                  StorageService.normalizeProgramName(p, selectedDept) === normProg ||
+                  p.trim().toLowerCase() === prog.name.trim().toLowerCase()
+              );
               const progShifts = programShiftsMap[prog.name] || StorageService.getProgramShifts(selectedDept, prog.name);
               return (
                 <div

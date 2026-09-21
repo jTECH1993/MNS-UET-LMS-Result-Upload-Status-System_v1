@@ -195,7 +195,7 @@ export class VCAnalyticsService {
       }
 
       // 2. Resolve Programs Dimension - Strictly for selected sessions (e.g. Session 2023, 2024...)
-      // Only consider active programs dynamically configured for these sessions or with active submissions
+      // Only consider active programs dynamically configured for these sessions
       const registeredProgramNames = new Set<string>();
       sessionList.forEach((sess) => {
         const sessionRoster = StorageService.getSessionPrograms(dept.name, sess, allRecords);
@@ -203,21 +203,6 @@ export class VCAnalyticsService {
           const canonical = StorageService.normalizeProgramName(p, dept.name);
           if (canonical) registeredProgramNames.add(canonical);
         });
-      });
-
-      // Dynamically include any program that has authentic submitted LMS records in this department for selected sessions
-      allRecords.forEach((r) => {
-        if (
-          r &&
-          r.department &&
-          StorageService._isDeptMatch(dept.name, r.department) &&
-          sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023')) &&
-          r.program &&
-          r.program.trim()
-        ) {
-          const canonical = StorageService.normalizeProgramName(r.program, dept.name);
-          if (canonical) registeredProgramNames.add(canonical);
-        }
       });
 
       // Filter dept.programs to only those active in the selected sessions

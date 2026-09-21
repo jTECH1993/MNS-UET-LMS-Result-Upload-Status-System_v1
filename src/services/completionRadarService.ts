@@ -259,32 +259,6 @@ export class CompletionRadarService {
       });
     });
 
-    // Add any programs with authentic submissions in these sessions
-    allRecords.forEach((r) => {
-      if (
-        r &&
-        r.department &&
-        StorageService._isMatch(r.department, deptName) &&
-        sessionList.some((s) => (r.session || '2023').startsWith(s) || s.startsWith(r.session || '2023')) &&
-        r.program &&
-        r.program.trim()
-      ) {
-        const canonical = StorageService.normalizeProgramName(r.program, deptName);
-        if (canonical) set.add(canonical);
-      }
-    });
-
-    // If the set is empty, fallback to session-configured programs
-    if (set.size === 0 && deptObj) {
-      const is2023 = sessionList.some((s) => s === '2023' || s.includes('23'));
-      const defaults = deptObj.programs.filter((p) => (is2023 ? p.session2023 : true));
-      if (defaults.length > 0) {
-        defaults.forEach((p) => set.add(p.name));
-      } else if (deptObj.programs.length > 0) {
-        set.add(deptObj.programs[0].name);
-      }
-    }
-
     return Array.from(set);
   }
 
