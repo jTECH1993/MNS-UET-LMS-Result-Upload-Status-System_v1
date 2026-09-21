@@ -132,12 +132,18 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
       const isZeroPercent = uploadedPercentage === 0 || uploadedCoursesCount === 0;
       const isTrailing = uploadedPercentage < 50;
 
+      const fullDisplayName = `${dept.name} (${dept.code})`;
       const rawShortName = dept.code.replace('Dept. of ', '').replace('Engineering', 'Eng.');
       const shortName = isZeroPercent ? `⚠️ ${rawShortName}` : rawShortName;
+      const chartLabel = isZeroPercent
+        ? `⚠️ ${dept.name.replace('Department of ', '')} (${dept.code})`
+        : `${dept.name.replace('Department of ', '')} (${dept.code})`;
 
       return {
         deptName: dept.name,
         deptCode: dept.code,
+        fullDisplayName,
+        chartLabel,
         shortName,
         rawShortName,
         uploadedCount: uploadedCoursesCount,
@@ -260,7 +266,7 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
                 </span>
               </p>
               <p className="text-[11px] font-bold text-rose-900 dark:text-rose-200 mt-0.5 truncate">
-                Missing Submissions in: {zeroPercentDepts.map((d) => d.rawShortName).join(', ')}
+                Missing Submissions in: {zeroPercentDepts.map((d) => d.fullDisplayName).join(' • ')}
               </p>
             </div>
           </div>
@@ -292,8 +298,8 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
             />
             <YAxis
               type="category"
-              dataKey="shortName"
-              width={125}
+              dataKey="chartLabel"
+              width={195}
               tick={({ x, y, payload }) => {
                 const isZero = payload.value.includes('⚠️');
                 return (
@@ -303,8 +309,8 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
                       y={3}
                       textAnchor="end"
                       fill={isZero ? '#dc2626' : '#334155'}
-                      fontSize={11}
-                      fontWeight={isZero ? 900 : 700}
+                      fontSize={10.5}
+                      fontWeight={isZero ? 900 : 600}
                     >
                       {payload.value}
                     </text>
@@ -319,7 +325,7 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
                   return (
                     <div className="bg-slate-900 text-white p-3 rounded-lg shadow-xl border border-slate-700 text-xs space-y-1.5 z-50">
                       <p className="font-bold text-amber-400 border-b border-slate-800 pb-1 flex items-center justify-between gap-3">
-                        <span>{data.deptName}</span>
+                        <span>{data.fullDisplayName}</span>
                         {data.isZeroPercent ? (
                           <span className="text-[9px] bg-rose-600 text-white px-2 py-0.5 rounded font-black animate-pulse">
                             🚨 0% MISSING SUBMISSIONS
@@ -352,7 +358,7 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
                         </p>
                       )}
                       <p className="text-[9px] text-slate-400 italic pt-1 border-t border-slate-800">
-                        Click row below to filter VC Dashboard to this department.
+                        Click card below to filter VC Dashboard to this department.
                       </p>
                     </div>
                   );
@@ -387,28 +393,28 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
       </div>
 
       {/* Department Quick Filter List */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
         {filteredStats.map((d) => (
           <div
             key={d.deptName}
             onClick={() => onSelectDepartment?.(d.deptName)}
-            className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2 group ${
+            className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
               d.isZeroPercent
                 ? 'bg-rose-100/90 dark:bg-rose-950/80 border-2 border-rose-500 shadow-xs hover:border-rose-600'
                 : d.isTrailing
                 ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 hover:border-amber-500'
                 : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 hover:border-emerald-500'
             }`}
-            title={`Click to inspect details for ${d.deptName}`}
+            title={`Click to inspect details for ${d.fullDisplayName}`}
           >
-            <div className="min-w-0">
-              <p className={`text-xs font-bold truncate transition-colors flex items-center gap-1 ${
+            <div className="min-w-0 flex-1">
+              <p className={`text-xs font-bold transition-colors flex items-center gap-1.5 ${
                 d.isZeroPercent
                   ? 'text-rose-950 dark:text-rose-100 font-black'
                   : 'text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
               }`}>
                 {d.isZeroPercent && <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
-                <span className="truncate">{d.rawShortName}</span>
+                <span className="truncate block" title={d.fullDisplayName}>{d.fullDisplayName}</span>
               </p>
               <p className={`text-[10px] flex items-center gap-1 mt-0.5 ${
                 d.isZeroPercent ? 'text-rose-800 dark:text-rose-300 font-bold' : 'text-slate-500 dark:text-slate-400'
@@ -418,7 +424,7 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
             </div>
             <div className="text-right shrink-0">
               <span
-                className={`text-xs font-black px-2 py-0.5 rounded ${
+                className={`text-xs font-black px-2 py-0.5 rounded whitespace-nowrap ${
                   d.isZeroPercent
                     ? 'bg-rose-600 text-white animate-pulse'
                     : d.isTrailing

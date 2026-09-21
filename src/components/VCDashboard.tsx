@@ -1553,9 +1553,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                   }}
+                  title={`${d.deptName} (${d.deptCode}) - ${d.percentage}%`}
                   className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-300 hover:bg-rose-200"
                 >
-                  {d.deptCode} ({d.percentage}%)
+                  {d.deptName} ({d.deptCode}) • {d.percentage}%
                 </span>
               ))}
               {executiveSummaryMetrics.attentionDeptsList.length > 4 && (
@@ -2036,7 +2037,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       <div>
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-[10px] font-mono font-bold text-rose-700 bg-rose-100 dark:bg-rose-950 px-2 py-0.5 rounded-full">
-                            {alert.deptCode} • {alert.program}
+                            {alert.department ? (alert.department.includes(`(${alert.deptCode})`) ? alert.department : `${alert.department} (${alert.deptCode})`) : alert.deptCode} • {alert.program}
                           </span>
                           <span className="text-[9px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
                             Severe Delay
@@ -2461,12 +2462,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                           size={34}
                           strokeWidth={3.5}
                         />
-                        <div>
-                          <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors block">
-                            {dept.deptCode}
+                        <div className="min-w-0">
+                          <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors block truncate" title={`${dept.deptName} (${dept.deptCode})`}>
+                            {dept.deptName} ({dept.deptCode})
                           </span>
-                          <h4 className="text-[11px] font-semibold text-slate-700 line-clamp-1" title={dept.deptName}>
-                            {dept.deptName}
+                          <h4 className="text-[10.5px] font-medium text-slate-500 line-clamp-1">
+                            {dept.programsCount} Programs • {dept.totalCohorts} Batches
                           </h4>
                         </div>
                       </div>
