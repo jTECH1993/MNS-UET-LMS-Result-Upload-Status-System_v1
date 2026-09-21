@@ -105,9 +105,9 @@ export class StorageService {
       // If it's a key we want to sync, and we aren't currently receiving it from Firebase
       if (!isReceiving && keysToSync.includes(key)) {
         try {
-          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(console.error);
+          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
         } catch(e) {
-          FirebaseStore.syncGlobalState(key, value).catch(console.error);
+          FirebaseStore.syncGlobalState(key, value).catch(() => {});
         }
       }
       
@@ -128,9 +128,9 @@ export class StorageService {
           }
         });
         try {
-          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(console.error);
+          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
         } catch(e) {
-          FirebaseStore.syncGlobalState(key, value).catch(console.error);
+          FirebaseStore.syncGlobalState(key, value).catch(() => {});
         }
       }
     };
@@ -241,7 +241,7 @@ export class StorageService {
       const updated = sortSessions([...current, trimmed]);
       localStorage.setItem('mnsuet_available_sessions_v99', JSON.stringify(updated));
       try {
-        FirebaseStore.syncGlobalState('mnsuet_available_sessions_v99', updated).catch(console.error);
+        FirebaseStore.syncGlobalState('mnsuet_available_sessions_v99', updated).catch(() => {});
       } catch (e) {}
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated'));
@@ -596,19 +596,34 @@ export class StorageService {
     sessionName: string = '2023'
   ): void {
     const roster = this.getAllSessionRoster(sessionName);
-    roster[departmentName] = programNames;
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) =>
+        d.name.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+        d.code.trim().toLowerCase() === departmentName.trim().toLowerCase()
+    );
+
+    const normProgs = Array.from(
+      new Set(programNames.map((p) => this.normalizeProgramName(p, departmentName)).filter(Boolean))
+    );
+
+    if (dept) {
+      roster[dept.name] = normProgs;
+      roster[dept.code] = normProgs;
+    }
+    roster[departmentName] = normProgs;
+
     const key = 'mnsuet_session_active_roster_v99__' + sessionName;
     localStorage.setItem(key, JSON.stringify(roster));
     
     // Immediately persist to Firestore Database so changes reflect across devices and users
     try {
-      FirebaseStore.syncGlobalState(key, roster).catch(console.error);
+      FirebaseStore.syncGlobalState(key, roster).catch(() => {});
     } catch (e) {}
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('mnsuet_roster_updated', {
-          detail: { department: departmentName, session: sessionName, programs: programNames },
+          detail: { department: departmentName, session: sessionName, programs: normProgs },
         })
       );
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
@@ -623,7 +638,7 @@ export class StorageService {
     const key = 'mnsuet_session_active_roster_v99__2023';
     localStorage.removeItem(key);
     try {
-      FirebaseStore.syncGlobalState(key, {}).catch(console.error);
+      FirebaseStore.syncGlobalState(key, {}).catch(() => {});
     } catch (e) {}
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_roster_updated', { detail: { session: '2023' } }));
@@ -641,15 +656,26 @@ export class StorageService {
     selectedSessions: string[] = ['2023'],
     allRecords?: SubmissionRecord[]
   ): ProgramSessionDetail {
-    const dept = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === departmentName.trim().toLowerCase());
+    const dept = UNIVERSITY_DEPARTMENTS.find(
+      (d) =>
+        d.name.trim().toLowerCase() === departmentName.trim().toLowerCase() ||
+        d.code.trim().toLowerCase() === departmentName.trim().toLowerCase()
+    );
     const prog = dept?.programs.find((p) => p.name.trim().toLowerCase() === programName.trim().toLowerCase());
     const degreeLevel = prog?.degreeLevel || 'BS';
 
     const availableSessions = this.getAvailableSessions();
     const allConfiguredSessions: string[] = [];
+    const normTarget = this.normalizeProgramName(programName, departmentName);
+
     availableSessions.forEach((sess) => {
       const progs = this.getSessionPrograms(departmentName, sess, allRecords);
-      if (progs.includes(programName)) {
+      const isMatch = progs.some(
+        (p) =>
+          this.normalizeProgramName(p, departmentName) === normTarget ||
+          p.trim().toLowerCase() === programName.trim().toLowerCase()
+      );
+      if (isMatch) {
         allConfiguredSessions.push(sess);
       }
     });
@@ -1067,7 +1093,7 @@ export class StorageService {
       };
       const updated = [entry, ...logs].slice(0, 500);
       localStorage.setItem('mnsuet_lms_access_logs_v100_authentic', JSON.stringify(updated));
-      FirebaseStore.saveAccessLog(entry).catch(console.error);
+      FirebaseStore.saveAccessLog(entry).catch(() => {});
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
@@ -1223,7 +1249,35 @@ export class StorageService {
     return null;
   }
 
-  public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean }> {
+  private static popupDebounce = false;
+
+  public static triggerQuotaExhaustedPopup(): void {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_show_quota_popup', {
+          detail: {
+            title: '⚠️ Write Limit Exceeded',
+            message:
+              'The Firestore daily write limit has been exceeded. Your submission cannot be saved at this time. Please try again later.',
+          },
+        })
+      );
+
+      if (!this.popupDebounce) {
+        this.popupDebounce = true;
+        setTimeout(() => {
+          this.popupDebounce = false;
+        }, 3000);
+        try {
+          alert(
+            '⚠️ Write Limit Exceeded\n\nThe Firestore daily write limit has been exceeded. Your submission cannot be saved at this time. Please try again later.'
+          );
+        } catch (e) {}
+      }
+    }
+  }
+
+  public static async saveSubmission(record: SubmissionRecord): Promise<{ success: boolean; isUpdate: boolean; quotaExceeded?: boolean }> {
     const activeUser = this.getActiveUser();
     const shiftVal = this.validateAndNormalizeShift(record.department, record.program, record.shift || 'Morning');
     const safeShift = shiftVal.normalizedShift;
@@ -1239,7 +1293,6 @@ export class StorageService {
     );
     
     try {
-      // Update local store to reflect changes instantly
       const sec = (record.section || 'A').trim().toUpperCase();
       const key = getRecordKey(
         record.department,
@@ -1264,12 +1317,36 @@ export class StorageService {
         createdAt: isUpdate ? (store[key]?.createdAt || new Date().toISOString()) : new Date().toISOString(),
       };
       
+      const firebaseReadyRecord = JSON.parse(JSON.stringify(completeRecord));
+
+      // 1. Check if Firestore quota is ALREADY known to be exceeded
+      if (FirebaseStore.isQuotaExhausted()) {
+        this.triggerQuotaExhaustedPopup();
+        return { success: false, isUpdate, quotaExceeded: true };
+      }
+
+      // 2. Attempt saving to Firestore FIRST before saving to local storage
+      try {
+        await FirebaseStore.saveSubmission(firebaseReadyRecord);
+      } catch (e: any) {
+        if (
+          FirebaseStore.isQuotaExhausted() ||
+          (e && (e.name === 'QuotaExceededError' || String(e).toLowerCase().includes('quota')))
+        ) {
+          this.triggerQuotaExhaustedPopup();
+          return { success: false, isUpdate, quotaExceeded: true };
+        }
+      }
+
+      // 3. Check again if Firestore quota was exceeded during save attempt
+      if (FirebaseStore.isQuotaExhausted()) {
+        this.triggerQuotaExhaustedPopup();
+        return { success: false, isUpdate, quotaExceeded: true };
+      }
+
+      // 4. QUOTA AVAILABLE -> Save to local store!
       store[key] = completeRecord;
       this.setStore(store);
-      
-      // Update Firebase in real-time with the full record
-      const firebaseReadyRecord = JSON.parse(JSON.stringify(completeRecord));
-      FirebaseStore.saveSubmission(firebaseReadyRecord).catch(e => console.error('Firebase save failed', e));
 
       // Also sync to backend SQLite API if running
       if (typeof window !== 'undefined') {
@@ -1302,12 +1379,12 @@ export class StorageService {
   public static async wipeAllSubmissions(): Promise<boolean> {
     try {
       // 1. Wipe Firestore submissions & access logs
-      await FirebaseStore.wipeAllSubmissions().catch(console.error);
-      await FirebaseStore.wipeAllAccessLogs().catch(console.error);
+      await FirebaseStore.wipeAllSubmissions().catch(() => {});
+      await FirebaseStore.wipeAllAccessLogs().catch(() => {});
 
       // 2. Wipe SQLite submissions & subjects via backend API
       if (typeof window !== 'undefined') {
-        await fetch('/api/reset-data', { method: 'POST' }).catch(console.error);
+        await fetch('/api/reset-data', { method: 'POST' }).catch(() => {});
       }
 
       // 3. Clear local storage submission stores and logs (PRESERVING accounts and sessions)
@@ -1657,7 +1734,7 @@ export class StorageService {
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
     try {
-      FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(console.error);
+      FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(() => {});
     } catch (e) {}
 
     if (typeof window !== 'undefined') {
@@ -1705,7 +1782,7 @@ export class StorageService {
 
     localStorage.setItem('mnsuet_cohort_sections_v99', JSON.stringify(sectionsMap));
     try {
-      await FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(console.error);
+      await FirebaseStore.syncGlobalState('mnsuet_cohort_sections_v99', sectionsMap).catch(() => {});
     } catch (e) {}
 
     // 2. Delete all records in local store and Firestore matching this department + program + section

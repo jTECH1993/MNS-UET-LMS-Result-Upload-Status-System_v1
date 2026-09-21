@@ -1793,6 +1793,11 @@ export const HODEntryForm: React.FC<Props> = ({
       );
 
       if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+    } else {
+      showFeedback(
+        'warning',
+        '⚠️ Write Limit Exceeded: The Firestore daily write limit has been exceeded. Your submission cannot be saved at this time. Please try again later.'
+      );
     }
   };
 
@@ -2659,7 +2664,14 @@ export const HODEntryForm: React.FC<Props> = ({
               {(() => {
                 const activeNames = StorageService.getSessionPrograms(department, session);
                 if (!isPrivilegedUser) {
-                  const activeAllowedList = coordinatorAllowedPrograms.filter((p) => activeNames.includes(p.name));
+                  const activeAllowedList = coordinatorAllowedPrograms.filter((p) =>
+                    activeNames.some(
+                      (an) =>
+                        StorageService.normalizeProgramName(an, department) ===
+                          StorageService.normalizeProgramName(p.name, department) ||
+                        an.trim().toLowerCase() === p.name.trim().toLowerCase()
+                    )
+                  );
                   const activeAllowed = activeAllowedList.length > 0 ? activeAllowedList : coordinatorAllowedPrograms;
                   return (
                     <optgroup label={`Your Coordinated Programs (${activeAllowed.length})`}>
@@ -2672,20 +2684,50 @@ export const HODEntryForm: React.FC<Props> = ({
                   );
                 }
 
-                const enrolled = allDeptPrograms;
+                const activeInSession = allDeptPrograms.filter((p) =>
+                  activeNames.some(
+                    (an) =>
+                      StorageService.normalizeProgramName(an, department) ===
+                        StorageService.normalizeProgramName(p.name, department) ||
+                      an.trim().toLowerCase() === p.name.trim().toLowerCase()
+                  )
+                );
+                const offCycleInSession = allDeptPrograms.filter(
+                  (p) =>
+                    !activeNames.some(
+                      (an) =>
+                        StorageService.normalizeProgramName(an, department) ===
+                          StorageService.normalizeProgramName(p.name, department) ||
+                        an.trim().toLowerCase() === p.name.trim().toLowerCase()
+                    )
+                );
+
                 return (
-                  <optgroup label={`Department Degree Offerings (${enrolled.length})`}>
-                    {enrolled.map((p) => {
-                      const isCoordinated = currentUser?.assignedPrograms
-                        ? currentUser.assignedPrograms.includes(p.name)
-                        : currentUser?.program === p.name;
-                      return (
-                        <option key={p.name} value={p.name} className="font-bold text-slate-900">
-                          {p.name} {isCoordinated ? '★ (Coordinated)' : ''}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
+                  <>
+                    {activeInSession.length > 0 && (
+                      <optgroup label={`Session ${session} Active Offerings (${activeInSession.length})`}>
+                        {activeInSession.map((p) => {
+                          const isCoordinated = currentUser?.assignedPrograms
+                            ? currentUser.assignedPrograms.includes(p.name)
+                            : currentUser?.program === p.name;
+                          return (
+                            <option key={p.name} value={p.name} className="font-bold text-slate-900">
+                              {p.name} {isCoordinated ? '★ (Coordinated)' : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
+                    {offCycleInSession.length > 0 && (
+                      <optgroup label={`Other Programs (Off-cycle in Session ${session})`}>
+                        {offCycleInSession.map((p) => (
+                          <option key={p.name} value={p.name} className="font-bold text-slate-400 italic">
+                            {p.name} — [Off-cycle in Session {session}]
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
                 );
               })()}
             </select>
@@ -2693,7 +2735,14 @@ export const HODEntryForm: React.FC<Props> = ({
             {(() => {
               const activeNames = StorageService.getSessionPrograms(department, session);
               const allowed = !isPrivilegedUser ? coordinatorAllowedPrograms : allDeptPrograms;
-              const enrolledList = allowed.filter((p) => activeNames.includes(p.name));
+              const enrolledList = allowed.filter((p) =>
+                activeNames.some(
+                  (an) =>
+                    StorageService.normalizeProgramName(an, department) ===
+                      StorageService.normalizeProgramName(p.name, department) ||
+                    an.trim().toLowerCase() === p.name.trim().toLowerCase()
+                )
+              );
               const visibleProgs = enrolledList.length > 0 ? enrolledList : allowed;
               if (visibleProgs.length <= 1) return null;
               return (

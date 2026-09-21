@@ -273,7 +273,7 @@ export class AuditTrailService {
 
     try {
       localStorage.setItem(AUDIT_KEY, JSON.stringify(merged));
-      FirebaseStore.syncGlobalState(AUDIT_KEY, merged).catch(console.error);
+      FirebaseStore.syncGlobalState(AUDIT_KEY, merged).catch(() => {});
     } catch (e) {}
 
     return merged;
@@ -304,7 +304,7 @@ export class AuditTrailService {
     localStorage.setItem(AUDIT_KEY, JSON.stringify(updated));
 
     try {
-      FirebaseStore.syncGlobalState(AUDIT_KEY, updated).catch(console.error);
+      FirebaseStore.syncGlobalState(AUDIT_KEY, updated).catch(() => {});
     } catch (e) {}
 
     if (typeof window !== 'undefined') {

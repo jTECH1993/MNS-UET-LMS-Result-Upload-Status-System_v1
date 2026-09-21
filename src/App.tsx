@@ -17,6 +17,7 @@ import { Session2023SelectorModal } from './components/Session2023SelectorModal'
 import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
 import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
+import { QuotaExceededModal } from './components/QuotaExceededModal';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
 import { RolePerspectiveComparisonModal } from './components/RolePerspectiveComparisonModal';
@@ -1523,6 +1524,9 @@ export default function App() {
 
       {/* Global Real-Time Sync & Save Evidence Toast */}
       <SyncEvidenceToast />
+
+      {/* Global Firestore Quota Exceeded Modal */}
+      <QuotaExceededModal />
     </div>
   );
 }
