@@ -53,18 +53,28 @@ export class StorageService {
       }
     });
 
-    // Listen to System Config (deadline)
+    // Listen to System Config (deadline & lockdown)
     FirebaseStore.listenToSystemConfig((config) => {
       const current = localStorage.getItem(SYSTEM_DEADLINE_KEY);
+      const currentDisabled = localStorage.getItem('mnsuet_lockdown_disabled_v99') === 'true';
+      let hasChanged = false;
+
       if (config?.deadline !== undefined && config.deadline !== current) {
         if (config.deadline === null) {
           localStorage.removeItem(SYSTEM_DEADLINE_KEY);
         } else {
           localStorage.setItem(SYSTEM_DEADLINE_KEY, config.deadline);
         }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: config.deadline }));
-        }
+        hasChanged = true;
+      }
+
+      if (config?.lockdownDisabled !== undefined && config.lockdownDisabled !== currentDisabled) {
+        localStorage.setItem('mnsuet_lockdown_disabled_v99', config.lockdownDisabled ? 'true' : 'false');
+        hasChanged = true;
+      }
+
+      if (hasChanged && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: config?.deadline }));
       }
     });
 
@@ -160,11 +170,28 @@ export class StorageService {
 
 
   
+  public static getLockdownDisabled(): boolean {
+    return localStorage.getItem('mnsuet_lockdown_disabled_v99') === 'true';
+  }
+
+  public static setLockdownDisabled(disabled: boolean): void {
+    localStorage.setItem('mnsuet_lockdown_disabled_v99', disabled ? 'true' : 'false');
+    try {
+      FirebaseStore.setLockdownDisabled(disabled);
+    } catch(e) {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: this.getSystemDeadline() }));
+    }
+  }
+
   public static getSystemDeadline(): string | null {
     return localStorage.getItem('mnsuet_system_deadline_v99');
   }
 
   public static isSystemDeadlineExpired(): boolean {
+    if (this.getLockdownDisabled()) {
+      return false; // Lockdown explicitly turned OFF by Vice Chancellor
+    }
     const stored = this.getSystemDeadline();
     if (!stored) {
       return false; 

@@ -633,7 +633,11 @@ Director, Academic Affairs & Examination Directorate`;
                         Mandatory Compliance Deadline
                       </span>
                       <span className="text-[11px] font-bold text-amber-900">
-                        {deadlineDetails.totalHours > 0 ? `⏳ ${deadlineDetails.totalHours} Hours Remaining` : '⚠️ Lockdown Active'}
+                        {StorageService.getLockdownDisabled()
+                          ? '🔓 Lockdown Off (Unlocked by VC)'
+                          : deadlineDetails.totalHours > 0
+                          ? `⏳ ${deadlineDetails.totalHours} Hours Remaining`
+                          : '⚠️ Lockdown Active'}
                       </span>
                     </div>
                     <p className="text-xs font-black text-slate-900">

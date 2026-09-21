@@ -90,6 +90,15 @@ export class FirebaseStore {
     }
   }
 
+  static async setLockdownDisabled(disabled: boolean): Promise<void> {
+    try {
+      const docRef = doc(db, SYSTEM_DOC);
+      await setDoc(docRef, { lockdownDisabled: disabled, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
+    }
+  }
+
   static listenToSystemConfig(callback: (config: any) => void): () => void {
     return onSnapshot(
       doc(db, SYSTEM_DOC),
