@@ -18,6 +18,7 @@ import { CompletionRadarService } from '../services/completionRadarService';
 import { dispatchSyncEvidence } from './SyncEvidenceToast';
 import { ExecutiveSummaryCards } from './ExecutiveSummaryCards';
 import { DeadlineBanner } from './DeadlineBanner';
+import { LockdownScopeModal } from './LockdownScopeModal';
 import { DeleteModal, DeleteScope } from './DeleteModal';
 import { Session2023SelectorModal } from './Session2023SelectorModal';
 import { AcademicSessionModal } from './AcademicSessionModal';
@@ -2708,7 +2709,7 @@ export const HODEntryForm: React.FC<Props> = ({
               semesterFilter={semester}
               activeSessions={[session]}
               selectedSemesters={[semester]}
-              isVC={false}
+              isVC={Boolean(isVC || isAdmin)}
             />
           </div>
 

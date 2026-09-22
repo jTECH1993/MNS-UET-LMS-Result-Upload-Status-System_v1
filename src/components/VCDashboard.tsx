@@ -22,6 +22,8 @@ import { DepartmentSubmissionSummaryWidget } from './DepartmentSubmissionSummary
 import { VCAuditFeed } from './VCAuditFeed';
 import { MnsUetLogo } from './MnsUetLogo';
 import { DeadlineBanner } from './DeadlineBanner';
+import { LockdownScopeModal } from './LockdownScopeModal';
+import { DataIntegritySyncDashboard } from './DataIntegritySyncDashboard';
 import { DepartmentCompletionHeatmap } from './DepartmentCompletionHeatmap';
 import { DepartmentDrillDownModal } from './DepartmentDrillDownModal';
 import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
@@ -79,7 +81,8 @@ import {
   Activity,
   Timer,
   Info,
-  Target
+  Target,
+  Database
 } from 'lucide-react';
 
 interface Props {
@@ -164,7 +167,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return () => window.removeEventListener('mnsuet_storage_updated', handleRecalc);
   }, []);
 
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'DATA_INTEGRITY'>('COMMAND_CENTER');
+  const [isLockdownScopeModalOpen, setIsLockdownScopeModalOpen] = useState<boolean>(false);
 
   // Change History / Audit Trail Modal State
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
@@ -1829,6 +1833,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping ml-0.5" />
             )}
           </button>
+
+          <button
+            id="btn-vc-mode-data-integrity"
+            type="button"
+            onClick={() => setDashboardViewMode('DATA_INTEGRITY')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+              dashboardViewMode === 'DATA_INTEGRITY'
+                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400 scale-[1.02]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Database className="w-4 h-4 text-indigo-300" />
+            <span>6. Data Integrity & Sync Status</span>
+            {dashboardViewMode === 'DATA_INTEGRITY' && (
+              <span className="w-2 h-2 rounded-full bg-indigo-300 animate-ping ml-0.5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -1841,6 +1862,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             {dashboardViewMode === 'ACTIVITY' && <Activity className="w-6 h-6 text-sky-400" />}
             {dashboardViewMode === 'DIGITAL_TWIN' && <Building2 className="w-6 h-6 text-indigo-400" />}
             {dashboardViewMode === 'ACTION_CENTER' && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+            {dashboardViewMode === 'DATA_INTEGRITY' && <Database className="w-6 h-6 text-indigo-400" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -1858,6 +1880,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && '3. System Audit Trail & Real-Time Security Logs'}
               {dashboardViewMode === 'DIGITAL_TWIN' && '4. University Digital Twin Architecture Matrix'}
               {dashboardViewMode === 'ACTION_CENTER' && '5. VC Executive Action Center & Circular Directives'}
+              {dashboardViewMode === 'DATA_INTEGRITY' && '6. Data Integrity & Firestore Quota Metrics'}
             </h2>
             <p className="text-xs text-slate-300 mt-0.5">
               {dashboardViewMode === 'COMMAND_CENTER' && 'Comprehensive overview of institutional bottlenecks, high-level upload stats, and interactive completion radar.'}
@@ -1865,6 +1888,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && 'Live event stream tracking coordinator logins, HOD verifications, and result upload timestamps.'}
               {dashboardViewMode === 'DIGITAL_TWIN' && 'Interactive hierarchical view of departments, degree programs, academic sessions, and semesters.'}
               {dashboardViewMode === 'ACTION_CENTER' && 'Department compliance overview, official Vice Chancellor result upload summaries, and circular dispatch.'}
+              {dashboardViewMode === 'DATA_INTEGRITY' && 'Real-time database read/write operation metrics against daily subscription quotas and optimization savings.'}
             </p>
           </div>
         </div>
@@ -2289,6 +2313,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedDeptFilter={selectedDeptFilter}
             selectedShiftFilter={selectedShiftFilter}
           />
+        </div>
+      )}
+
+      {/* Data Integrity & Sync Status Tab */}
+      {dashboardViewMode === 'DATA_INTEGRITY' && (
+        <div className="mt-2">
+          <DataIntegritySyncDashboard />
         </div>
       )}
 
@@ -3645,6 +3676,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </div>
         </div>
       )}
+
+      {/* Dynamic Scope Lockdown Modal */}
+      <LockdownScopeModal
+        isOpen={isLockdownScopeModalOpen}
+        onClose={() => setIsLockdownScopeModalOpen(false)}
+        initialSession={currentSession}
+        initialSemester={selectedSemesterFilter}
+      />
     </div>
   );
 };

@@ -66,14 +66,14 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errMsg = error instanceof Error ? error.message : String(error);
   const lowerMsg = errMsg.toLowerCase();
 
-  // Only real gRPC RESOURCE_EXHAUSTED or HTTP 429 quota exhaustion errors trigger circuit breaker:
   if (
     lowerMsg.includes('resource-exhausted') ||
-    lowerMsg.includes('resource_exhausted') ||
-    (lowerMsg.includes('write stream exhausted') && lowerMsg.includes('quota')) ||
-    (lowerMsg.includes('quota limit exceeded') && lowerMsg.includes('write')) ||
-    (lowerMsg.includes('quota exceeded') && lowerMsg.includes('write')) ||
-    (errMsg.includes('429') && lowerMsg.includes('quota'))
+    lowerMsg.includes('write stream exhausted') ||
+    lowerMsg.includes('maximum allowed queued writes') ||
+    lowerMsg.includes('quota limit exceeded') ||
+    lowerMsg.includes('quota exceeded') ||
+    lowerMsg.includes('quota') ||
+    errMsg.includes('429')
   ) {
     FirebaseStore.setQuotaExhausted(true);
     return true;
@@ -106,8 +106,10 @@ if (typeof window !== 'undefined') {
     const lower = (msg || '').toLowerCase();
     return (
       lower.includes('resource-exhausted') ||
-      lower.includes('resource_exhausted') ||
-      (lower.includes('quota exceeded') && lower.includes('write'))
+      lower.includes('quota limit exceeded') ||
+      lower.includes('quota exceeded') ||
+      lower.includes('using maximum backoff delay') ||
+      lower.includes('write stream exhausted')
     );
   };
 
@@ -144,6 +146,22 @@ if (typeof window !== 'undefined') {
 }
 
 export class FirebaseStore {
+  private static submissionCache: { records: SubmissionRecord[]; timestamp: number } | null = null;
+  private static lastWriteHashes: Record<string, { hash: string; timestamp: number }> = {};
+
+  private static isDuplicateWrite(key: string, payload: any, maxAgeMs = 1500): boolean {
+    try {
+      const hash = JSON.stringify(payload);
+      const existing = this.lastWriteHashes[key];
+      const now = Date.now();
+      if (existing && existing.hash === hash && now - existing.timestamp < maxAgeMs) {
+        return true;
+      }
+      this.lastWriteHashes[key] = { hash, timestamp: now };
+    } catch (e) {}
+    return false;
+  }
+
   static isQuotaExhausted(): boolean {
     if (isQuotaExhausted) return true;
     isQuotaExhausted = checkInitialQuotaExhaustion();
@@ -177,29 +195,19 @@ export class FirebaseStore {
     } catch (e) {}
   }
 
-  static clearQuotaCircuitBreaker(): void {
-    this.setQuotaExhausted(false);
-    try {
-      enableNetwork(db).catch(() => {});
-    } catch (e) {}
-  }
-
   static async testConnection(): Promise<{ success: boolean; message?: string }> {
     try {
       await enableNetwork(db);
-      this.setQuotaExhausted(false);
-      FirestoreUsageService.clearQuotaExhaustion();
       // Read the system config document which is guaranteed to be authorized by Firestore security rules
       const docRef = doc(db, 'config', 'system');
       await getDocFromServer(docRef);
       this.setQuotaExhausted(false);
-      FirestoreUsageService.clearQuotaExhaustion();
       FirestoreUsageService.recordOperation('READ', 'config', 1, 'Real-time Cloud Connectivity Probe');
       return { success: true, message: 'Cloud Firestore live connection active. Real-time stream is verified & responsive.' };
     } catch (error: any) {
       const errMsg = error instanceof Error ? error.message : String(error);
       const isQuota = handleFirestoreError(error, OperationType.GET, 'config/system');
-      if (isQuota) {
+      if (isQuota || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource-exhausted')) {
         this.setQuotaExhausted(true);
         return { success: false, message: 'Cloud Firestore daily quota limit is reached. Safe Local/SQLite mode active until midnight UTC reset.' };
       }
@@ -337,9 +345,14 @@ export class FirebaseStore {
       throw err;
     }
     const docPath = `${RECORDS_COLLECTION}/${record.id}`;
+    if (this.isDuplicateWrite(docPath, record)) {
+      // Skip redundant duplicate write to save quota
+      return;
+    }
     try {
       const docRef = doc(db, RECORDS_COLLECTION, record.id);
       await setDoc(docRef, record, { merge: true });
+      this.submissionCache = null; // Invalidate read cache on new write
       FirestoreUsageService.recordOperation('WRITE', 'records', 1, `${record.department} - ${record.program} (${record.session})`);
     } catch (e) {
       const isQuota = handleFirestoreError(e, OperationType.WRITE, docPath);
@@ -357,6 +370,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, RECORDS_COLLECTION, id);
       await deleteDoc(docRef);
+      this.submissionCache = null;
       FirestoreUsageService.recordOperation('DELETE', 'records', 1, `Deleted record: ${id}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, docPath);
@@ -365,6 +379,10 @@ export class FirebaseStore {
 
   static async fetchAllSubmissions(): Promise<SubmissionRecord[]> {
     if (this.isQuotaExhausted()) return [];
+    const now = Date.now();
+    if (this.submissionCache && now - this.submissionCache.timestamp < 15000) {
+      return this.submissionCache.records;
+    }
     try {
       const fetchPromise = getDocs(collection(db, RECORDS_COLLECTION));
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -375,7 +393,9 @@ export class FirebaseStore {
       if (count > 0) {
         FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records');
       }
-      return snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
+      const records = snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
+      this.submissionCache = { records, timestamp: now };
+      return records;
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
       return [];
