@@ -107,6 +107,7 @@ export const FirestoreUsageModal: React.FC<Props> = ({
 
   const handleResetCounters = () => {
     if (window.confirm('Reset local daily Firestore operation counters for today?')) {
+      FirebaseStore.setQuotaExhausted(false);
       FirestoreUsageService.resetDailyCounters();
       setStats(FirestoreUsageService.getUsageStats());
       setActionNotice('Local operation counter reset to 0 for today.');
@@ -116,6 +117,9 @@ export const FirestoreUsageModal: React.FC<Props> = ({
 
   const handlePlanChange = (plan: FirebasePlanTier) => {
     setSelectedPlan(plan);
+    if (plan === 'BLAZE') {
+      FirebaseStore.setQuotaExhausted(false);
+    }
     FirestoreUsageService.setPlanTier(plan);
     setStats(FirestoreUsageService.getUsageStats());
     setActionNotice(`Subscription display updated to ${plan === 'SPARK' ? 'Spark (Free Tier)' : 'Blaze (Pay-As-You-Go)'}.`);

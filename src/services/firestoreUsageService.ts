@@ -94,6 +94,9 @@ export class FirestoreUsageService {
   public static setPlanTier(plan: FirebasePlanTier): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(PLAN_TIER_KEY, plan);
+      if (plan === 'BLAZE') {
+        localStorage.removeItem(QUOTA_STORAGE_KEY);
+      }
     }
     this.notify();
   }

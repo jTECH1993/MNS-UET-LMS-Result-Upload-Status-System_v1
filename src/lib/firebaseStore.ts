@@ -66,14 +66,14 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errMsg = error instanceof Error ? error.message : String(error);
   const lowerMsg = errMsg.toLowerCase();
 
+  // Only real gRPC RESOURCE_EXHAUSTED or HTTP 429 quota exhaustion errors trigger circuit breaker:
   if (
     lowerMsg.includes('resource-exhausted') ||
-    lowerMsg.includes('write stream exhausted') ||
-    lowerMsg.includes('maximum allowed queued writes') ||
-    lowerMsg.includes('quota limit exceeded') ||
-    lowerMsg.includes('quota exceeded') ||
-    lowerMsg.includes('quota') ||
-    errMsg.includes('429')
+    lowerMsg.includes('resource_exhausted') ||
+    (lowerMsg.includes('write stream exhausted') && lowerMsg.includes('quota')) ||
+    (lowerMsg.includes('quota limit exceeded') && lowerMsg.includes('write')) ||
+    (lowerMsg.includes('quota exceeded') && lowerMsg.includes('write')) ||
+    (errMsg.includes('429') && lowerMsg.includes('quota'))
   ) {
     FirebaseStore.setQuotaExhausted(true);
     return true;
@@ -106,10 +106,8 @@ if (typeof window !== 'undefined') {
     const lower = (msg || '').toLowerCase();
     return (
       lower.includes('resource-exhausted') ||
-      lower.includes('quota limit exceeded') ||
-      lower.includes('quota exceeded') ||
-      lower.includes('using maximum backoff delay') ||
-      lower.includes('write stream exhausted')
+      lower.includes('resource_exhausted') ||
+      (lower.includes('quota exceeded') && lower.includes('write'))
     );
   };
 
@@ -179,19 +177,29 @@ export class FirebaseStore {
     } catch (e) {}
   }
 
+  static clearQuotaCircuitBreaker(): void {
+    this.setQuotaExhausted(false);
+    try {
+      enableNetwork(db).catch(() => {});
+    } catch (e) {}
+  }
+
   static async testConnection(): Promise<{ success: boolean; message?: string }> {
     try {
       await enableNetwork(db);
+      this.setQuotaExhausted(false);
+      FirestoreUsageService.clearQuotaExhaustion();
       // Read the system config document which is guaranteed to be authorized by Firestore security rules
       const docRef = doc(db, 'config', 'system');
       await getDocFromServer(docRef);
       this.setQuotaExhausted(false);
+      FirestoreUsageService.clearQuotaExhaustion();
       FirestoreUsageService.recordOperation('READ', 'config', 1, 'Real-time Cloud Connectivity Probe');
       return { success: true, message: 'Cloud Firestore live connection active. Real-time stream is verified & responsive.' };
     } catch (error: any) {
       const errMsg = error instanceof Error ? error.message : String(error);
       const isQuota = handleFirestoreError(error, OperationType.GET, 'config/system');
-      if (isQuota || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource-exhausted')) {
+      if (isQuota) {
         this.setQuotaExhausted(true);
         return { success: false, message: 'Cloud Firestore daily quota limit is reached. Safe Local/SQLite mode active until midnight UTC reset.' };
       }

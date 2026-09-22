@@ -109,9 +109,15 @@ export function ActionCenterPanel({
       let uploadedCount = 0;
       let pendingCount = 0;
 
-      const semList = selectedSemesterFilter === 'ALL' ? ['1'] : [String(selectedSemesterFilter)];
-
       targetPrograms.forEach((prog) => {
+        const isMasterOrPhd = prog.degreeLevel === 'MS' || prog.degreeLevel === 'PhD';
+        const semList =
+          selectedSemesterFilter === 'ALL'
+            ? isMasterOrPhd
+              ? ['1', '2', '3', '4']
+              : ['1', '2', '3', '4', '5', '6', '7', '8']
+            : [String(selectedSemesterFilter)];
+
         const allowedShifts = StorageService.getProgramShifts(dept.name, prog.name);
         const evalShifts =
           selectedShiftFilter === 'ALL'

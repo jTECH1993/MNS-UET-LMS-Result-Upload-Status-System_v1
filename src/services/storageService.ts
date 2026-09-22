@@ -829,11 +829,19 @@ export class StorageService {
     );
 
     let isConfigured = false;
-    if (configuredKey && Array.isArray(roster[configuredKey])) {
+    if (configuredKey && Array.isArray(roster[configuredKey]) && roster[configuredKey].length > 0) {
       isConfigured = true;
-      // Preserve all programs explicitly selected in the roster
-      activePrograms = roster[configuredKey].map((p) => this.normalizeProgramName(p, departmentName));
-    } else {
+      // Preserve all programs explicitly selected in the roster that belong to this department
+      activePrograms = roster[configuredKey]
+        .map((p) => this.normalizeProgramName(p, departmentName))
+        .filter((normProg) =>
+          dept.programs.some(
+            (dp) => this.normalizeProgramName(dp.name, departmentName) === normProg
+          )
+        );
+    }
+
+    if (!isConfigured || activePrograms.length === 0) {
       // 2. Default coordinator template: Include active programs for this session
       if (sessionName === '2023') {
         activePrograms = dept.programs.filter((p) => p.session2023 === true).map((p) => p.name);
@@ -881,6 +889,25 @@ export class StorageService {
           }
         });
       } catch (e) {}
+    }
+
+    // Strict validation for Session 2023:
+    // Programs marked session2023 === false in departmentsData.ts (e.g. BS Artificial Intelligence,
+    // B.Sc. Software Engineering Technology) must NOT be included unless explicitly selected by user in roster.
+    if (sessionName === '2023') {
+      const userSelectedInRoster = isConfigured && configuredKey ? (roster[configuredKey] || []) : [];
+      activePrograms = activePrograms.filter((progName) => {
+        const official = dept.programs.find(
+          (dp) => this.normalizeProgramName(dp.name, departmentName) === this.normalizeProgramName(progName, departmentName)
+        );
+        if (!official) return false;
+        if (official.session2023 === true) return true;
+        // If session2023 is false, keep ONLY if explicitly checked in user-saved roster
+        return userSelectedInRoster.some(
+          (userP) =>
+            this.normalizeProgramName(userP, departmentName) === this.normalizeProgramName(progName, departmentName)
+        );
+      });
     }
 
     return Array.from(new Set(activePrograms.filter(Boolean)));
