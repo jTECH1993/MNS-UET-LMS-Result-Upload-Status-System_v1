@@ -39,6 +39,7 @@ import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { UniversityDigitalTwin } from './UniversityDigitalTwin';
 import { VCDashboardPDFExportModal } from './VCDashboardPDFExportModal';
+import { DepartmentUploadVelocityTrend } from './DepartmentUploadVelocityTrend';
 import { CircularProgress } from './CircularProgress';
 import {
   CompletionRadarService,
@@ -2263,6 +2264,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
           {/* Deadline Monitoring / Aging Risk Chart */}
           <DeadlineAgingChart risk={hierarchy.agingRisk} />
+
+          {/* Department Result Upload Velocity Trend Line Chart (Comparing Departments) */}
+          <DepartmentUploadVelocityTrend
+            allRecords={allRecords}
+            currentSession={currentSession}
+            activeSessions={activeSessions}
+            selectedSemesterFilter={selectedSemesterFilter}
+            selectedShiftFilter={selectedShiftFilter}
+            selectedSectionFilter={selectedSectionFilter}
+            onSelectDepartment={(deptName) => {
+              const matched = hierarchy.departments.find((d) => StorageService._isDeptMatch(d.name, deptName));
+              if (matched) {
+                setSelectedDrillDownDept(matched);
+                setIsDeptDrillDownOpen(true);
+              }
+            }}
+          />
 
           {/* Core Analytics Visualizations (Status Distribution Donut, Program Grouped Bar, Trend) */}
           <VCAnalyticsCharts
