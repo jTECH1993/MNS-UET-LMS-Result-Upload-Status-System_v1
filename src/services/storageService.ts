@@ -40,6 +40,7 @@ const LOCKDOWN_LOGS_KEY = 'mnsuet_lockdown_logs_v99';
 export class StorageService {
   
   private static _isSyncing = false;
+  private static _cachedStore: Record<string, SubmissionRecord> | null = null;
   
   public static initFirebaseSync(): void {
     if (this._isSyncing) return;
@@ -1337,15 +1338,31 @@ export class StorageService {
   }
 
   public static getStore(): Record<string, SubmissionRecord> {
+    if (this._cachedStore !== null) {
+      return this._cachedStore;
+    }
     try {
       const stored = localStorage.getItem('mnsuet_lms_result_records_v99');
-      if (stored) return JSON.parse(stored);
-    } catch(e) {}
-    return {};
+      if (stored) {
+        this._cachedStore = JSON.parse(stored);
+        return this._cachedStore!;
+      }
+    } catch (e) {}
+    this._cachedStore = {};
+    return this._cachedStore!;
   }
 
   private static setStore(data: Record<string, SubmissionRecord>): void {
-    localStorage.setItem('mnsuet_lms_result_records_v99', JSON.stringify(data));
+    this._cachedStore = data;
+    try {
+      localStorage.setItem('mnsuet_lms_result_records_v99', JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to persist store to localStorage:', e);
+    }
+  }
+
+  public static invalidateCache(): void {
+    this._cachedStore = null;
   }
 
   public static getActiveUser(): ActiveUserSession {
@@ -1939,6 +1956,101 @@ export class StorageService {
       console.error(e);
       throw e;
     }
+  }
+
+  /**
+   * Batch save submission records to in-memory cache, local storage, SQLite, and Firestore writeBatch
+   */
+  public static async saveSubmissionsBatch(
+    records: SubmissionRecord[]
+  ): Promise<{ success: boolean; count: number; quotaExceeded?: boolean }> {
+    if (!records || records.length === 0) {
+      return { success: true, count: 0 };
+    }
+
+    const activeUser = this.getActiveUser();
+    const store = this.getStore();
+    const completeRecords: SubmissionRecord[] = [];
+    const firebaseReadyRecords: any[] = [];
+
+    records.forEach((record) => {
+      const shiftVal = this.validateAndNormalizeShift(record.department, record.program, record.shift || 'Morning');
+      const safeShift = shiftVal.normalizedShift;
+      const sec = (record.section || 'A').trim().toUpperCase();
+      const key = getRecordKey(
+        record.department,
+        record.program,
+        record.degreeLevel,
+        safeShift,
+        record.session || '2023',
+        record.semester || '1',
+        sec
+      );
+      const isUpdate = !!store[key];
+
+      const completeRecord: SubmissionRecord = {
+        ...record,
+        id: key,
+        section: sec,
+        shift: safeShift,
+        session: (record.session || '2023').trim(),
+        semester: (record.semester || '1').trim(),
+        accessedBy: activeUser.name || 'Administrator',
+        userDesignation: activeUser.designation || 'Administrator',
+        updatedAt: new Date().toISOString(),
+        createdAt: isUpdate ? (store[key]?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+      };
+
+      store[key] = completeRecord;
+      completeRecords.push(completeRecord);
+      firebaseReadyRecords.push(JSON.parse(JSON.stringify(completeRecord)));
+    });
+
+    // Save all to local in-memory cache and localStorage in one atomic write
+    this.setStore(store);
+
+    // Sync to backend SQLite API in batch mode
+    if (typeof window !== 'undefined') {
+      fetch('/api/submissions/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(firebaseReadyRecords),
+      }).catch(() => {
+        firebaseReadyRecords.forEach((rec) => {
+          fetch('/api/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rec),
+          }).catch(() => {});
+        });
+      });
+    }
+
+    let quotaExceeded = false;
+
+    // Batch sync to Firestore if write quota is not exhausted
+    if (!FirebaseStore.isQuotaExhausted()) {
+      try {
+        await FirebaseStore.saveSubmissionsBatch(firebaseReadyRecords);
+      } catch (e: any) {
+        if (
+          FirebaseStore.isQuotaExhausted() ||
+          (e && (e.name === 'QuotaExceededError' || String(e).toLowerCase().includes('quota')))
+        ) {
+          quotaExceeded = true;
+        }
+      }
+    } else {
+      quotaExceeded = true;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+    }
+
+    this.logAccess(`Batch saved ${completeRecords.length} LMS records`);
+
+    return { success: true, count: completeRecords.length, quotaExceeded };
   }
 
   public static async wipeAllSubmissions(): Promise<boolean> {
@@ -2679,6 +2791,8 @@ export class StorageService {
       }
     }
 
+    const clonedRecordsBatch: SubmissionRecord[] = [];
+
     // Copy or Move records
     matchKeys.forEach((key) => {
       const sourceRecord = store[key];
@@ -2724,6 +2838,7 @@ export class StorageService {
 
       // Store in updated store
       updatedStore[destKey] = clonedRecord;
+      clonedRecordsBatch.push(clonedRecord);
       count++;
 
       // If it's a move, delete from the store if the destination key is different
@@ -2732,13 +2847,13 @@ export class StorageService {
         // Delete original from Firestore
         FirebaseStore.deleteSubmission(key).catch(() => {});
       }
-
-      // Sync the new/updated record to Firestore
-      FirebaseStore.saveSubmission(clonedRecord).catch(() => {});
     });
 
-    // Save back to local storage
+    // Save back to local storage and batch sync to Firestore
     this.setStore(updatedStore);
+    if (clonedRecordsBatch.length > 0 && !FirebaseStore.isQuotaExhausted()) {
+      FirebaseStore.saveSubmissionsBatch(clonedRecordsBatch).catch(() => {});
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
     }

@@ -276,7 +276,7 @@ export function ActionCenterPanel({
     let generatedTitle = '';
 
     if (targetProg !== 'ALL' && targetProg) {
-      const progInfo = deptObj?.programBreakdown.find(p => p.programName === targetProg);
+      const progInfo = deptObj?.programBreakdown.find((p: any) => p.programName === targetProg);
       const pendingCount = progInfo ? progInfo.pendingCount : 0;
       const uploadedCount = progInfo ? progInfo.uploadedCount : 0;
       const totalCount = progInfo ? progInfo.totalSubjects : 0;
@@ -287,7 +287,7 @@ export function ActionCenterPanel({
       generatedTitle = `LMS Submissions Review for ${deptFullName.replace('Department of ', '')}`;
       if (pendingProgs.length > 0) {
         const progListText = pendingProgs
-          .map(p => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
+          .map((p: any) => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
           .join('\n');
 
         generatedMessage = `Reviewing result uploads for ${deptFullName} (Session ${currentSession}, ${semText}).\n\nThe following degree program(s) remain incomplete:\n${progListText}\n\nAll concerned HODs and Program Coordinators are directed to ensure complete upload and verification of LMS grade sheets immediately.`;
@@ -338,7 +338,7 @@ export function ActionCenterPanel({
 
     pendingDepts.forEach(dept => {
       const progListText = dept.pendingPrograms
-        .map(p => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
+        .map((p: any) => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
         .join('\n');
 
       DirectiveService.createDirective({
@@ -374,7 +374,7 @@ export function ActionCenterPanel({
       .filter(d => d.pendingCount > 0)
       .map(d => {
         const progDetail = d.pendingPrograms.length > 0
-          ? d.pendingPrograms.map(p => `${p.programName}: ${p.pendingCount} pending`).join(', ')
+          ? d.pendingPrograms.map((p: any) => `${p.programName}: ${p.pendingCount} pending`).join(', ')
           : `${d.pendingCount} pending subject(s)`;
 
         return {

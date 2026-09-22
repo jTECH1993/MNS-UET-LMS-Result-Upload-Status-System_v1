@@ -147,6 +147,7 @@ if (typeof window !== 'undefined') {
 
 export class FirebaseStore {
   private static submissionCache: { records: SubmissionRecord[]; timestamp: number } | null = null;
+  private static inFlightFetchPromise: Promise<SubmissionRecord[]> | null = null;
   private static lastWriteHashes: Record<string, { hash: string; timestamp: number }> = {};
 
   private static isDuplicateWrite(key: string, payload: any, maxAgeMs = 1500): boolean {
@@ -364,6 +365,42 @@ export class FirebaseStore {
     }
   }
 
+  static async saveSubmissionsBatch(records: SubmissionRecord[]): Promise<void> {
+    if (this.isQuotaExhausted()) {
+      const err = new Error('The Firestore daily write limit has been exceeded.');
+      err.name = 'QuotaExceededError';
+      throw err;
+    }
+    if (!records || records.length === 0) return;
+
+    const validRecords = records.filter((r) => r && r.id);
+    if (validRecords.length === 0) return;
+
+    // Chunk records into max 400 documents per batch (Firestore limit is 500)
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+      const chunk = validRecords.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((rec) => {
+        const docRef = doc(db, RECORDS_COLLECTION, rec.id);
+        batch.set(docRef, rec, { merge: true });
+      });
+
+      try {
+        await batch.commit();
+        this.submissionCache = null; // Invalidate cache after batch write
+        FirestoreUsageService.recordOperation('WRITE', 'records', chunk.length, `Batch commit: ${chunk.length} submission records`);
+      } catch (e) {
+        const isQuota = handleFirestoreError(e, OperationType.WRITE, RECORDS_COLLECTION);
+        if (isQuota || isQuotaExhausted) {
+          const err = new Error('The Firestore daily write limit has been exceeded.');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+      }
+    }
+  }
+
   static async deleteSubmission(id: string): Promise<void> {
     if (this.isQuotaExhausted()) return;
     const docPath = `${RECORDS_COLLECTION}/${id}`;
@@ -377,29 +414,41 @@ export class FirebaseStore {
     }
   }
 
-  static async fetchAllSubmissions(): Promise<SubmissionRecord[]> {
+  static async fetchAllSubmissions(forceRefresh = false): Promise<SubmissionRecord[]> {
     if (this.isQuotaExhausted()) return [];
     const now = Date.now();
-    if (this.submissionCache && now - this.submissionCache.timestamp < 15000) {
+    // Cache-first strategy: return cached result if within 30s TTL
+    if (!forceRefresh && this.submissionCache && now - this.submissionCache.timestamp < 30000) {
       return this.submissionCache.records;
     }
-    try {
-      const fetchPromise = getDocs(collection(db, RECORDS_COLLECTION));
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
-      );
-      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
-      const count = snapshot.docs.length;
-      if (count > 0) {
-        FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records');
-      }
-      const records = snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
-      this.submissionCache = { records, timestamp: now };
-      return records;
-    } catch (e) {
-      handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
-      return [];
+    // Deduplicate concurrent in-flight fetch operations
+    if (this.inFlightFetchPromise) {
+      return this.inFlightFetchPromise;
     }
+
+    this.inFlightFetchPromise = (async () => {
+      try {
+        const fetchPromise = getDocs(collection(db, RECORDS_COLLECTION));
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Firestore fetch timeout')), 3500)
+        );
+        const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+        const count = snapshot.docs.length;
+        if (count > 0) {
+          FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records (Cache-First Batch)');
+        }
+        const records = snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
+        this.submissionCache = { records, timestamp: Date.now() };
+        return records;
+      } catch (e) {
+        handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
+        return this.submissionCache ? this.submissionCache.records : [];
+      } finally {
+        this.inFlightFetchPromise = null;
+      }
+    })();
+
+    return this.inFlightFetchPromise;
   }
 
   static listenToSubmissions(
