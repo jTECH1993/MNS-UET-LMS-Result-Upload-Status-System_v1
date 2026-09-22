@@ -40,6 +40,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { UniversityDigitalTwin } from './UniversityDigitalTwin';
 import { VCDashboardPDFExportModal } from './VCDashboardPDFExportModal';
 import { DepartmentUploadVelocityTrend } from './DepartmentUploadVelocityTrend';
+import { GlobalSearchFilterBar, SearchScope } from './GlobalSearchFilterBar';
 import { CircularProgress } from './CircularProgress';
 import {
   CompletionRadarService,
@@ -149,6 +150,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchScope, setSearchScope] = useState<SearchScope>('ALL');
+  const [selectedDeptFilters, setSelectedDeptFilters] = useState<string[]>([]);
+  const [selectedShifts, setSelectedShifts] = useState<('Morning' | 'Evening')[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'PENDING'>('ALL');
   const [onlySessionFilter, setOnlySessionFilter] = useState<boolean>(true);
   const [onlyGenuineSubmissions, setOnlyGenuineSubmissions] = useState<boolean>(false);
@@ -866,8 +870,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return allUniversityPrograms.filter((item) => {
       if (onlySessionFilter && !item.sessionActive) return false;
 
-      // Department filter
-      if (selectedDeptFilter !== 'ALL' && item.department !== selectedDeptFilter) {
+      // Department filter (supports multi-select array selectedDeptFilters or single selectedDeptFilter)
+      if (selectedDeptFilters.length > 0 && !selectedDeptFilters.includes('ALL')) {
+        if (!selectedDeptFilters.includes(item.department)) {
+          return false;
+        }
+      } else if (selectedDeptFilter !== 'ALL' && item.department !== selectedDeptFilter) {
         return false;
       }
 
@@ -876,6 +884,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         selectedShiftFilter !== 'ALL'
           ? selectedShiftFilter
           : rowShiftOverrides[item.program] || item.recommendedShift;
+
+      // Multi-shift array filter
+      if (selectedShifts.length > 0) {
+        if (!selectedShifts.includes(effectiveShift as any)) {
+          return false;
+        }
+      }
 
       const activeShiftData = item.shifts[effectiveShift];
 
@@ -957,12 +972,15 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     allUniversityPrograms,
     onlySessionFilter,
     selectedDeptFilter,
+    selectedDeptFilters,
     selectedShiftFilter,
+    selectedShifts,
     selectedSemesterFilter,
     rowShiftOverrides,
     onlyGenuineSubmissions,
     statusFilter,
     searchQuery,
+    searchScope,
   ]);
 
   const analytics = useMemo(() => {
@@ -2440,6 +2458,33 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </button>
         </div>
       </div>
+
+      {/* Global Search & Multi-Select Filter Chip Bar */}
+      <GlobalSearchFilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchScope={searchScope}
+        onSearchScopeChange={setSearchScope}
+        selectedDeptFilters={selectedDeptFilters}
+        onDeptFiltersChange={setSelectedDeptFilters}
+        selectedSemesters={selectedSemesters}
+        onSemestersChange={setSelectedSemesters}
+        selectedShifts={selectedShifts}
+        onShiftsChange={setSelectedShifts}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onlyGenuineSubmissions={onlyGenuineSubmissions}
+        onOnlyGenuineChange={setOnlyGenuineSubmissions}
+        allRecords={allRecords}
+        onSelectDepartment={(deptName) => {
+          setSelectedDeptFilter(deptName);
+          const matched = hierarchy.departments.find((d) => StorageService._isDeptMatch(d.name, deptName));
+          if (matched) {
+            setSelectedDrillDownDept(matched);
+            setIsDeptDrillDownOpen(true);
+          }
+        }}
+      />
 
       {/* Vice Chancellor Executive Productivity Suite: Department Performance & Compliance Matrix */}
       <div className="bg-white rounded-lg border border-slate-300 shadow-2xs overflow-hidden">
