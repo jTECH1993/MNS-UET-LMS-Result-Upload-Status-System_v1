@@ -240,6 +240,10 @@ export const HODEntryForm: React.FC<Props> = ({
     if (isPrivilegedUser) {
       return allDeptPrograms;
     }
+    // Gating check: if coordinator account is pending approval by HOD, they have NO approved programs
+    if (currentUser?.approvalStatus === 'PENDING') {
+      return [];
+    }
     const userPrograms: string[] = [];
     if (currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 0) {
       userPrograms.push(...currentUser.assignedPrograms);
@@ -497,6 +501,82 @@ export const HODEntryForm: React.FC<Props> = ({
       showFeedback('success', 'Authorization request sent to the Head of Department. Your status is Pending Approval.');
     } else {
       showFeedback('info', res.message);
+    }
+  };
+
+  // Collect all programs pending HOD approval for this user
+  const pendingCoordinatorPrograms = useMemo(() => {
+    const list = new Set<string>();
+    if (currentUser?.requestedPrograms) {
+      currentUser.requestedPrograms.forEach((p) => {
+        if (p && p.trim()) list.add(p.trim());
+      });
+    }
+    userProgramRequests
+      .filter((r) => r.status === 'PENDING')
+      .forEach((r) => {
+        if (r.requestedProgram && r.requestedProgram.trim()) list.add(r.requestedProgram.trim());
+      });
+    if (currentUser?.approvalStatus === 'PENDING') {
+      if (currentUser?.assignedPrograms) {
+        currentUser.assignedPrograms.forEach((p) => {
+          if (p && p.trim()) list.add(p.trim());
+        });
+      }
+      if (currentUser?.program && currentUser.program.trim()) {
+        list.add(currentUser.program.trim());
+      }
+    }
+    // Remove any programs that are already approved in coordinatorAllowedPrograms
+    coordinatorAllowedPrograms.forEach((ap) => list.delete(ap.name.trim()));
+    return Array.from(list);
+  }, [currentUser, userProgramRequests, coordinatorAllowedPrograms]);
+
+  const hasApprovedCoordinatorPrograms = isPrivilegedUser || (coordinatorAllowedPrograms.length > 0 && currentUser?.approvalStatus !== 'PENDING');
+
+  const handleDeleteCoordinatorProgram = (progToDelete: string) => {
+    if (!currentUser) return;
+    const confirmMsg = `Are you sure you want to remove "${progToDelete}" from your account?\n\nYou do not need any permission from your Head of Department to delete programs (you can delete programs even until no programs are left).`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const res = AuthService.removeCoordinatorProgram(currentUser.id, progToDelete);
+    if (res.success) {
+      showFeedback('info', res.message);
+      const remaining = coordinatorAllowedPrograms.filter(
+        (p) => p.name.trim().toLowerCase() !== progToDelete.trim().toLowerCase()
+      );
+      if (remaining.length > 0) {
+        handleProgramChange(remaining[0].name);
+      } else {
+        setProgram('');
+      }
+    } else {
+      showFeedback('warning', res.message);
+    }
+  };
+
+  const handleCancelPendingProgramRequest = (progName: string) => {
+    if (!currentUser) return;
+    const confirmMsg = `Cancel and delete your pending authorization request for "${progName}"?\n\nYou do not need HOD permission to cancel or delete this request.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const req = userProgramRequests.find(
+      (r) => r.requestedProgram.trim().toLowerCase() === progName.trim().toLowerCase() && r.status === 'PENDING'
+    );
+    if (req) {
+      const res = AuthService.cancelProgramAccessRequest(req.id, currentUser.id);
+      if (res.success) {
+        showFeedback('info', res.message);
+      } else {
+        showFeedback('warning', res.message);
+      }
+    } else {
+      const res = AuthService.removeCoordinatorProgram(currentUser.id, progName);
+      if (res.success) {
+        showFeedback('info', res.message);
+      } else {
+        showFeedback('warning', res.message);
+      }
     }
   };
 
@@ -2493,21 +2573,150 @@ export const HODEntryForm: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="mb-4">
-        <DeadlineBanner
-          currentSession={session}
-          semesterFilter={semester}
-          activeSessions={[session]}
-          selectedSemesters={[semester]}
-          isVC={false}
-        />
-      </div>
+      {/* Access Gate: If coordinator has no approved programs */}
+      {!hasApprovedCoordinatorPrograms ? (
+        <div className="space-y-4">
+          {pendingCoordinatorPrograms.length > 0 ? (
+            <div id="coordinator-access-restricted-card" className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 sm:p-7 text-amber-950 shadow-md space-y-4 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-700 border border-amber-400/40">
+                    <Clock className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-amber-950">
+                      Program Access Restricted: Awaiting Head of Department Approval
+                    </h3>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      Your program enrollment request is pending review by the Head of Department for {currentUser?.department}.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs bg-amber-200 text-amber-950 font-black px-3 py-1 rounded-full border border-amber-300 self-start sm:self-auto">
+                  Pending HOD Authorization
+                </span>
+              </div>
 
-      {/* CARD 2: SELECT PROGRAM DETAILS (Screenshot 1) */}
-      <div
-        id="select-program-details-card"
-        className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5"
-      >
+              <div className="bg-white/90 border border-amber-200/90 rounded-xl p-4 text-xs text-amber-950 leading-relaxed space-y-2">
+                <p>
+                  <strong>University Access Policy:</strong> When you first create an account and select a degree program, your request is automatically forwarded to your Head of Department. <strong>You can only access the program and enter course records if your HOD allows you</strong>.
+                </p>
+                <p className="text-amber-900">
+                  <strong>Unrestricted Program Deletion:</strong> You can delete or leave this program at any time <strong>without any permission of the HOD</strong> (even until no program is left).
+                </p>
+              </div>
+
+              {/* Pending Programs List with Immediate Delete (No HOD permission needed) */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-amber-950 uppercase tracking-wider block">
+                  Requested Degree Programs Awaiting Approval ({pendingCoordinatorPrograms.length}):
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {pendingCoordinatorPrograms.map((pName) => (
+                    <div
+                      key={pName}
+                      className="bg-white border-2 border-amber-300 rounded-xl p-4 flex flex-col justify-between gap-3 shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-bold text-sm text-slate-900">{pName}</span>
+                          <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full shrink-0">
+                            Awaiting HOD
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mt-1.5 space-y-0.5">
+                          <div>
+                            <span className="font-medium text-slate-500">Department:</span> {currentUser?.department}
+                          </div>
+                          <div>
+                            <span className="font-medium text-slate-500">Requested Shift:</span> {currentUser?.requestedShifts?.join(', ') || 'Morning & Evening'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-slate-400 italic">No HOD permission required</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelPendingProgramRequest(pName)}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="Delete this program without HOD permission (even if no program left)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Delete Program</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-amber-200">
+                <button
+                  type="button"
+                  onClick={() => setIsReqProgModalOpen(true)}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Request Another Program from HOD</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRequestHODReapproval}
+                  className="px-3.5 py-2 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Refresh / Check Approval Status</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div id="coordinator-no-programs-card" className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-8 sm:p-10 text-center space-y-4 shadow-sm animate-in fade-in">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center">
+                <GraduationCap className="w-7 h-7" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1.5">
+                <h3 className="text-lg font-bold text-slate-900">
+                  No Degree Programs Assigned (0 Programs Left)
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  You currently have no active or pending degree programs in your account. Coordinators may delete programs at any time without HOD permission (even until no program is left).
+                </p>
+                <p className="text-xs text-teal-800 font-medium">
+                  When you want to add or join a new program, submit a formal request to your Head of Department. Once your HOD approves, you will gain full access to the program.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsReqProgModalOpen(true)}
+                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Request Degree Program from Head of Department</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <DeadlineBanner
+              currentSession={session}
+              semesterFilter={semester}
+              activeSessions={[session]}
+              selectedSemesters={[semester]}
+              isVC={false}
+            />
+          </div>
+
+          {/* CARD 2: SELECT PROGRAM DETAILS (Screenshot 1) */}
+          <div
+            id="select-program-details-card"
+            className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5"
+          >
         {/* Global Active Shifts Configuration Settings Banner */}
         <div className="bg-slate-900 text-white rounded-xl p-3.5 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3">
@@ -2945,28 +3154,81 @@ export const HODEntryForm: React.FC<Props> = ({
                 )}
               </div>
             </div>
-            {/* Quick multi-program switcher chips for coordinators overseeing >1 program */}
-            {currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 1 && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                <span className="text-[9px] font-bold text-teal-900">Your Coordinated Programs:</span>
-                {currentUser.assignedPrograms.map((pName) => {
-                  const isCurrent = program === pName;
-                  return (
-                    <button
-                      key={pName}
-                      type="button"
-                      onClick={() => handleProgramChange(pName)}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer border ${
-                        isCurrent
-                          ? 'bg-teal-700 text-white border-teal-800 shadow-2xs'
-                          : 'bg-teal-50 text-teal-900 border-teal-200 hover:bg-teal-100'
-                      }`}
-                      title={`Switch to ${pName}`}
+            {/* Multi-program management and switcher chips for coordinators */}
+            {!isPrivilegedUser && (
+              <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">
+                    Your Assigned Degree Programs ({coordinatorAllowedPrograms.length}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsReqProgModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition-colors cursor-pointer"
+                    title="Submit a formal request to your Head of Department to add another program"
+                  >
+                    <Plus className="w-3 h-3 text-emerald-700" />
+                    <span>+ Add New Program (Request to HOD)</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {coordinatorAllowedPrograms.map((ap) => {
+                    const pName = ap.name;
+                    const isCurrent = program.trim().toLowerCase() === pName.trim().toLowerCase();
+                    return (
+                      <div
+                        key={pName}
+                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md border transition-all ${
+                          isCurrent
+                            ? 'bg-teal-700 text-white border-teal-800 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleProgramChange(pName)}
+                          className="cursor-pointer"
+                          title={`Select ${pName}`}
+                        >
+                          {isCurrent ? '● ' : ''}{pName}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCoordinatorProgram(pName)}
+                          className={`p-0.5 rounded transition-colors cursor-pointer ml-1 ${
+                            isCurrent
+                              ? 'text-white/80 hover:text-white hover:bg-teal-800'
+                              : 'text-rose-500 hover:text-rose-700 hover:bg-rose-50'
+                          }`}
+                          title={`Delete "${pName}" without HOD permission (even if no programs left)`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Pending programs awaiting HOD approval */}
+                  {pendingCoordinatorPrograms.map((pendingP) => (
+                    <div
+                      key={pendingP}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs"
+                      title="Awaiting Head of Department approval"
                     >
-                      {isCurrent ? '● ' : ''}{pName}
-                    </button>
-                  );
-                })}
+                      <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                      <span>{pendingP} (Pending HOD)</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelPendingProgramRequest(pendingP)}
+                        className="p-0.5 rounded hover:bg-rose-200/50 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer ml-0.5"
+                        title={`Cancel and delete request for "${pendingP}" without HOD permission`}
+                      >
+                        <Trash2 className="w-3 h-3 text-rose-500" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -4970,6 +5232,8 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteModal

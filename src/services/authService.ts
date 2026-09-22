@@ -438,10 +438,11 @@ export class AuthService {
       assignedPrograms: account.assignedPrograms,
       assignedShifts: account.assignedShifts,
       programShiftAssignments: account.programShiftAssignments,
-      approvalStatus: account.approvalStatus || 'APPROVED',
+      approvalStatus: account.approvalStatus || (account.role === 'COORDINATOR' ? 'PENDING' : 'APPROVED'),
       requestedPrograms: account.requestedPrograms,
       requestedShifts: account.requestedShifts,
       requestedAt: account.requestedAt,
+      pendingProgramRequests: account.pendingProgramRequests,
       approvedBy: account.approvedBy,
       approvedAt: account.approvedAt,
       avatarUrl: account.avatarUrl,
@@ -685,11 +686,32 @@ export class AuthService {
       }
     }
 
-    const isCoordinator = assignedRole === 'COORDINATOR';
-    const initialApproval: 'APPROVED' | 'PENDING' | 'REJECTED' = data.approvalStatus || (isCoordinator ? 'PENDING' : 'APPROVED');
+    const isPrivileged = assignedRole === 'HOD' || assignedRole === 'ADMIN' || assignedRole === 'VC';
+    const isCoordinatorOrFaculty = !isPrivileged;
+    const initialApproval: 'APPROVED' | 'PENDING' | 'REJECTED' = data.approvalStatus || (isCoordinatorOrFaculty ? 'PENDING' : 'APPROVED');
+
+    // If pending HOD approval, program is NOT yet accessible until HOD allows
+    const approvedProgramsList = initialApproval === 'APPROVED' && assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : [];
+    const activeProgram = initialApproval === 'APPROVED' && assignedRole !== 'HOD' ? primaryProgram : '';
+
+    const newAccountId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const initialPendingRequests: ProgramAccessRequest[] = isCoordinatorOrFaculty && rawAssigned.length > 0
+      ? rawAssigned.map((pName, pIdx) => ({
+          id: `prog_req_reg_${Date.now()}_${pIdx}_${Math.random().toString(36).substring(2, 6)}`,
+          userId: newAccountId,
+          userName: cleanName,
+          userEmail: cleanEmail,
+          department: cleanDept,
+          requestedProgram: pName,
+          requestedShifts: (data.programShiftAssignments && data.programShiftAssignments[pName]) || resolvedShifts || ['Morning', 'Evening'],
+          reason: 'Initial program registration enrollment request',
+          status: 'PENDING' as const,
+          requestedAt: new Date().toISOString(),
+        }))
+      : [];
 
     const newAccount: UserAccount = {
-      id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: newAccountId,
       username: cleanUser,
       email: cleanEmail,
       password: SecurityHelper.hashPassword(cleanPass),
@@ -697,14 +719,15 @@ export class AuthService {
       department: cleanDept,
       designation: cleanDesig,
       role: assignedRole,
-      program: assignedRole !== 'HOD' ? primaryProgram : undefined,
-      assignedPrograms: assignedRole !== 'HOD' && rawAssigned.length > 0 ? rawAssigned : undefined,
-      assignedShifts: assignedRole !== 'HOD' ? resolvedShifts : undefined,
-      programShiftAssignments: assignedRole !== 'HOD' ? data.programShiftAssignments : undefined,
+      program: activeProgram,
+      assignedPrograms: approvedProgramsList,
+      assignedShifts: initialApproval === 'APPROVED' ? resolvedShifts : [],
+      programShiftAssignments: initialApproval === 'APPROVED' ? data.programShiftAssignments : {},
       approvalStatus: initialApproval,
-      requestedPrograms: isCoordinator ? rawAssigned : undefined,
-      requestedShifts: isCoordinator ? resolvedShifts : undefined,
-      requestedAt: isCoordinator ? new Date().toISOString() : undefined,
+      requestedPrograms: isCoordinatorOrFaculty ? rawAssigned : undefined,
+      requestedShifts: isCoordinatorOrFaculty ? resolvedShifts : undefined,
+      requestedAt: isCoordinatorOrFaculty ? new Date().toISOString() : undefined,
+      pendingProgramRequests: initialApproval === 'PENDING' ? initialPendingRequests : undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       themePreference: 'emerald',
@@ -734,7 +757,7 @@ export class AuthService {
       severity: 'INFO',
       actor: newAccount.username,
       targetAccount: newAccount.username,
-      details: `New account registered: ${newAccount.username} [${newAccount.role} - ${newAccount.department}] (Status: ${newAccount.approvalStatus}). Requested Programs: ${newAccount.assignedPrograms?.join(', ') || newAccount.program || 'None'}.`,
+      details: `New account registered: ${newAccount.username} [${newAccount.role} - ${newAccount.department}] (Status: ${newAccount.approvalStatus}). Requested Programs: ${rawAssigned.join(', ') || 'None'}.`,
     });
 
     const session: ActiveUserSession = {
@@ -753,6 +776,7 @@ export class AuthService {
       requestedPrograms: newAccount.requestedPrograms,
       requestedShifts: newAccount.requestedShifts,
       requestedAt: newAccount.requestedAt,
+      pendingProgramRequests: newAccount.pendingProgramRequests,
       token: `auth_tok_${Date.now()}`,
     };
 
@@ -760,7 +784,7 @@ export class AuthService {
     return {
       success: true,
       message: initialApproval === 'PENDING'
-        ? `Account registered! As a Coordinator, your program assignment request has been queued for authorization by your Head of Department (HOD).`
+        ? `Account registered! Your enrollment request for program(s) "${rawAssigned.join(', ')}" has been forwarded to the Head of Department (${cleanDept}) for authorization. Access will be unlocked once approved by your HOD.`
         : `Account created and synced in university database successfully for ${newAccount.name} (${newAccount.department}).`,
       session,
     };
@@ -1253,6 +1277,18 @@ export class AuthService {
       account.assignedShifts = finalShifts;
     }
 
+    // Mark pending initial requests as approved and clear requested list
+    if (account.pendingProgramRequests) {
+      account.pendingProgramRequests.forEach((req) => {
+        if (req.status === 'PENDING') {
+          req.status = 'APPROVED';
+          req.reviewedBy = approverName;
+          req.reviewedAt = new Date().toISOString();
+        }
+      });
+    }
+    account.requestedPrograms = [];
+
     this.saveAccounts(accounts);
     FirebaseStore.saveUserAccount(account).catch(() => {});
     if (typeof window !== 'undefined') {
@@ -1275,6 +1311,8 @@ export class AuthService {
         role: account.role,
         approvedBy: account.approvedBy,
         approvedAt: account.approvedAt,
+        requestedPrograms: [],
+        pendingProgramRequests: account.pendingProgramRequests,
       };
       this.setCurrentSession(updatedSession);
     }
@@ -1350,7 +1388,7 @@ export class AuthService {
     });
   }
 
-  // Self-service program removal: Coordinator can remove any or all of their assigned programs
+  // Self-service program removal: Coordinator can remove any or all of their assigned/requested programs without HOD permission
   public static removeCoordinatorProgram(
     userId: string,
     programToRemove: string
@@ -1361,23 +1399,47 @@ export class AuthService {
 
     const cleanProg = programToRemove.trim();
     const currentAssigned = account.assignedPrograms || (account.program ? [account.program] : []);
+    const currentRequested = account.requestedPrograms || [];
+    const hasPendingReq = (account.pendingProgramRequests || []).some(
+      (r) => r.requestedProgram.trim().toLowerCase() === cleanProg.toLowerCase()
+    );
 
-    if (!currentAssigned.some((p) => p.trim().toLowerCase() === cleanProg.toLowerCase())) {
+    const isInAssigned = currentAssigned.some((p) => p.trim().toLowerCase() === cleanProg.toLowerCase());
+    const isInRequested = currentRequested.some((p) => p.trim().toLowerCase() === cleanProg.toLowerCase());
+
+    if (!isInAssigned && !isInRequested && !hasPendingReq) {
       return {
         success: false,
-        message: `Program "${cleanProg}" is not in your current assigned programs list.`,
+        message: `Program "${cleanProg}" was not found in your assigned or requested programs list.`,
       };
     }
 
+    // 1. Remove from assignedPrograms
     const updatedAssigned = currentAssigned.filter(
       (p) => p.trim().toLowerCase() !== cleanProg.toLowerCase()
     );
-
     account.assignedPrograms = updatedAssigned;
-    if (account.program && account.program.trim().toLowerCase() === cleanProg.toLowerCase()) {
-      account.program = updatedAssigned.length > 0 ? updatedAssigned[0] : '';
+
+    // 2. Remove from requestedPrograms
+    account.requestedPrograms = currentRequested.filter(
+      (p) => p.trim().toLowerCase() !== cleanProg.toLowerCase()
+    );
+
+    // 3. Remove or cancel matching requests in pendingProgramRequests
+    if (account.pendingProgramRequests && account.pendingProgramRequests.length > 0) {
+      account.pendingProgramRequests = account.pendingProgramRequests.filter(
+        (r) => r.requestedProgram.trim().toLowerCase() !== cleanProg.toLowerCase()
+      );
     }
 
+    // 4. Update active primary program
+    if (account.program && account.program.trim().toLowerCase() === cleanProg.toLowerCase()) {
+      account.program = updatedAssigned.length > 0 ? updatedAssigned[0] : '';
+    } else if (updatedAssigned.length === 0) {
+      account.program = '';
+    }
+
+    // 5. Remove shifts for this program
     if (account.programShiftAssignments && account.programShiftAssignments[cleanProg]) {
       delete account.programShiftAssignments[cleanProg];
     }
@@ -1399,6 +1461,8 @@ export class AuthService {
         ...currentSession,
         assignedPrograms: updatedAssigned,
         program: account.program,
+        requestedPrograms: account.requestedPrograms,
+        pendingProgramRequests: account.pendingProgramRequests,
         programShiftAssignments: account.programShiftAssignments,
       };
       this.setCurrentSession(updatedSession);
@@ -1409,7 +1473,7 @@ export class AuthService {
       severity: 'INFO',
       actor: account.username,
       targetAccount: account.username,
-      details: `Coordinator ${account.name} self-removed program "${cleanProg}" from assigned programs list. Remaining programs: ${updatedAssigned.length > 0 ? updatedAssigned.join(', ') : 'None'}.`,
+      details: `Coordinator ${account.name} deleted program "${cleanProg}" without requiring HOD permission. Remaining assigned: ${updatedAssigned.length > 0 ? updatedAssigned.join(', ') : 'None'}.`,
     });
 
     if (typeof window !== 'undefined') {
@@ -1420,8 +1484,60 @@ export class AuthService {
     return {
       success: true,
       message: updatedAssigned.length > 0
-        ? `Program "${cleanProg}" has been removed from your active coordinated programs list.`
-        : `Program "${cleanProg}" has been removed. You have no active assigned programs left. You can request a new program from your HOD at any time.`,
+        ? `Program "${cleanProg}" removed successfully without requiring HOD permission. Remaining active: ${updatedAssigned.join(', ')}.`
+        : `Program "${cleanProg}" removed without requiring HOD permission. You currently have no degree programs assigned. You can request a program from your HOD at any time.`,
+      session: updatedSession,
+    };
+  }
+
+  // Cancel or delete a pending program access request without HOD permission
+  public static cancelProgramAccessRequest(
+    requestId: string,
+    userId: string
+  ): { success: boolean; message: string; session?: ActiveUserSession } {
+    const accounts = this.getAccounts();
+    const account = accounts.find((a) => a.id === userId);
+    if (!account) return { success: false, message: 'User account not found.' };
+
+    const targetReq = (account.pendingProgramRequests || []).find((r) => r.id === requestId);
+    const progName = targetReq?.requestedProgram || '';
+
+    account.pendingProgramRequests = (account.pendingProgramRequests || []).filter((r) => r.id !== requestId);
+    if (progName) {
+      account.requestedPrograms = (account.requestedPrograms || []).filter(
+        (p) => p.trim().toLowerCase() !== progName.trim().toLowerCase()
+      );
+    }
+
+    this.saveAccounts(accounts);
+    FirebaseStore.saveUserAccount(account).catch(() => {});
+    if (typeof window !== 'undefined') {
+      fetch(`/api/users/${account.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(account),
+      }).catch(() => {});
+    }
+
+    const currentSession = this.getCurrentSession();
+    let updatedSession: ActiveUserSession | undefined;
+    if (currentSession && currentSession.id === userId) {
+      updatedSession = {
+        ...currentSession,
+        requestedPrograms: account.requestedPrograms,
+        pendingProgramRequests: account.pendingProgramRequests,
+      };
+      this.setCurrentSession(updatedSession);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_auth_changed'));
+      window.dispatchEvent(new CustomEvent('mnsuet_accounts_updated'));
+    }
+
+    return {
+      success: true,
+      message: `Pending authorization request for "${progName || 'program'}" cancelled and deleted without requiring HOD permission.`,
       session: updatedSession,
     };
   }
@@ -1435,6 +1551,8 @@ export class AuthService {
     if (!account) return { success: false, message: 'User account not found.' };
 
     account.assignedPrograms = [];
+    account.requestedPrograms = [];
+    account.pendingProgramRequests = [];
     account.program = '';
     account.programShiftAssignments = {};
 
@@ -1454,6 +1572,8 @@ export class AuthService {
       updatedSession = {
         ...currentSession,
         assignedPrograms: [],
+        requestedPrograms: [],
+        pendingProgramRequests: [],
         program: '',
         programShiftAssignments: {},
       };
@@ -1611,6 +1731,12 @@ export class AuthService {
     };
 
     account.pendingProgramRequests.push(newRequest);
+    if (!account.requestedPrograms) {
+      account.requestedPrograms = [];
+    }
+    if (!account.requestedPrograms.includes(cleanProg)) {
+      account.requestedPrograms.push(cleanProg);
+    }
 
     this.saveAccounts(accounts);
     FirebaseStore.saveUserAccount(account).catch(() => {});
@@ -1627,6 +1753,7 @@ export class AuthService {
     if (currentSession && currentSession.id === userId) {
       this.setCurrentSession({
         ...currentSession,
+        requestedPrograms: account.requestedPrograms,
         pendingProgramRequests: account.pendingProgramRequests,
       });
     }
@@ -1696,6 +1823,14 @@ export class AuthService {
     }
     targetAccount.programShiftAssignments[targetRequest.requestedProgram] = targetRequest.requestedShifts;
 
+    // Remove approved program from requestedPrograms
+    if (targetAccount.requestedPrograms) {
+      targetAccount.requestedPrograms = targetAccount.requestedPrograms.filter(
+        (rp) => rp.trim().toLowerCase() !== targetRequest.requestedProgram.trim().toLowerCase()
+      );
+    }
+    targetAccount.approvalStatus = 'APPROVED';
+
     // Merge shifts into overall assignedShifts
     const currentShifts = new Set<AcademicShift>(targetAccount.assignedShifts || []);
     targetRequest.requestedShifts.forEach((s) => currentShifts.add(s));
@@ -1716,8 +1851,10 @@ export class AuthService {
     if (currentSession && currentSession.id === targetAccount.id) {
       this.setCurrentSession({
         ...currentSession,
+        approvalStatus: 'APPROVED',
         assignedPrograms: targetAccount.assignedPrograms,
         program: targetAccount.program,
+        requestedPrograms: targetAccount.requestedPrograms,
         assignedShifts: targetAccount.assignedShifts,
         programShiftAssignments: targetAccount.programShiftAssignments,
         pendingProgramRequests: targetAccount.pendingProgramRequests,
@@ -1977,5 +2114,27 @@ export class AuthService {
       message: `Cleared ${removedCount} registered user account(s). Official core accounts preserved.`,
       count: removedCount,
     };
+  }
+
+  // Check if a specific program is approved and allowed for a user session/account
+  public static isProgramAllowedForUser(
+    user: ActiveUserSession | UserAccount | null | undefined,
+    programName: string
+  ): boolean {
+    if (!user) return false;
+    if (user.role === 'HOD' || user.role === 'ADMIN' || user.role === 'VC') return true;
+    if (user.approvalStatus === 'PENDING') return false;
+    const cleanProg = programName.trim().toLowerCase();
+    const assigned = user.assignedPrograms || (user.program ? [user.program] : []);
+    return assigned.some((p) => p.trim().toLowerCase() === cleanProg);
+  }
+
+  // Check if user has at least one approved degree program
+  public static hasApprovedPrograms(user: ActiveUserSession | UserAccount | null | undefined): boolean {
+    if (!user) return false;
+    if (user.role === 'HOD' || user.role === 'ADMIN' || user.role === 'VC') return true;
+    if (user.approvalStatus === 'PENDING') return false;
+    const assigned = user.assignedPrograms || (user.program ? [user.program] : []);
+    return assigned.length > 0;
   }
 }

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sun,
   Moon,
+  Trash2,
   X,
   XCircle,
   AlertCircle,
@@ -118,6 +119,38 @@ export const RequestAdditionalProgramModal: React.FC<Props> = ({
     }
   };
 
+  const handleDeleteAuthorizedProgram = (progName: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to remove "${progName}" from your account? You do not need any permission from your Head of Department to delete programs (even until no program is left).`
+      )
+    ) {
+      return;
+    }
+    const res = AuthService.removeCoordinatorProgram(currentUser.id, progName);
+    if (res.success) {
+      setFeedback({ type: 'success', message: res.message });
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+    }
+  };
+
+  const handleCancelPendingRequest = (reqId: string, progName: string) => {
+    if (
+      !window.confirm(
+        `Cancel and remove your pending authorization request for "${progName}"? You do not need HOD permission to cancel or delete this request.`
+      )
+    ) {
+      return;
+    }
+    const res = AuthService.cancelProgramAccessRequest(reqId, currentUser.id);
+    if (res.success) {
+      setFeedback({ type: 'success', message: res.message });
+    } else {
+      setFeedback({ type: 'error', message: res.message });
+    }
+  };
+
   // Get current active department programs for dropdown
   const currentDeptObj = UNIVERSITY_DEPARTMENTS.find(
     (d) => d.name.trim().toLowerCase() === selectedDepartment.trim().toLowerCase()
@@ -176,26 +209,45 @@ export const RequestAdditionalProgramModal: React.FC<Props> = ({
             </div>
             
             <div>
-              <span className="text-[11px] font-bold text-slate-600 block mb-1">
-                Currently Authorized Programs:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {assignedPrograms.map((prog) => {
-                  const shifts = currentUser.programShiftAssignments?.[prog] || currentUser.assignedShifts || ['Morning', 'Evening'];
-                  return (
-                    <span
-                      key={prog}
-                      className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 text-xs font-semibold"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{prog}</span>
-                      <span className="text-[10px] bg-emerald-200/70 text-emerald-900 font-bold px-1.5 py-0.2 rounded">
-                        {shifts.join(' & ')}
-                      </span>
-                    </span>
-                  );
-                })}
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold text-slate-600 block">
+                  Currently Authorized Programs:
+                </span>
+                <span className="text-[10px] text-slate-400 italic">
+                  Self-service: delete without HOD permission
+                </span>
               </div>
+              {assignedPrograms.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedPrograms.map((prog) => {
+                    const shifts = currentUser.programShiftAssignments?.[prog] || currentUser.assignedShifts || ['Morning', 'Evening'];
+                    return (
+                      <span
+                        key={prog}
+                        className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg px-2.5 py-1 text-xs font-semibold"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>{prog}</span>
+                        <span className="text-[10px] bg-emerald-200/70 text-emerald-900 font-bold px-1.5 py-0.2 rounded">
+                          {shifts.join(' & ')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAuthorizedProgram(prog)}
+                          className="ml-1 p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                          title={`Delete "${prog}" without HOD permission (even if no programs left)`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500 hover:text-rose-700" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 italic bg-white border border-dashed border-slate-300 rounded-lg p-2.5">
+                  No degree programs currently assigned. You can delete or leave programs at any time without HOD permission (even until 0 programs are left). Select a program below to submit an enrollment request to your HOD.
+                </div>
+              )}
             </div>
           </div>
 
@@ -224,11 +276,16 @@ export const RequestAdditionalProgramModal: React.FC<Props> = ({
           {/* Pending Requests Alert */}
           {pendingRequests.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-700 shrink-0 animate-pulse" />
-                <h4 className="font-bold text-amber-950 text-xs">
-                  Awaiting HOD Review ({pendingRequests.length})
-                </h4>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-700 shrink-0 animate-pulse" />
+                  <h4 className="font-bold text-amber-950 text-xs">
+                    Awaiting HOD Review ({pendingRequests.length})
+                  </h4>
+                </div>
+                <span className="text-[10px] text-amber-800">
+                  Delete anytime without HOD approval
+                </span>
               </div>
               <div className="space-y-1.5">
                 {pendingRequests.map((req) => (
@@ -243,9 +300,19 @@ export const RequestAdditionalProgramModal: React.FC<Props> = ({
                         {new Date(req.requestedAt).toLocaleDateString()}
                       </div>
                     </div>
-                    <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded-full shrink-0">
-                      Pending HOD
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded-full">
+                        Pending HOD
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelPendingRequest(req.id, req.requestedProgram)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                        title={`Cancel & delete request for "${req.requestedProgram}" without HOD permission`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500 hover:text-rose-700" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
