@@ -7,6 +7,7 @@ import {
   onSnapshot,
   deleteDoc,
   writeBatch,
+  getDocFromServer,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { SubmissionRecord, WorkOnDemandRequisition, UserAccount, AccessLogEntry } from '../types';
@@ -32,7 +33,23 @@ export interface FirestoreErrorInfo {
   path: string | null;
 }
 
-let isQuotaExhausted = false;
+const QUOTA_STORAGE_KEY = 'mnsuet_firestore_quota_exhausted_v1';
+
+function checkInitialQuotaExhaustion(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const raw = localStorage.getItem(QUOTA_STORAGE_KEY);
+    if (!raw) return false;
+    const timestamp = parseInt(raw, 10);
+    // Quota resets at 00:00 Pacific Time daily (within ~20 hours)
+    if (Date.now() - timestamp < 20 * 60 * 60 * 1000) {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+let isQuotaExhausted = checkInitialQuotaExhaustion();
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): boolean {
   const errMsg = error instanceof Error ? error.message : String(error);
@@ -40,12 +57,28 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
   if (
     lowerMsg.includes('resource-exhausted') ||
+    lowerMsg.includes('write stream exhausted') ||
+    lowerMsg.includes('maximum allowed queued writes') ||
     lowerMsg.includes('quota limit exceeded') ||
     lowerMsg.includes('quota exceeded') ||
     lowerMsg.includes('quota') ||
     errMsg.includes('429')
   ) {
-    isQuotaExhausted = true;
+    if (!isQuotaExhausted) {
+      isQuotaExhausted = true;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(QUOTA_STORAGE_KEY, Date.now().toString());
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('mnsuet_firestore_quota_status', {
+              detail: { exhausted: true, message: errMsg },
+            })
+          );
+        }
+      } catch (e) {}
+    }
     return true;
   }
 
@@ -55,7 +88,8 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     errMsg.includes('offline') ||
     errMsg.includes('unavailable') ||
     errMsg.includes('deadline-exceeded') ||
-    errMsg.includes('failed to get document')
+    errMsg.includes('failed to get document') ||
+    errMsg.includes('maximum backoff delay')
   ) {
     // Offline or high-latency network connection: Firestore automatically operates in offline cache mode.
     return false;
@@ -71,11 +105,42 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 export class FirebaseStore {
   static isQuotaExhausted(): boolean {
+    if (isQuotaExhausted) return true;
+    isQuotaExhausted = checkInitialQuotaExhaustion();
     return isQuotaExhausted;
   }
 
   static setQuotaExhausted(exhausted: boolean = true): void {
     isQuotaExhausted = exhausted;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        if (exhausted) {
+          localStorage.setItem(QUOTA_STORAGE_KEY, Date.now().toString());
+        } else {
+          localStorage.removeItem(QUOTA_STORAGE_KEY);
+        }
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('mnsuet_firestore_quota_status', {
+            detail: { exhausted },
+          })
+        );
+      }
+    } catch (e) {}
+  }
+
+  static async testConnection(): Promise<void> {
+    if (this.isQuotaExhausted()) return;
+    try {
+      await getDocFromServer(doc(db, 'test', 'connection'));
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('the client is offline')) {
+        console.warn('Please check your Firebase configuration or internet connection.');
+      } else {
+        handleFirestoreError(error, OperationType.GET, 'test/connection');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -175,6 +240,7 @@ export class FirebaseStore {
   }
 
   static async fetchAllSubmissions(): Promise<SubmissionRecord[]> {
+    if (this.isQuotaExhausted()) return [];
     try {
       const fetchPromise = getDocs(collection(db, RECORDS_COLLECTION));
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -247,6 +313,7 @@ export class FirebaseStore {
   }
 
   static async fetchAllUserAccounts(): Promise<UserAccount[]> {
+    if (this.isQuotaExhausted()) return [];
     try {
       const fetchPromise = getDocs(collection(db, USERS_COLLECTION));
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -302,6 +369,7 @@ export class FirebaseStore {
   }
 
   static async fetchAllWorkOnDemand(): Promise<WorkOnDemandRequisition[]> {
+    if (this.isQuotaExhausted()) return [];
     try {
       const fetchPromise = getDocs(collection(db, REQUISITIONS_COLLECTION));
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -335,7 +403,7 @@ export class FirebaseStore {
   // AUDIT & ACCESS LOGS
   // ---------------------------------------------------------------------------
   static async saveAccessLog(log: AccessLogEntry): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${LOGS_COLLECTION}/${log.id}`;
     try {
       const docRef = doc(db, LOGS_COLLECTION, log.id);
@@ -346,6 +414,7 @@ export class FirebaseStore {
   }
 
   static async fetchRecentAccessLogs(limitCount = 50): Promise<AccessLogEntry[]> {
+    if (this.isQuotaExhausted()) return [];
     try {
       const fetchPromise = getDocs(collection(db, LOGS_COLLECTION));
       const timeoutPromise = new Promise<never>((_, reject) =>

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCOxfuY32fnlTpYdpp4DJT2CejWm7YMcvg",
@@ -13,16 +13,8 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
+// Initialize Firestore with specific database ID
 const dbId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-mnsuetlmsresultu-e2136163-8fbb-42d0-a2cb-ea06807df2ce";
 export const db = getFirestore(app, dbId);
 
-// Enable offline persistence with graceful fallback
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // Multiple tabs open; persistence is active in the primary tab.
-  } else if (err.code === 'unimplemented') {
-    // Browser does not support IndexedDB persistence.
-  }
-});
 

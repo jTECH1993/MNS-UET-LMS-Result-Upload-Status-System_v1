@@ -271,11 +271,6 @@ export class AuditTrailService {
     // Sort descending by timestamp
     merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    try {
-      localStorage.setItem(AUDIT_KEY, JSON.stringify(merged));
-      FirebaseStore.syncGlobalState(AUDIT_KEY, merged).catch(() => {});
-    } catch (e) {}
-
     return merged;
   }
 
@@ -303,9 +298,11 @@ export class AuditTrailService {
 
     localStorage.setItem(AUDIT_KEY, JSON.stringify(updated));
 
-    try {
-      FirebaseStore.syncGlobalState(AUDIT_KEY, updated).catch(() => {});
-    } catch (e) {}
+    if (!FirebaseStore.isQuotaExhausted()) {
+      try {
+        FirebaseStore.syncGlobalState(AUDIT_KEY, updated).catch(() => {});
+      } catch (e) {}
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_audit_updated'));

@@ -79,9 +79,8 @@ export class StorageService {
       }
     });
 
-    // Generic key sync for Accounts, Logs, Sessions, Requisitions, etc.
+    // Generic key sync for Accounts, Sessions, Requisitions, etc. (Access logs synced independently)
     const keysToSync = [
-      ACCESS_LOG_KEY,
       AVAILABLE_SESSIONS_KEY,
       CURRENT_SESSION_KEY,
       ACTIVE_SESSIONS_KEY,
@@ -97,6 +96,7 @@ export class StorageService {
 
     let isReceiving = false;
     const originalSetItem = localStorage.setItem;
+    const syncDebounceTimers: Record<string, any> = {};
     
     // Intercept localStorage.setItem
     localStorage.setItem = function(key, value) {
@@ -104,10 +104,16 @@ export class StorageService {
       
       // If it's a key we want to sync, and we aren't currently receiving it from Firebase
       if (!isReceiving && keysToSync.includes(key)) {
-        try {
-          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
-        } catch(e) {
-          FirebaseStore.syncGlobalState(key, value).catch(() => {});
+        if (!FirebaseStore.isQuotaExhausted()) {
+          if (syncDebounceTimers[key]) clearTimeout(syncDebounceTimers[key]);
+          syncDebounceTimers[key] = setTimeout(() => {
+            if (FirebaseStore.isQuotaExhausted()) return;
+            try {
+              FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
+            } catch(e) {
+              FirebaseStore.syncGlobalState(key, value).catch(() => {});
+            }
+          }, 1000);
         }
       }
       
@@ -116,7 +122,7 @@ export class StorageService {
         keysToSync.push(key); // Track it
         FirebaseStore.listenGlobalState(key, (data) => {
           if (data === undefined) return;
-        const current = localStorage.getItem(key);
+          const current = localStorage.getItem(key);
           const newStr = typeof data === 'string' ? data : JSON.stringify(data);
           if (current !== newStr) {
             isReceiving = true;
@@ -127,10 +133,12 @@ export class StorageService {
             }
           }
         });
-        try {
-          FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
-        } catch(e) {
-          FirebaseStore.syncGlobalState(key, value).catch(() => {});
+        if (!FirebaseStore.isQuotaExhausted()) {
+          try {
+            FirebaseStore.syncGlobalState(key, JSON.parse(value)).catch(() => {});
+          } catch(e) {
+            FirebaseStore.syncGlobalState(key, value).catch(() => {});
+          }
         }
       }
     };
@@ -1093,7 +1101,9 @@ export class StorageService {
       };
       const updated = [entry, ...logs].slice(0, 500);
       localStorage.setItem('mnsuet_lms_access_logs_v100_authentic', JSON.stringify(updated));
-      FirebaseStore.saveAccessLog(entry).catch(() => {});
+      if (!FirebaseStore.isQuotaExhausted()) {
+        FirebaseStore.saveAccessLog(entry).catch(() => {});
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
@@ -1321,11 +1331,32 @@ export class StorageService {
 
       // 1. Check if Firestore quota is ALREADY known to be exceeded
       if (FirebaseStore.isQuotaExhausted()) {
-        this.triggerQuotaExhaustedPopup();
-        return { success: false, isUpdate, quotaExceeded: true };
+        store[key] = completeRecord;
+        this.setStore(store);
+
+        // Also sync to backend SQLite API if running
+        if (typeof window !== 'undefined') {
+          fetch('/api/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(firebaseReadyRecord),
+          }).catch(() => {});
+
+          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: store[key] } }));
+        }
+
+        this.logAccess(
+          isUpdate
+            ? `Updated result upload status for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses) [Local/SQLite Mode]`
+            : `Submitted new LMS record for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses) [Local/SQLite Mode]`,
+          record.department,
+          record.program
+        );
+
+        return { success: true, isUpdate, quotaExceeded: true };
       }
 
-      // 2. Attempt saving to Firestore FIRST before saving to local storage
+      // 2. Attempt saving to Firestore
       try {
         await FirebaseStore.saveSubmission(firebaseReadyRecord);
       } catch (e: any) {
@@ -1333,18 +1364,33 @@ export class StorageService {
           FirebaseStore.isQuotaExhausted() ||
           (e && (e.name === 'QuotaExceededError' || String(e).toLowerCase().includes('quota')))
         ) {
-          this.triggerQuotaExhaustedPopup();
-          return { success: false, isUpdate, quotaExceeded: true };
+          // Gracefully fall back to saving locally and to SQLite
+          store[key] = completeRecord;
+          this.setStore(store);
+
+          if (typeof window !== 'undefined') {
+            fetch('/api/submissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(firebaseReadyRecord),
+            }).catch(() => {});
+
+            window.dispatchEvent(new CustomEvent('mnsuet_storage_updated', { detail: { record: store[key] } }));
+          }
+
+          this.logAccess(
+            isUpdate
+              ? `Updated result upload status for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses) [Local/SQLite Mode]`
+              : `Submitted new LMS record for ${record.program} [${record.shift} - Sec ${sec}] (${record.subjects.length} courses) [Local/SQLite Mode]`,
+            record.department,
+            record.program
+          );
+
+          return { success: true, isUpdate, quotaExceeded: true };
         }
       }
 
-      // 3. Check again if Firestore quota was exceeded during save attempt
-      if (FirebaseStore.isQuotaExhausted()) {
-        this.triggerQuotaExhaustedPopup();
-        return { success: false, isUpdate, quotaExceeded: true };
-      }
-
-      // 4. QUOTA AVAILABLE -> Save to local store!
+      // 3. Save to local store and SQLite backend
       store[key] = completeRecord;
       this.setStore(store);
 
@@ -1876,13 +1922,9 @@ export class StorageService {
           // Remote is newer: update local store
           store[remote.id] = remote;
           storeChanged = true;
-        } else if (localTime > remoteTime) {
-          // Local is newer: sync back to Firebase asynchronously to maintain consistency
-          const firebaseReadyRecord = JSON.parse(JSON.stringify(local));
-          FirebaseStore.saveSubmission(firebaseReadyRecord).catch((err) => {
-            console.error('Failed to sync newer local record back to Firebase:', err);
-          });
         }
+        // Note: Do not automatically push local records back to Firebase inside mergeIncrementalSubmissions
+        // to prevent recursive write storms and quota exhaustion. Explicit user actions handle syncing.
       }
     });
 
@@ -1915,12 +1957,14 @@ export class StorageService {
     let remoteList: SubmissionRecord[] = [];
     let fetchedFromFirebase = false;
 
-    // 1. Try Firestore Sync
-    try {
-      remoteList = await FirebaseStore.fetchAllSubmissions();
-      fetchedFromFirebase = true;
-    } catch (e) {
-      console.warn('Firebase submissions fetch failed, checking local SQLite fallback:', e);
+    // 1. Try Firestore Sync only if quota is not currently exhausted
+    if (!FirebaseStore.isQuotaExhausted()) {
+      try {
+        remoteList = await FirebaseStore.fetchAllSubmissions();
+        fetchedFromFirebase = true;
+      } catch (e) {
+        console.warn('Firebase submissions fetch failed, checking local SQLite fallback:', e);
+      }
     }
 
     // 2. Try SQLite Backend API Sync

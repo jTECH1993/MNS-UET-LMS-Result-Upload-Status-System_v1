@@ -1749,6 +1749,8 @@ export const HODEntryForm: React.FC<Props> = ({
         'success',
         activeRows.length === 0
           ? 'Record updated in database. All course records have been removed (0 courses remaining).'
+          : result.quotaExceeded
+          ? `Record saved locally & to server SQLite database (Cloud writes paused due to daily quota limit).`
           : (result.isUpdate ? "Record updated successfully." : "Record created successfully.")
       );
 
