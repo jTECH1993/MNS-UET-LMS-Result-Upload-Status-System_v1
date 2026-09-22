@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Database,
   Copy,
@@ -15,9 +15,13 @@ import {
   Activity, AlertTriangle,
   RefreshCw,
   AlertCircle,
+  ExternalLink,
+  Clock,
+  Zap,
 } from 'lucide-react';
 import { SubmissionRecord } from '../types';
 import { StorageService } from '../services/storageService';
+import { FirestoreUsageService, FirestoreUsageStats } from '../services/firestoreUsageService';
 
 interface Props {
   isOpen: boolean;
@@ -35,13 +39,20 @@ export const FirebaseSchemaModal: React.FC<Props> = ({
   isAdmin = false,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'diagnostic' | 'logs' | 'current' | 'all' | 'schemas' | 'rules'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'diagnostic' | 'logs' | 'current' | 'all' | 'schemas' | 'rules' | 'usage'>('status');
   const [accessLogs, setAccessLogs] = useState(() => StorageService.getAccessLogs());
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showConfirmClearDb, setShowConfirmClearDb] = useState(false);
+  const [stats, setStats] = useState<FirestoreUsageStats>(() => FirestoreUsageService.getUsageStats());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return FirestoreUsageService.subscribe((updated) => {
+      setStats(updated);
+    });
+  }, []);
 
   if (!isOpen) return null;
 
@@ -403,6 +414,20 @@ export interface PasswordResetRequest {
             Live Diagnostic
           </button>
           <button
+            onClick={() => setActiveTab('usage')}
+            className={`pb-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'usage'
+                ? 'border-amber-600 text-amber-900 font-bold bg-amber-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5 text-amber-600" />
+            <span>Daily Quota &amp; Ops</span>
+            <span className="text-[10px] bg-amber-200 text-amber-900 font-mono px-1 rounded font-bold">
+              {Math.max(0, stats.limits.dailyWrites - stats.writes).toLocaleString()} left
+            </span>
+          </button>
+          <button
             onClick={() => {
               setAccessLogs(StorageService.getAccessLogs());
               setActiveTab('logs');
@@ -699,6 +724,154 @@ export interface PasswordResetRequest {
                   </table>
                 </div>
               )}
+            </div>
+          ) : activeTab === 'usage' ? (
+            <div className="space-y-4 text-xs">
+              {/* Header Banner with Firebase Console Direct Link */}
+              <div className="p-3.5 rounded-lg bg-gradient-to-r from-amber-500/10 via-amber-600/10 to-transparent border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-amber-950 dark:text-amber-200 text-sm">
+                      Firestore Operations &amp; Quota Monitor
+                    </span>
+                    <span className="text-[10px] uppercase font-mono font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full">
+                      {stats.planTier} Plan
+                    </span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-xs mt-1">
+                    Free daily limit: <strong>{stats.limits.dailyWrites.toLocaleString()} writes</strong>, <strong>{stats.limits.dailyReads.toLocaleString()} reads</strong>. Resets every midnight at 00:00 UTC.
+                  </p>
+                </div>
+                <a
+                  href="https://console.firebase.google.com/project/hrcv-2d7ce/firestore/databases/ai-studio-mnsuetlmsresultu-e2136163-8fbb-42d0-a2cb-ea06807df2ce/usage/prev-24h"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Firebase Console</span>
+                </a>
+              </div>
+
+              {/* Progress Gauges */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Writes */}
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-bold">
+                    <span>Document Writes</span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                      {((stats.writes / stats.limits.dailyWrites) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        stats.writes >= stats.limits.dailyWrites * 0.9 ? 'bg-rose-500' : stats.writes >= stats.limits.dailyWrites * 0.7 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (stats.writes / stats.limits.dailyWrites) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {stats.writes.toLocaleString()} performed
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {Math.max(0, stats.limits.dailyWrites - stats.writes).toLocaleString()} left
+                    </span>
+                  </div>
+                </div>
+
+                {/* Reads */}
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-bold">
+                    <span>Document Reads</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                      {((stats.reads / stats.limits.dailyReads) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (stats.reads / stats.limits.dailyReads) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {stats.reads.toLocaleString()} performed
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {Math.max(0, stats.limits.dailyReads - stats.reads).toLocaleString()} left
+                    </span>
+                  </div>
+                </div>
+
+                {/* Deletes */}
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-bold">
+                    <span>Document Deletes</span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
+                      {((stats.deletes / stats.limits.dailyDeletes) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (stats.deletes / stats.limits.dailyDeletes) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {stats.deletes.toLocaleString()} performed
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {Math.max(0, stats.limits.dailyDeletes - stats.deletes).toLocaleString()} left
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collections breakdown table */}
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                  Collection Activity Breakdown (Today)
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  {Object.entries(stats.writesByCollection || {}).map(([col, writeCount]) => {
+                    const readCount = stats.readsByCollection?.[col] || 0;
+                    const deleteCount = stats.deletesByCollection?.[col] || 0;
+                    return (
+                      <div key={col} className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-750">
+                        <div className="font-mono font-bold text-emerald-700 dark:text-emerald-400 truncate">
+                          {col}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
+                          <span>W: {Number(writeCount)}</span>
+                          <span>R: {Number(readCount)}</span>
+                          <span>D: {Number(deleteCount)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      FirestoreUsageService.resetDailyCounters();
+                    }}
+                    className="px-2.5 py-1 text-[11px] bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold transition-colors cursor-pointer"
+                  >
+                    Reset Local Counters
+                  </button>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Database ID: <code className="font-mono text-emerald-700 dark:text-emerald-400">ai-studio-mnsuetlmsresultu-e2136163-8fbb-42d0-a2cb-ea06807df2ce</code>
+                </span>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

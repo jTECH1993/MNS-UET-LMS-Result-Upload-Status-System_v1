@@ -9,6 +9,7 @@ import {
   X,
   Briefcase,
   Layers,
+  Activity,
 } from 'lucide-react';
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
   savedCount: number;
+  onOpenUsageModal?: () => void;
 }
 
 
@@ -38,6 +40,7 @@ export const SidebarNavigation: React.FC<Props> = ({
   isCollapsed,
   onToggleCollapsed,
   savedCount,
+  onOpenUsageModal,
 }) => {
   const isVC = currentUser?.role === 'VC';
   const isAdmin = currentUser?.role === 'ADMIN';
@@ -255,6 +258,39 @@ export const SidebarNavigation: React.FC<Props> = ({
             )}
           </div>
         </div>
+
+        {/* SECTION 3: ADMIN CLOUD MONITORING & QUOTA */}
+        {isAdmin && onOpenUsageModal && (
+          <div>
+            {!isCollapsed && (
+              <div className="px-2 mb-2 flex items-center justify-between text-[10px] font-bold tracking-wider uppercase text-slate-400">
+                <span>Cloud Infrastructure</span>
+                <span className="bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.2 rounded font-mono text-[9px]">
+                  Admin
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                onOpenUsageModal();
+                onCloseMobile();
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-amber-200 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/70 transition-all cursor-pointer shadow-2xs group"
+              title="Firestore Real-time Usage & Daily Quotas (Reads, Writes, Subscription)"
+            >
+              <Activity className="w-4 h-4 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
+              {!isCollapsed && (
+                <div className="flex-1 flex items-center justify-between text-left truncate">
+                  <span className="truncate">Usage &amp; Quotas</span>
+                  <span className="text-[9px] font-mono text-amber-300 font-extrabold bg-amber-900/70 px-1.5 py-0.5 rounded border border-amber-700/60">
+                    Quota
+                  </span>
+                </div>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* User Session Footer */}

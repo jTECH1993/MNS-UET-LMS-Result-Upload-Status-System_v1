@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { SubmissionRecord, WorkOnDemandRequisition, UserAccount, AccessLogEntry } from '../types';
+import { FirestoreUsageService } from '../services/firestoreUsageService';
 
 const RECORDS_COLLECTION = 'records';
 const USERS_COLLECTION = 'users';
@@ -164,6 +165,7 @@ export class FirebaseStore {
       if (exhausted) {
         // Stop Firestore WriteStream from endless reconnect loops
         disableNetwork(db).catch(() => {});
+        FirestoreUsageService.recordOperation('WRITE', 'records', 0, 'Firestore Daily Quota Reached (Circuit Breaker Activated)', 'CIRCUIT_BREAKER_BLOCKED');
       } else {
         enableNetwork(db).catch(() => {});
       }
@@ -201,6 +203,7 @@ export class FirebaseStore {
     if (this.isQuotaExhausted()) return;
     try {
       await setDoc(doc(db, 'config', key), { data: data ?? null, updatedAt: new Date().toISOString() });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, `Global State: ${key}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `config/${key}`);
     }
@@ -228,6 +231,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, SYSTEM_DOC);
       await setDoc(docRef, { deadline: isoString, updatedAt: new Date().toISOString() }, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Deadline Configuration');
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
     }
@@ -238,6 +242,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, SYSTEM_DOC);
       await setDoc(docRef, { lockdownDisabled: disabled, updatedAt: new Date().toISOString() }, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Lockdown Mode Toggle');
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
     }
@@ -271,6 +276,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, RECORDS_COLLECTION, record.id);
       await setDoc(docRef, record, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'records', 1, `${record.department} - ${record.program} (${record.session})`);
     } catch (e) {
       const isQuota = handleFirestoreError(e, OperationType.WRITE, docPath);
       if (isQuota || isQuotaExhausted) {
@@ -287,6 +293,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, RECORDS_COLLECTION, id);
       await deleteDoc(docRef);
+      FirestoreUsageService.recordOperation('DELETE', 'records', 1, `Deleted record: ${id}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, docPath);
     }
@@ -300,6 +307,10 @@ export class FirebaseStore {
         setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
       );
       const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+      const count = snapshot.docs.length;
+      if (count > 0) {
+        FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records');
+      }
       return snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
@@ -335,6 +346,7 @@ export class FirebaseStore {
         batch.delete(docSnap.ref);
       });
       await batch.commit();
+      FirestoreUsageService.recordOperation('DELETE', 'records', snapshot.size, 'Wipe all submission documents');
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, RECORDS_COLLECTION);
     }
@@ -350,6 +362,7 @@ export class FirebaseStore {
       const docRef = doc(db, USERS_COLLECTION, user.id);
       const sanitized = JSON.parse(JSON.stringify(user));
       await setDoc(docRef, sanitized, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'users', 1, `User Account: ${user.username} (${user.role})`);
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, docPath);
     }
@@ -361,6 +374,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, USERS_COLLECTION, id);
       await deleteDoc(docRef);
+      FirestoreUsageService.recordOperation('DELETE', 'users', 1, `Deleted user ID: ${id}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, docPath);
     }
@@ -374,6 +388,10 @@ export class FirebaseStore {
         setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
       );
       const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+      const count = snapshot.docs.length;
+      if (count > 0) {
+        FirestoreUsageService.recordOperation('READ', 'users', count, 'Fetch user accounts roster');
+      }
       return snapshot.docs.map((docSnap) => docSnap.data() as UserAccount);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, USERS_COLLECTION);
@@ -407,6 +425,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, REQUISITIONS_COLLECTION, requisition.id);
       await setDoc(docRef, JSON.parse(JSON.stringify(requisition)), { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'requisitions', 1, `Requisition: ${requisition.moduleName}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, docPath);
     }
@@ -418,6 +437,7 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, REQUISITIONS_COLLECTION, id);
       await deleteDoc(docRef);
+      FirestoreUsageService.recordOperation('DELETE', 'requisitions', 1, `Deleted Requisition: ${id}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, docPath);
     }
@@ -431,6 +451,10 @@ export class FirebaseStore {
         setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
       );
       const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+      const count = snapshot.docs.length;
+      if (count > 0) {
+        FirestoreUsageService.recordOperation('READ', 'requisitions', count, 'Fetch work requisitions');
+      }
       return snapshot.docs.map((docSnap) => docSnap.data() as WorkOnDemandRequisition);
     } catch (e) {
       handleFirestoreError(e, OperationType.LIST, REQUISITIONS_COLLECTION);

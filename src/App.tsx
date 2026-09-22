@@ -16,6 +16,7 @@ import { WorkOnDemandView } from './components/WorkOnDemandView';
 import { Session2023SelectorModal } from './components/Session2023SelectorModal';
 import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
 import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
+import { FirestoreUsageModal } from './components/FirestoreUsageModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { QuotaExceededModal } from './components/QuotaExceededModal';
 import { SplashScreen } from './components/SplashScreen';
@@ -86,6 +87,7 @@ export default function App() {
   });
   const [allRecords, setAllRecords] = useState<SubmissionRecord[]>([]);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState<boolean>(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [isUserAccountsModalOpen, setIsUserAccountsModalOpen] = useState<boolean>(false);
   const [isDataMigrationModalOpen, setIsDataMigrationModalOpen] = useState<boolean>(false);
@@ -514,6 +516,7 @@ export default function App() {
         isCollapsed={isSidebarCollapsed}
         onToggleCollapsed={() => setIsSidebarCollapsed((prev) => !prev)}
         savedCount={allRecords.length}
+        onOpenUsageModal={() => setIsUsageModalOpen(true)}
       />
 
       {/* Main Workspace Column */}
@@ -530,6 +533,7 @@ export default function App() {
             }
           }}
           onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+          onOpenUsageModal={() => setIsUsageModalOpen(true)}
           onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
           onOpenDataMigrationModal={() => setIsDataMigrationModalOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
@@ -1485,6 +1489,15 @@ export default function App() {
           onClose={() => setIsFirebaseModalOpen(false)}
           currentRecord={currentRecord}
           allRecords={allRecords}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* Real-time Firestore Daily Usage & Quotas Dashboard (Admin only) */}
+      {isAdmin && (
+        <FirestoreUsageModal
+          isOpen={isUsageModalOpen}
+          onClose={() => setIsUsageModalOpen(false)}
           isAdmin={isAdmin}
         />
       )}
