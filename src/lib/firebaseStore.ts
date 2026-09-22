@@ -146,7 +146,9 @@ if (typeof window !== 'undefined') {
 }
 
 export class FirebaseStore {
-  private static submissionCache: { records: SubmissionRecord[]; timestamp: number } | null = null;
+  private static submissionMap = new Map<string, SubmissionRecord>();
+  private static submissionCacheTimestamp = 0;
+  private static readonly submissionCacheTtlMs = 30000; // 30 seconds TTL
   private static inFlightFetchPromise: Promise<SubmissionRecord[]> | null = null;
   private static lastWriteHashes: Record<string, { hash: string; timestamp: number }> = {};
 
@@ -347,13 +349,22 @@ export class FirebaseStore {
     }
     const docPath = `${RECORDS_COLLECTION}/${record.id}`;
     if (this.isDuplicateWrite(docPath, record)) {
-      // Skip redundant duplicate write to save quota
+      // Record avoided duplicate write
+      FirestoreUsageService.recordDuplicateWriteAvoided(
+        'records',
+        1,
+        `Deduplicated write for ${record.department} - ${record.program} (${record.session})`
+      );
       return;
     }
     try {
       const docRef = doc(db, RECORDS_COLLECTION, record.id);
       await setDoc(docRef, record, { merge: true });
-      this.submissionCache = null; // Invalidate read cache on new write
+
+      // Synchronize in-memory normalized map
+      this.submissionMap.set(record.id, record);
+      this.submissionCacheTimestamp = Date.now();
+
       FirestoreUsageService.recordOperation('WRITE', 'records', 1, `${record.department} - ${record.program} (${record.session})`);
     } catch (e) {
       const isQuota = handleFirestoreError(e, OperationType.WRITE, docPath);
@@ -376,10 +387,33 @@ export class FirebaseStore {
     const validRecords = records.filter((r) => r && r.id);
     if (validRecords.length === 0) return;
 
+    // Filter out duplicate records
+    const newRecordsToWrite: SubmissionRecord[] = [];
+    let skippedDuplicates = 0;
+
+    validRecords.forEach((rec) => {
+      const docPath = `${RECORDS_COLLECTION}/${rec.id}`;
+      if (this.isDuplicateWrite(docPath, rec)) {
+        skippedDuplicates++;
+      } else {
+        newRecordsToWrite.push(rec);
+      }
+    });
+
+    if (skippedDuplicates > 0) {
+      FirestoreUsageService.recordDuplicateWriteAvoided(
+        'records',
+        skippedDuplicates,
+        `Deduplicated ${skippedDuplicates} unchanged batch submission records`
+      );
+    }
+
+    if (newRecordsToWrite.length === 0) return;
+
     // Chunk records into max 400 documents per batch (Firestore limit is 500)
     const BATCH_SIZE = 400;
-    for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
-      const chunk = validRecords.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < newRecordsToWrite.length; i += BATCH_SIZE) {
+      const chunk = newRecordsToWrite.slice(i, i + BATCH_SIZE);
       const batch = writeBatch(db);
       chunk.forEach((rec) => {
         const docRef = doc(db, RECORDS_COLLECTION, rec.id);
@@ -388,7 +422,10 @@ export class FirebaseStore {
 
       try {
         await batch.commit();
-        this.submissionCache = null; // Invalidate cache after batch write
+        chunk.forEach((rec) => {
+          this.submissionMap.set(rec.id, rec);
+        });
+        this.submissionCacheTimestamp = Date.now();
         FirestoreUsageService.recordOperation('WRITE', 'records', chunk.length, `Batch commit: ${chunk.length} submission records`);
       } catch (e) {
         const isQuota = handleFirestoreError(e, OperationType.WRITE, RECORDS_COLLECTION);
@@ -407,7 +444,11 @@ export class FirebaseStore {
     try {
       const docRef = doc(db, RECORDS_COLLECTION, id);
       await deleteDoc(docRef);
-      this.submissionCache = null;
+
+      // Remove from normalized map
+      this.submissionMap.delete(id);
+      this.submissionCacheTimestamp = Date.now();
+
       FirestoreUsageService.recordOperation('DELETE', 'records', 1, `Deleted record: ${id}`);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, docPath);
@@ -415,12 +456,16 @@ export class FirebaseStore {
   }
 
   static async fetchAllSubmissions(forceRefresh = false): Promise<SubmissionRecord[]> {
-    if (this.isQuotaExhausted()) return [];
+    if (this.isQuotaExhausted()) return Array.from(this.submissionMap.values());
     const now = Date.now();
-    // Cache-first strategy: return cached result if within 30s TTL
-    if (!forceRefresh && this.submissionCache && now - this.submissionCache.timestamp < 30000) {
-      return this.submissionCache.records;
+
+    // Cache-first strategy: return normalized cached result if within 30s TTL
+    if (!forceRefresh && this.submissionMap.size > 0 && now - this.submissionCacheTimestamp < this.submissionCacheTtlMs) {
+      const cached = Array.from(this.submissionMap.values());
+      FirestoreUsageService.recordCacheHit('records', cached.length, `Served ${cached.length} records from in-memory normalized cache`);
+      return cached;
     }
+
     // Deduplicate concurrent in-flight fetch operations
     if (this.inFlightFetchPromise) {
       return this.inFlightFetchPromise;
@@ -435,14 +480,19 @@ export class FirebaseStore {
         const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
         const count = snapshot.docs.length;
         if (count > 0) {
-          FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records (Cache-First Batch)');
+          FirestoreUsageService.recordOperation('READ', 'records', count, 'Fetch all academic records (Firestore getDocs Network Request)');
         }
-        const records = snapshot.docs.map((docSnap) => docSnap.data() as SubmissionRecord);
-        this.submissionCache = { records, timestamp: Date.now() };
-        return records;
+
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data() as SubmissionRecord;
+          this.submissionMap.set(docSnap.id, { ...data, id: docSnap.id });
+        });
+        this.submissionCacheTimestamp = Date.now();
+
+        return Array.from(this.submissionMap.values());
       } catch (e) {
         handleFirestoreError(e, OperationType.LIST, RECORDS_COLLECTION);
-        return this.submissionCache ? this.submissionCache.records : [];
+        return Array.from(this.submissionMap.values());
       } finally {
         this.inFlightFetchPromise = null;
       }
@@ -458,11 +508,28 @@ export class FirebaseStore {
     return onSnapshot(
       collection(db, RECORDS_COLLECTION),
       (snapshot) => {
-        const records: Record<string, SubmissionRecord> = {};
-        snapshot.forEach((docSnap) => {
-          records[docSnap.id] = docSnap.data() as SubmissionRecord;
+        // Incrementally update normalized Map based on docChanges
+        snapshot.docChanges().forEach((change) => {
+          const docId = change.doc.id;
+          const data = change.doc.data() as SubmissionRecord;
+
+          if (change.type === 'added' || change.type === 'modified') {
+            this.submissionMap.set(docId, { ...data, id: docId });
+          } else if (change.type === 'removed') {
+            this.submissionMap.delete(docId);
+          }
         });
-        callback(records);
+
+        // Mark cache timestamp fresh to ensure real-time snapshot is authoritative source
+        this.submissionCacheTimestamp = Date.now();
+
+        const recordsDict: Record<string, SubmissionRecord> = {};
+        this.submissionMap.forEach((rec, key) => {
+          recordsDict[key] = rec;
+        });
+
+        FirestoreUsageService.updateStorageEstimate(this.submissionMap.size, JSON.stringify(recordsDict).length);
+        callback(recordsDict);
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, RECORDS_COLLECTION);
@@ -479,6 +546,8 @@ export class FirebaseStore {
         batch.delete(docSnap.ref);
       });
       await batch.commit();
+      this.submissionMap.clear();
+      this.submissionCacheTimestamp = Date.now();
       FirestoreUsageService.recordOperation('DELETE', 'records', snapshot.size, 'Wipe all submission documents');
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, RECORDS_COLLECTION);

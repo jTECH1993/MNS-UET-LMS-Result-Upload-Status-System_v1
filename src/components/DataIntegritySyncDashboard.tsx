@@ -103,14 +103,9 @@ export const DataIntegritySyncDashboard: React.FC<Props> = ({ isCompact = false 
     });
   }, [stats.operationLogs, collectionFilter, statusFilter, searchQuery]);
 
-  // Compute optimization savings (estimated cached reads and deduplicated writes)
-  const savedReads = useMemo(() => {
-    return Math.max(142, (stats.readsByCollection.records || 0) * 3 + 85);
-  }, [stats.readsByCollection]);
-
-  const savedWrites = useMemo(() => {
-    return Math.max(38, (stats.writesByCollection.records || 0) * 2 + 12);
-  }, [stats.writesByCollection]);
+  // Actual optimization savings (tracked directly at Firestore execution boundary)
+  const savedReads = stats.cacheHits || 0;
+  const savedWrites = stats.duplicateWritesAvoided || 0;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden space-y-6 p-5 sm:p-6 text-slate-900 dark:text-slate-100">

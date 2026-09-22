@@ -20,10 +20,24 @@ import {
   FileText,
   Workflow,
   Sparkles,
+  TrendingUp,
+  Zap,
+  BarChart2,
+  ShieldAlert,
 } from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import {
   FirestoreUsageService,
   FirestoreUsageStats,
+  DailyUsageHistoryPoint,
   FIREBASE_CONSOLE_URL,
   FIREBASE_PROJECT_ID,
   FIRESTORE_DATABASE_ID,
@@ -51,6 +65,46 @@ export const FirestoreUsageModal: React.FC<Props> = ({
   const [selectedPlan, setSelectedPlan] = useState<FirebasePlanTier>(stats.planTier);
   const [activeTab, setActiveTab] = useState<'overview' | 'breakdown' | 'logs' | 'plan'>('overview');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  // 7-day historical usage data for API Usage Health Sparklines
+  const sevenDayHistory = React.useMemo(() => {
+    return FirestoreUsageService.getSevenDayUsageHistory();
+  }, [stats]);
+
+  const sevenDaySummary = React.useMemo(() => {
+    let totalReads = 0;
+    let totalWrites = 0;
+    let spikeCount = 0;
+    let peakOps = -1;
+    let peakDayLabel = '';
+    let peakSpikeReason = '';
+
+    sevenDayHistory.forEach((pt) => {
+      totalReads += pt.reads;
+      totalWrites += pt.writes;
+      if (pt.isSpike) spikeCount++;
+      if (pt.totalOps > peakOps) {
+        peakOps = pt.totalOps;
+        peakDayLabel = pt.dayLabel;
+        peakSpikeReason = pt.spikeReason || 'High volume operation burst';
+      }
+    });
+
+    const totalOps = totalReads + totalWrites;
+    const avgDailyOps = Math.round(totalOps / Math.max(1, sevenDayHistory.length));
+
+    return {
+      totalReads,
+      totalWrites,
+      totalOps,
+      avgDailyOps,
+      spikeCount,
+      peakOps,
+      peakDayLabel,
+      peakSpikeReason,
+      hasSpikes: spikeCount > 0,
+    };
+  }, [sevenDayHistory]);
 
   // Auto-refresh stats and countdown timer
   useEffect(() => {
@@ -432,6 +486,174 @@ export const FirestoreUsageModal: React.FC<Props> = ({
                   </div>
                 </div>
 
+              </div>
+
+              {/* API USAGE HEALTH VISUALIZER (7-DAY SPARKLINE CHART & ANOMALY DETECTOR) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 text-white shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shrink-0">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-extrabold text-sm sm:text-base text-white tracking-wide">
+                          API Usage Health &amp; 7-Day Activity Sparkline
+                        </h4>
+                        {sevenDaySummary.hasSpikes ? (
+                          <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-amber-400" />
+                            <span>{sevenDaySummary.spikeCount} Operation Spike(s) Detected</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            <span>Optimal Traffic Baseline</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        7-day trend of read and write activity across Firestore collections to assist Administrators in identifying anomalous operation bursts.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Micro Legend */}
+                  <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 self-start sm:self-center">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block shadow-xs"></span> Reads
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-xs"></span> Writes
+                    </span>
+                  </div>
+                </div>
+
+                {/* Recharts Area Chart Sparkline */}
+                <div className="h-52 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={sevenDayHistory}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorReads" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.5} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                        </linearGradient>
+                        <linearGradient id="colorWrites" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.5} />
+                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
+                      <XAxis
+                        dataKey="dayLabel"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={{ stroke: '#475569' }}
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={{ stroke: '#475569' }}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          borderColor: '#334155',
+                          borderRadius: '0.75rem',
+                          fontSize: '12px',
+                          color: '#f8fafc',
+                          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)',
+                        }}
+                        formatter={(value: any, name: any) => [
+                          `${Number(value).toLocaleString()} ops`,
+                          name === 'reads' ? '📖 Reads' : '✍️ Writes',
+                        ]}
+                        labelFormatter={(label, payload) => {
+                          const point = payload && payload[0] ? payload[0].payload : null;
+                          if (point && point.isSpike) {
+                            return `${label} — 🚨 ANOMALY SPIKE: ${point.spikeReason || 'Operation Burst'}`;
+                          }
+                          return `${label} Activity`;
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="reads"
+                        name="reads"
+                        stroke="#6366f1"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorReads)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="writes"
+                        name="writes"
+                        stroke="#f43f5e"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorWrites)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* 4 Health Metric Micro-Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-800">
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
+                    <div className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
+                      7-Day Total Ops
+                    </div>
+                    <div className="text-sm sm:text-base font-black text-indigo-300 mt-0.5 tabular-nums">
+                      {sevenDaySummary.totalOps.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {sevenDaySummary.totalReads.toLocaleString()} R / {sevenDaySummary.totalWrites.toLocaleString()} W
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
+                    <div className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
+                      Avg Daily Activity
+                    </div>
+                    <div className="text-sm sm:text-base font-black text-emerald-400 mt-0.5 tabular-nums">
+                      {sevenDaySummary.avgDailyOps.toLocaleString()} <span className="text-[10px] text-slate-400">ops/day</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Baseline operational pace
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
+                    <div className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
+                      Peak Volume Day
+                    </div>
+                    <div className="text-sm sm:text-base font-black text-amber-300 mt-0.5 truncate">
+                      {sevenDaySummary.peakDayLabel}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
+                      {sevenDaySummary.peakOps.toLocaleString()} total ops
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5">
+                    <div className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider">
+                      Anomaly Detector
+                    </div>
+                    <div className={`text-sm sm:text-base font-black mt-0.5 ${sevenDaySummary.hasSpikes ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {sevenDaySummary.hasSpikes ? `${sevenDaySummary.spikeCount} Spike(s)` : 'Clear (No Spikes)'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                      {sevenDaySummary.hasSpikes ? sevenDaySummary.peakSpikeReason : 'Within normal variance'}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Secondary Specs Bar: Storage, Egress & Daily Reset Countdown */}
