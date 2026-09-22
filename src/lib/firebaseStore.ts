@@ -8,6 +8,8 @@ import {
   deleteDoc,
   writeBatch,
   getDocFromServer,
+  disableNetwork,
+  enableNetwork,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { SubmissionRecord, WorkOnDemandRequisition, UserAccount, AccessLogEntry } from '../types';
@@ -51,6 +53,14 @@ function checkInitialQuotaExhaustion(): boolean {
 
 let isQuotaExhausted = checkInitialQuotaExhaustion();
 
+// If quota is known to be exhausted on startup, disable network immediately
+// to prevent the Firestore client SDK from attempting to open write streams or looping
+if (isQuotaExhausted) {
+  try {
+    disableNetwork(db).catch(() => {});
+  } catch (e) {}
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): boolean {
   const errMsg = error instanceof Error ? error.message : String(error);
   const lowerMsg = errMsg.toLowerCase();
@@ -64,21 +74,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     lowerMsg.includes('quota') ||
     errMsg.includes('429')
   ) {
-    if (!isQuotaExhausted) {
-      isQuotaExhausted = true;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(QUOTA_STORAGE_KEY, Date.now().toString());
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('mnsuet_firestore_quota_status', {
-              detail: { exhausted: true, message: errMsg },
-            })
-          );
-        }
-      } catch (e) {}
-    }
+    FirebaseStore.setQuotaExhausted(true);
     return true;
   }
 
@@ -103,6 +99,51 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   return false;
 }
 
+// Global interceptors to catch repeating internal Firestore stream retry loops
+if (typeof window !== 'undefined') {
+  const isQuotaRelated = (msg: string) => {
+    const lower = (msg || '').toLowerCase();
+    return (
+      lower.includes('resource-exhausted') ||
+      lower.includes('quota limit exceeded') ||
+      lower.includes('quota exceeded') ||
+      lower.includes('using maximum backoff delay') ||
+      lower.includes('write stream exhausted')
+    );
+  };
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    if (isQuotaRelated(msg)) {
+      FirebaseStore.setQuotaExhausted(true);
+      event.preventDefault();
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    const msg = event.message || (event.error instanceof Error ? event.error.message : '');
+    if (isQuotaRelated(msg)) {
+      FirebaseStore.setQuotaExhausted(true);
+      event.preventDefault();
+    }
+  });
+
+  // Intercept repeating console.error logs originating from @firebase/firestore's backoff retry loop
+  const origConsoleError = console.error;
+  console.error = function (...args: any[]) {
+    const fullText = args
+      .map((a) => (typeof a === 'object' ? (a?.message || a?.stack || JSON.stringify(a)) : String(a)))
+      .join(' ');
+    if (isQuotaRelated(fullText)) {
+      FirebaseStore.setQuotaExhausted(true);
+      // Suppress noisy repeating retry loop messages from flooding console
+      return;
+    }
+    origConsoleError.apply(console, args);
+  };
+}
+
 export class FirebaseStore {
   static isQuotaExhausted(): boolean {
     if (isQuotaExhausted) return true;
@@ -120,6 +161,12 @@ export class FirebaseStore {
           localStorage.removeItem(QUOTA_STORAGE_KEY);
         }
       }
+      if (exhausted) {
+        // Stop Firestore WriteStream from endless reconnect loops
+        disableNetwork(db).catch(() => {});
+      } else {
+        enableNetwork(db).catch(() => {});
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('mnsuet_firestore_quota_status', {
@@ -130,16 +177,20 @@ export class FirebaseStore {
     } catch (e) {}
   }
 
-  static async testConnection(): Promise<void> {
-    if (this.isQuotaExhausted()) return;
+  static async testConnection(): Promise<{ success: boolean; message?: string }> {
     try {
+      await enableNetwork(db);
       await getDocFromServer(doc(db, 'test', 'connection'));
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('the client is offline')) {
-        console.warn('Please check your Firebase configuration or internet connection.');
-      } else {
-        handleFirestoreError(error, OperationType.GET, 'test/connection');
+      this.setQuotaExhausted(false);
+      return { success: true };
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isQuota = handleFirestoreError(error, OperationType.GET, 'test/connection');
+      if (isQuota || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource-exhausted')) {
+        this.setQuotaExhausted(true);
+        return { success: false, message: 'Cloud Firestore quota is still reached for today. System remains in safe Local/SQLite mode.' };
       }
+      return { success: false, message: errMsg };
     }
   }
 
@@ -147,7 +198,7 @@ export class FirebaseStore {
   // GLOBAL STATE / CONFIGURATION
   // ---------------------------------------------------------------------------
   static async syncGlobalState(key: string, data: any): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     try {
       await setDoc(doc(db, 'config', key), { data: data ?? null, updatedAt: new Date().toISOString() });
     } catch (e) {
@@ -156,6 +207,7 @@ export class FirebaseStore {
   }
 
   static listenGlobalState(key: string, callback: (data: any) => void): () => void {
+    if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       doc(db, 'config', key),
       (docSnap) => {
@@ -172,7 +224,7 @@ export class FirebaseStore {
   }
 
   static async setSystemDeadline(isoString: string | null): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     try {
       const docRef = doc(db, SYSTEM_DOC);
       await setDoc(docRef, { deadline: isoString, updatedAt: new Date().toISOString() }, { merge: true });
@@ -182,7 +234,7 @@ export class FirebaseStore {
   }
 
   static async setLockdownDisabled(disabled: boolean): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     try {
       const docRef = doc(db, SYSTEM_DOC);
       await setDoc(docRef, { lockdownDisabled: disabled, updatedAt: new Date().toISOString() }, { merge: true });
@@ -192,6 +244,7 @@ export class FirebaseStore {
   }
 
   static listenToSystemConfig(callback: (config: any) => void): () => void {
+    if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       doc(db, SYSTEM_DOC),
       (docSnap) => {
@@ -209,7 +262,7 @@ export class FirebaseStore {
   // SUBMISSION RECORDS
   // ---------------------------------------------------------------------------
   static async saveSubmission(record: SubmissionRecord): Promise<void> {
-    if (isQuotaExhausted) {
+    if (this.isQuotaExhausted()) {
       const err = new Error('The Firestore daily write limit has been exceeded. Your submission cannot be saved at this time. Please try again later.');
       err.name = 'QuotaExceededError';
       throw err;
@@ -229,7 +282,7 @@ export class FirebaseStore {
   }
 
   static async deleteSubmission(id: string): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${RECORDS_COLLECTION}/${id}`;
     try {
       const docRef = doc(db, RECORDS_COLLECTION, id);
@@ -257,6 +310,7 @@ export class FirebaseStore {
   static listenToSubmissions(
     callback: (records: Record<string, SubmissionRecord>) => void
   ): () => void {
+    if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       collection(db, RECORDS_COLLECTION),
       (snapshot) => {
@@ -273,7 +327,7 @@ export class FirebaseStore {
   }
 
   static async wipeAllSubmissions(): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     try {
       const snapshot = await getDocs(collection(db, RECORDS_COLLECTION));
       const batch = writeBatch(db);
@@ -290,7 +344,7 @@ export class FirebaseStore {
   // USER ACCOUNTS SYNCHRONIZATION
   // ---------------------------------------------------------------------------
   static async saveUserAccount(user: UserAccount): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${USERS_COLLECTION}/${user.id}`;
     try {
       const docRef = doc(db, USERS_COLLECTION, user.id);
@@ -302,7 +356,7 @@ export class FirebaseStore {
   }
 
   static async deleteUserAccount(id: string): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${USERS_COLLECTION}/${id}`;
     try {
       const docRef = doc(db, USERS_COLLECTION, id);
@@ -328,6 +382,7 @@ export class FirebaseStore {
   }
 
   static listenToUserAccounts(callback: (accounts: UserAccount[]) => void): () => void {
+    if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       collection(db, USERS_COLLECTION),
       (snapshot) => {
@@ -347,7 +402,7 @@ export class FirebaseStore {
   // WORK ON DEMAND REQUISITIONS
   // ---------------------------------------------------------------------------
   static async saveWorkOnDemand(requisition: WorkOnDemandRequisition): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${REQUISITIONS_COLLECTION}/${requisition.id}`;
     try {
       const docRef = doc(db, REQUISITIONS_COLLECTION, requisition.id);
@@ -358,7 +413,7 @@ export class FirebaseStore {
   }
 
   static async deleteWorkOnDemand(id: string): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     const docPath = `${REQUISITIONS_COLLECTION}/${id}`;
     try {
       const docRef = doc(db, REQUISITIONS_COLLECTION, id);
@@ -384,6 +439,7 @@ export class FirebaseStore {
   }
 
   static listenToWorkOnDemand(callback: (items: WorkOnDemandRequisition[]) => void): () => void {
+    if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       collection(db, REQUISITIONS_COLLECTION),
       (snapshot) => {
@@ -402,15 +458,9 @@ export class FirebaseStore {
   // ---------------------------------------------------------------------------
   // AUDIT & ACCESS LOGS
   // ---------------------------------------------------------------------------
-  static async saveAccessLog(log: AccessLogEntry): Promise<void> {
-    if (this.isQuotaExhausted()) return;
-    const docPath = `${LOGS_COLLECTION}/${log.id}`;
-    try {
-      const docRef = doc(db, LOGS_COLLECTION, log.id);
-      await setDoc(docRef, JSON.parse(JSON.stringify(log)), { merge: true });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, docPath);
-    }
+  static async saveAccessLog(_log: AccessLogEntry): Promise<void> {
+    // Access logs are maintained in Local Storage & SQLite backend to conserve Firestore daily quota
+    return;
   }
 
   static async fetchRecentAccessLogs(limitCount = 50): Promise<AccessLogEntry[]> {
@@ -431,7 +481,7 @@ export class FirebaseStore {
   }
 
   static async wipeAllAccessLogs(): Promise<void> {
-    if (isQuotaExhausted) return;
+    if (this.isQuotaExhausted()) return;
     try {
       const snapshot = await getDocs(collection(db, LOGS_COLLECTION));
       const batch = writeBatch(db);
@@ -444,3 +494,4 @@ export class FirebaseStore {
     }
   }
 }
+
