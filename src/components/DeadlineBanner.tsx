@@ -13,8 +13,10 @@ import {
   Calendar,
   RotateCcw,
   Sparkles,
+  History,
 } from 'lucide-react';
 import { StorageService } from '../services/storageService';
+import { LockdownLogSection } from './LockdownLogSection';
 
 interface Props {
   currentSession: string;
@@ -80,6 +82,19 @@ export const DeadlineBanner: React.FC<Props> = ({
   // Modal for Executive Session & Semester Matrix
   const [isMatrixModalOpen, setIsMatrixModalOpen] = useState(false);
   const [matrixVersion, setMatrixVersion] = useState(0);
+
+  // Lockdown Log Section States
+  const [showInlineLogs, setShowInlineLogs] = useState(false);
+  const [matrixModalTab, setMatrixModalTab] = useState<'matrix' | 'logs'>('matrix');
+  const [logCount, setLogCount] = useState<number>(() => StorageService.getLockdownLogs().length);
+
+  useEffect(() => {
+    const handleLogsUpdate = () => {
+      setLogCount(StorageService.getLockdownLogs().length);
+    };
+    window.addEventListener('mnsuet_lockdown_logs_updated', handleLogsUpdate);
+    return () => window.removeEventListener('mnsuet_lockdown_logs_updated', handleLogsUpdate);
+  }, []);
 
   // Sync state when primarySession or primarySemester changes
   useEffect(() => {
@@ -305,12 +320,30 @@ export const DeadlineBanner: React.FC<Props> = ({
                   {/* Executive Session & Semester Matrix Button */}
                   <button
                     type="button"
-                    onClick={() => setIsMatrixModalOpen(true)}
+                    onClick={() => {
+                      setMatrixModalTab('matrix');
+                      setIsMatrixModalOpen(true);
+                    }}
                     className="px-2.5 py-1.5 flex items-center gap-1.5 rounded-md text-xs font-bold transition-all shadow-sm border bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-600 cursor-pointer"
                     title="View and configure lockdown status for all academic sessions & semesters"
                   >
                     <Layers className="w-3.5 h-3.5 text-indigo-400" />
                     <span>Lockdown Matrix</span>
+                  </button>
+
+                  {/* Lockdown Log Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineLogs((prev) => !prev)}
+                    className={`px-2.5 py-1.5 flex items-center gap-1.5 rounded-md text-xs font-bold transition-all shadow-sm border cursor-pointer ${
+                      showInlineLogs
+                        ? 'bg-indigo-600 text-white border-indigo-400 ring-2 ring-indigo-400/50'
+                        : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-600'
+                    }`}
+                    title="View past lockdown events, session, semester, timestamp, and admin triggers"
+                  >
+                    <History className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Lockdown Log ({logCount})</span>
                   </button>
                 </div>
               )}
@@ -545,39 +578,96 @@ export const DeadlineBanner: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* INLINE EXPANDED LOCKDOWN LOG SECTION */}
+      {showInlineLogs && (
+        <div className="mt-3 animate-in fade-in duration-200">
+          <LockdownLogSection
+            currentSession={primarySession}
+            currentSemester={primarySemester}
+            onClose={() => setShowInlineLogs(false)}
+          />
+        </div>
+      )}
+
       {/* EXECUTIVE SESSION & SEMESTER LOCKDOWN MATRIX MODAL */}
       {isMatrixModalOpen && isVC && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-xs">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between gap-3">
+            <div className="p-4 sm:p-5 bg-slate-800/80 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-                  <Layers className="w-5 h-5" />
+                  {matrixModalTab === 'logs' ? <History className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                    <span>Institutional Session &amp; Semester Lockdown Matrix</span>
+                    <span>
+                      {matrixModalTab === 'logs'
+                        ? 'Institutional Lockdown Log & Audit Trail'
+                        : 'Institutional Session & Semester Lockdown Matrix'}
+                    </span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
                       Vice Chancellor Control
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Configure and inspect granular lockdown states and deadlines for every academic session and semester cohort.
+                    {matrixModalTab === 'logs'
+                      ? 'Historical log of past lockdown events, specific academic sessions, semesters, start timestamps, and admin triggers.'
+                      : 'Configure and inspect granular lockdown states and deadlines for every academic session and semester cohort.'}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsMatrixModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-                title="Close Modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* View Tab Switcher & Close Button */}
+              <div className="flex items-center gap-2">
+                <div className="bg-slate-950/80 p-1 rounded-xl border border-slate-700/80 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMatrixModalTab('matrix')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      matrixModalTab === 'matrix'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Cohort Matrix</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMatrixModalTab('logs')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      matrixModalTab === 'logs'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Lockdown Log ({logCount})</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMatrixModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                  title="Close Modal"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Quick Batch Bar */}
+            {matrixModalTab === 'logs' ? (
+              <div className="p-4 sm:p-5 overflow-auto flex-1">
+                <LockdownLogSection
+                  currentSession={primarySession}
+                  currentSemester={primarySemester}
+                />
+              </div>
+            ) : (
+              <>
+                {/* Quick Batch Bar */}
             <div className="px-5 py-3 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
@@ -810,18 +900,22 @@ export const DeadlineBanner: React.FC<Props> = ({
                 </div>
               </div>
             </div>
+          </>
+        )}
 
             {/* Modal Footer */}
             <div className="p-4 bg-slate-800/80 border-t border-slate-700 flex items-center justify-between">
               <span className="text-xs text-slate-400">
-                All changes sync automatically to Firebase and enforce in real-time across the university.
+                {matrixModalTab === 'logs'
+                  ? 'Lockdown events record administrative changes in real-time and persist across sessions.'
+                  : 'All changes sync automatically to Firebase and enforce in real-time across the university.'}
               </span>
               <button
                 type="button"
                 onClick={() => setIsMatrixModalOpen(false)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-sm"
               >
-                Done / Close Matrix
+                Done / Close
               </button>
             </div>
           </div>

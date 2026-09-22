@@ -143,6 +143,23 @@ export interface AuditLogEntry {
   changes?: AuditChangeDetail[];
 }
 
+export interface LockdownLogEntry {
+  id: string;
+  session: string;
+  semester: string;
+  action: 'LOCKDOWN_OFF' | 'LOCKDOWN_ON' | 'DEADLINE_CHANGED' | 'BATCH_OVERRIDE';
+  actionLabel: string;
+  startTimestamp: string;
+  formattedTimestamp: string;
+  adminName: string;
+  adminEmail?: string;
+  adminRole?: string;
+  adminDesignation?: string;
+  details?: string;
+  previousState?: string;
+  newState?: string;
+}
+
 export interface SubmissionRecord {
   id: string; // key: department__program__degreeLevel__shift__session__semester__sec
   department: string;

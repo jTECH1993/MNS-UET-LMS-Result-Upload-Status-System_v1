@@ -293,6 +293,17 @@ export class FirebaseStore {
     }
   }
 
+  static async setScopeLockdownLogs(logs: any[]): Promise<void> {
+    if (this.isQuotaExhausted()) return;
+    try {
+      const docRef = doc(db, SYSTEM_DOC);
+      await setDoc(docRef, { lockdownLogs: logs, updatedAt: new Date().toISOString() }, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Lockdown Logs Audit Entry');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
+    }
+  }
+
   static listenToSystemConfig(callback: (config: any) => void): () => void {
     if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
