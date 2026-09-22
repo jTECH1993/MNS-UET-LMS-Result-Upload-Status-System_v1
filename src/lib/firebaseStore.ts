@@ -145,6 +145,12 @@ if (typeof window !== 'undefined') {
   };
 }
 
+export interface SubmissionChangeEvent {
+  type: 'added' | 'modified' | 'removed';
+  id: string;
+  record: SubmissionRecord;
+}
+
 export class FirebaseStore {
   private static submissionMap = new Map<string, SubmissionRecord>();
   private static submissionCacheTimestamp = 0;
@@ -502,22 +508,31 @@ export class FirebaseStore {
   }
 
   static listenToSubmissions(
-    callback: (records: Record<string, SubmissionRecord>) => void
+    callback: (records: Record<string, SubmissionRecord>, changes: SubmissionChangeEvent[]) => void
   ): () => void {
     if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(
       collection(db, RECORDS_COLLECTION),
       (snapshot) => {
+        const changes: SubmissionChangeEvent[] = [];
+
         // Incrementally update normalized Map based on docChanges
         snapshot.docChanges().forEach((change) => {
           const docId = change.doc.id;
           const data = change.doc.data() as SubmissionRecord;
+          const record = { ...data, id: docId };
 
           if (change.type === 'added' || change.type === 'modified') {
-            this.submissionMap.set(docId, { ...data, id: docId });
+            this.submissionMap.set(docId, record);
           } else if (change.type === 'removed') {
             this.submissionMap.delete(docId);
           }
+
+          changes.push({
+            type: change.type as 'added' | 'modified' | 'removed',
+            id: docId,
+            record,
+          });
         });
 
         // Mark cache timestamp fresh to ensure real-time snapshot is authoritative source
@@ -529,7 +544,7 @@ export class FirebaseStore {
         });
 
         FirestoreUsageService.updateStorageEstimate(this.submissionMap.size, JSON.stringify(recordsDict).length);
-        callback(recordsDict);
+        callback(recordsDict, changes);
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, RECORDS_COLLECTION);

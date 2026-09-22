@@ -9,7 +9,7 @@ export const QuotaExceededModal: React.FC = () => {
   const [details, setDetails] = useState({
     title: 'Cloud Write Quota Reached (Spark Free Tier)',
     message:
-      'The Firebase Firestore daily write unit limit (20,000 units/day) for this free-tier project has been reached.',
+      'The Firebase Firestore daily write unit limit (40,000 units/day) for this shared quota free-tier project has been reached.',
   });
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export const QuotaExceededModal: React.FC = () => {
           title: e.detail.title || 'Cloud Write Quota Reached (Spark Free Tier)',
           message:
             e.detail.message ||
-            'The Firebase Firestore daily write unit limit (20,000 units/day) for this free-tier project has been reached.',
+            'The Firebase Firestore daily write unit limit (40,000 units/day) for this shared quota free-tier project has been reached.',
         });
       }
       setIsOpen(true);

@@ -20,7 +20,7 @@ import {
   getLegacyRecordKey,
   sortSessions,
 } from '../data/departmentsData';
-import { FirebaseStore } from '../lib/firebaseStore';
+import { FirebaseStore, SubmissionChangeEvent } from '../lib/firebaseStore';
 
 const STORAGE_KEY = 'mnsuet_lms_result_records_v99';
 const USER_KEY = 'mnsuet_lms_active_user_v99';
@@ -41,6 +41,7 @@ export class StorageService {
   
   private static _isSyncing = false;
   private static _cachedStore: Record<string, SubmissionRecord> | null = null;
+  private static submissionsMap: Map<string, SubmissionRecord> = new Map<string, SubmissionRecord>();
   
   public static initFirebaseSync(): void {
     if (this._isSyncing) return;
@@ -51,9 +52,9 @@ export class StorageService {
       AuthService.initDatabaseSync();
     }).catch(console.error);
 
-    // Listen to Firebase records and update local storage incrementally
-    FirebaseStore.listenToSubmissions((records) => {
-      const changed = StorageService.mergeIncrementalSubmissions(records);
+    // Listen to Firebase records and update normalized submissionsMap directly from onSnapshot events
+    FirebaseStore.listenToSubmissions((records, changes) => {
+      const changed = StorageService.handleSubmissionsSnapshotChanges(changes, records);
       if (changed && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
       }
@@ -1395,22 +1396,101 @@ export class StorageService {
     return result;
   }
 
+  private static ensureMapInitialized(): void {
+    if (this.submissionsMap.size === 0) {
+      try {
+        const stored = localStorage.getItem('mnsuet_lms_result_records_v99');
+        if (stored) {
+          const parsed: Record<string, SubmissionRecord> = JSON.parse(stored);
+          Object.entries(parsed).forEach(([id, rec]) => {
+            if (rec && id) {
+              this.submissionsMap.set(id, rec);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+  }
+
+  public static getSubmissionsMap(): Map<string, SubmissionRecord> {
+    this.ensureMapInitialized();
+    return this.submissionsMap;
+  }
+
+  public static handleSubmissionsSnapshotChanges(
+    changes?: SubmissionChangeEvent[],
+    fallbackRecords?: Record<string, SubmissionRecord>
+  ): boolean {
+    this.ensureMapInitialized();
+    let changed = false;
+
+    if (changes && changes.length > 0) {
+      changes.forEach((change) => {
+        const { type, id, record } = change;
+        if (type === 'added' || type === 'modified') {
+          const existing = this.submissionsMap.get(id);
+          if (!existing || JSON.stringify(existing) !== JSON.stringify(record)) {
+            this.submissionsMap.set(id, record);
+            changed = true;
+          }
+        } else if (type === 'removed') {
+          if (this.submissionsMap.has(id)) {
+            this.submissionsMap.delete(id);
+            changed = true;
+          }
+        }
+      });
+    } else if (fallbackRecords) {
+      const remoteKeys = new Set(Object.keys(fallbackRecords));
+
+      Object.entries(fallbackRecords).forEach(([id, record]) => {
+        if (record && id) {
+          const existing = this.submissionsMap.get(id);
+          if (!existing || JSON.stringify(existing) !== JSON.stringify(record)) {
+            this.submissionsMap.set(id, record);
+            changed = true;
+          }
+        }
+      });
+
+      if (Object.keys(fallbackRecords).length > 0) {
+        this.submissionsMap.forEach((_, localId) => {
+          if (!localId.startsWith('__') && !remoteKeys.has(localId)) {
+            this.submissionsMap.delete(localId);
+            changed = true;
+          }
+        });
+      }
+    }
+
+    if (changed) {
+      this.syncStoreFromMap();
+    }
+
+    return changed;
+  }
+
   public static getStore(): Record<string, SubmissionRecord> {
+    this.ensureMapInitialized();
     if (this._cachedStore !== null) {
       return this._cachedStore;
     }
-    try {
-      const stored = localStorage.getItem('mnsuet_lms_result_records_v99');
-      if (stored) {
-        this._cachedStore = JSON.parse(stored);
-        return this._cachedStore!;
-      }
-    } catch (e) {}
-    this._cachedStore = {};
-    return this._cachedStore!;
+    const store: Record<string, SubmissionRecord> = {};
+    this.submissionsMap.forEach((rec, id) => {
+      store[id] = rec;
+    });
+    this._cachedStore = store;
+    return store;
   }
 
   private static setStore(data: Record<string, SubmissionRecord>): void {
+    this.ensureMapInitialized();
+    this.submissionsMap.clear();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value && key) {
+        this.submissionsMap.set(key, value);
+      }
+    });
     this._cachedStore = data;
     try {
       localStorage.setItem('mnsuet_lms_result_records_v99', JSON.stringify(data));
@@ -1419,8 +1499,22 @@ export class StorageService {
     }
   }
 
+  private static syncStoreFromMap(): void {
+    const store: Record<string, SubmissionRecord> = {};
+    this.submissionsMap.forEach((rec, id) => {
+      store[id] = rec;
+    });
+    this._cachedStore = store;
+    try {
+      localStorage.setItem('mnsuet_lms_result_records_v99', JSON.stringify(store));
+    } catch (e) {
+      console.warn('Failed to persist submissionsMap to localStorage:', e);
+    }
+  }
+
   public static invalidateCache(): void {
     this._cachedStore = null;
+    this.submissionsMap.clear();
   }
 
   public static getActiveUser(): ActiveUserSession {
@@ -2683,8 +2777,7 @@ export class StorageService {
   }
 
   public static getAllSubmissions(): SubmissionRecord[] {
-    const store = this.getStore();
-    return Object.values(store);
+    return Array.from(this.getSubmissionsMap().values());
   }
 
   // Clear all data to ensure 100% clean database (Zero Dummy Data Guarantee)

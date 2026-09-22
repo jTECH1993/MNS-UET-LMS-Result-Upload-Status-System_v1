@@ -318,7 +318,7 @@ export const FirestoreUsageModal: React.FC<Props> = ({
                     <div>
                       <h4 className="font-bold text-sm">Firestore Spark Daily Write Limit Exceeded</h4>
                       <p className="text-xs text-rose-700 dark:text-rose-300/90 mt-0.5">
-                        All 20,000 free writes for today have been consumed. The system has automatically activated the
+                        All 40,000 free writes for today have been consumed. The system has automatically activated the
                         fail-safe <strong>Local & SQLite Storage Mode</strong>. All faculty result uploads, marks, and changes continue saving securely to the local and server SQLite databases.
                       </p>
                     </div>
@@ -978,12 +978,12 @@ export const FirestoreUsageModal: React.FC<Props> = ({
                     )}
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
-                    Default free tier without requiring a billing account. Hard quota stops writing when 20k is reached.
+                    Default free tier without requiring a billing account. Shared quota group allows up to 40k writes daily.
                   </p>
                   <ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1.5 font-medium">
-                    <li className="flex items-center gap-2">✓ <strong>20,000</strong> Document Writes / day</li>
-                    <li className="flex items-center gap-2">✓ <strong>50,000</strong> Document Reads / day</li>
-                    <li className="flex items-center gap-2">✓ <strong>20,000</strong> Document Deletes / day</li>
+                    <li className="flex items-center gap-2">✓ <strong>40,000</strong> Write Units / day</li>
+                    <li className="flex items-center gap-2">✓ <strong>50,000</strong> Read Units / day</li>
+                    <li className="flex items-center gap-2">✓ <strong>50,000</strong> Real-Time Update Units / day</li>
                     <li className="flex items-center gap-2">✓ <strong>1 GiB</strong> Total Stored Data</li>
                     <li className="flex items-center gap-2">✓ <strong>10 GiB</strong> Network Egress / month</li>
                   </ul>
@@ -1028,7 +1028,7 @@ export const FirestoreUsageModal: React.FC<Props> = ({
                   <li>Open the official Firebase Console: <a href="https://console.firebase.google.com/project/hrcv-2d7ce/usage" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 underline font-mono">console.firebase.google.com/project/hrcv-2d7ce</a></li>
                   <li>Click <strong>Upgrade</strong> at the bottom left menu.</li>
                   <li>Select the <strong>Blaze Plan</strong> and link a Google Cloud Billing account.</li>
-                  <li>You keep the free 20,000 writes and 50,000 reads every day; billing only occurs if daily activity exceeds that volume.</li>
+                  <li>You keep the free 40,000 writes and 50,000 reads every day; billing only occurs if daily activity exceeds that volume.</li>
                 </ol>
               </div>
 

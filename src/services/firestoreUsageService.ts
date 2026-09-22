@@ -62,9 +62,9 @@ export interface FirestoreUsageStats {
 }
 
 export const SPARK_LIMITS: FirestoreUsageLimits = {
-  dailyWrites: 20000,
+  dailyWrites: 40000,
   dailyReads: 50000,
-  dailyDeletes: 20000,
+  dailyDeletes: 40000,
   storageBytes: 1024 * 1024 * 1024, // 1 GiB
   monthlyEgressBytes: 10 * 1024 * 1024 * 1024, // 10 GiB
 };
@@ -199,7 +199,7 @@ export class FirestoreUsageService {
         if (quotaTimestamp) {
           stats.isQuotaExhausted = true;
           stats.quotaExhaustedAt = new Date(parseInt(quotaTimestamp, 10)).toISOString();
-          // If writes are reported below the limit, adjust to at least the Spark 20,000 limit
+          // If writes are reported below the limit, adjust to at least the Spark 40,000 limit
           if (stats.writes < SPARK_LIMITS.dailyWrites) {
             stats.writes = SPARK_LIMITS.dailyWrites;
           }
