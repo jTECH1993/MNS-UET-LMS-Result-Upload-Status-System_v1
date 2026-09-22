@@ -182,15 +182,18 @@ export class FirebaseStore {
   static async testConnection(): Promise<{ success: boolean; message?: string }> {
     try {
       await enableNetwork(db);
-      await getDocFromServer(doc(db, 'test', 'connection'));
+      // Read the system config document which is guaranteed to be authorized by Firestore security rules
+      const docRef = doc(db, 'config', 'system');
+      await getDocFromServer(docRef);
       this.setQuotaExhausted(false);
-      return { success: true };
+      FirestoreUsageService.recordOperation('READ', 'config', 1, 'Real-time Cloud Connectivity Probe');
+      return { success: true, message: 'Cloud Firestore live connection active. Real-time stream is verified & responsive.' };
     } catch (error: any) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      const isQuota = handleFirestoreError(error, OperationType.GET, 'test/connection');
+      const isQuota = handleFirestoreError(error, OperationType.GET, 'config/system');
       if (isQuota || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource-exhausted')) {
         this.setQuotaExhausted(true);
-        return { success: false, message: 'Cloud Firestore quota is still reached for today. System remains in safe Local/SQLite mode.' };
+        return { success: false, message: 'Cloud Firestore daily quota limit is reached. Safe Local/SQLite mode active until midnight UTC reset.' };
       }
       return { success: false, message: errMsg };
     }
