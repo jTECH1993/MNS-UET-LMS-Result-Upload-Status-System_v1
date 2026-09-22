@@ -141,48 +141,10 @@ export const LockdownLogSection: React.FC<LockdownLogSectionProps> = ({
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = [
-      'Log ID',
-      'Start Timestamp (ISO)',
-      'Formatted Timestamp',
-      'Session',
-      'Semester',
-      'Action Type',
-      'Action Description',
-      'Admin Name',
-      'Admin Email',
-      'Admin Role',
-      'Admin Designation',
-      'Details / Remarks',
-      'Previous State',
-      'New State',
-    ];
-
-    const rows = filteredLogs.map((log) => [
-      `"${log.id}"`,
-      `"${log.startTimestamp}"`,
-      `"${log.formattedTimestamp || ''}"`,
-      `"${(log.session || '').replace(/"/g, '""')}"`,
-      `"${(log.semester || '').replace(/"/g, '""')}"`,
-      `"${log.action}"`,
-      `"${(log.actionLabel || '').replace(/"/g, '""')}"`,
-      `"${(log.adminName || '').replace(/"/g, '""')}"`,
-      `"${(log.adminEmail || '').replace(/"/g, '""')}"`,
-      `"${(log.adminRole || '').replace(/"/g, '""')}"`,
-      `"${(log.adminDesignation || '').replace(/"/g, '""')}"`,
-      `"${(log.details || '').replace(/"/g, '""')}"`,
-      `"${(log.previousState || '').replace(/"/g, '""')}"`,
-      `"${(log.newState || '').replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `MNSUET_Lockdown_Audit_Logs_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    StorageService.exportLockdownLogsCSV(
+      filteredLogs,
+      `MNSUET_Lockdown_Audit_Logs_${sessionFilter}_${semesterFilter}_${new Date().toISOString().slice(0, 10)}.csv`
+    );
   };
 
   const handleClearLogs = () => {

@@ -548,6 +548,64 @@ export class StorageService {
     }
   }
 
+  // Export lockdown audit log to CSV
+  public static exportLockdownLogsCSV(customLogs?: LockdownLogEntry[], filename?: string): void {
+    const logs = customLogs || this.getLockdownLogs();
+    if (logs.length === 0) {
+      console.warn('No lockdown audit log entries found to export.');
+      return;
+    }
+
+    const headers = [
+      'Log ID',
+      'Start Timestamp (ISO)',
+      'Formatted Date & Time',
+      'Scope Session',
+      'Scope Semester',
+      'Action Code',
+      'Action Description',
+      'Triggered By (Admin Name)',
+      'Admin Email',
+      'Admin Role',
+      'Admin Designation',
+      'Details / Remarks',
+      'Previous Lockdown State',
+      'New Lockdown State',
+    ];
+
+    const rows = logs.map((log) => [
+      `"${log.id}"`,
+      `"${log.startTimestamp}"`,
+      `"${log.formattedTimestamp || ''}"`,
+      `"${(log.session || 'All Sessions').replace(/"/g, '""')}"`,
+      `"${(log.semester || 'All Semesters').replace(/"/g, '""')}"`,
+      `"${log.action}"`,
+      `"${(log.actionLabel || '').replace(/"/g, '""')}"`,
+      `"${(log.adminName || 'System Admin').replace(/"/g, '""')}"`,
+      `"${(log.adminEmail || '').replace(/"/g, '""')}"`,
+      `"${(log.adminRole || 'VC').replace(/"/g, '""')}"`,
+      `"${(log.adminDesignation || '').replace(/"/g, '""')}"`,
+      `"${(log.details || '').replace(/"/g, '""')}"`,
+      `"${(log.previousState || '').replace(/"/g, '""')}"`,
+      `"${(log.newState || '').replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      filename || `MNSUET_Lockdown_Audit_Logs_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   public static getSystemDeadline(session?: string, semester?: string): string | null {
     const sessionDeadlines = this.getSessionDeadlines();
     const cleanSession = (session || '').trim();
