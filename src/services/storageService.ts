@@ -32,6 +32,8 @@ const WORK_ON_DEMAND_KEY = 'mnsuet_work_on_demand_requisitions_v99';
 const SYSTEM_DEADLINE_KEY = 'mnsuet_system_deadline_v99';
 const PROGRAM_SHIFTS_KEY = 'mnsuet_program_active_shifts_v99';
 const GLOBAL_ACTIVE_SHIFTS_KEY = 'mnsuet_global_active_shifts_v99';
+const SESSION_LOCKDOWNS_KEY = 'mnsuet_session_lockdowns_v99';
+const SESSION_DEADLINES_KEY = 'mnsuet_session_deadlines_v99';
 
 export class StorageService {
   
@@ -72,6 +74,24 @@ export class StorageService {
       if (config?.lockdownDisabled !== undefined && config.lockdownDisabled !== currentDisabled) {
         localStorage.setItem('mnsuet_lockdown_disabled_v99', config.lockdownDisabled ? 'true' : 'false');
         hasChanged = true;
+      }
+
+      if (config?.sessionLockdowns !== undefined) {
+        const storedStr = localStorage.getItem(SESSION_LOCKDOWNS_KEY) || '{}';
+        const newStr = JSON.stringify(config.sessionLockdowns);
+        if (storedStr !== newStr) {
+          localStorage.setItem(SESSION_LOCKDOWNS_KEY, newStr);
+          hasChanged = true;
+        }
+      }
+
+      if (config?.sessionDeadlines !== undefined) {
+        const storedStr = localStorage.getItem(SESSION_DEADLINES_KEY) || '{}';
+        const newStr = JSON.stringify(config.sessionDeadlines);
+        if (storedStr !== newStr) {
+          localStorage.setItem(SESSION_DEADLINES_KEY, newStr);
+          hasChanged = true;
+        }
       }
 
       if (hasChanged && typeof window !== 'undefined') {
@@ -183,48 +203,246 @@ export class StorageService {
 
 
   
-  public static getLockdownDisabled(): boolean {
+  public static getSessionLockdowns(): Record<string, boolean> {
+    try {
+      const raw = localStorage.getItem(SESSION_LOCKDOWNS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  public static getSessionDeadlines(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem(SESSION_DEADLINES_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  public static getLockdownDisabled(session?: string, semester?: string): boolean {
+    const sessionLockdowns = this.getSessionLockdowns();
+    const cleanSession = (session || '').trim();
+    const cleanSemester = (semester || '').trim();
+
+    if (cleanSession && cleanSemester && cleanSemester !== 'ALL') {
+      // Check exact session + semester key (e.g., "2023:1")
+      const key = `${cleanSession}:${cleanSemester}`;
+      if (sessionLockdowns[key] !== undefined) {
+        return Boolean(sessionLockdowns[key]);
+      }
+      // Check session-wide override (e.g., "2023:ALL")
+      const sessionAllKey = `${cleanSession}:ALL`;
+      if (sessionLockdowns[sessionAllKey] !== undefined) {
+        return Boolean(sessionLockdowns[sessionAllKey]);
+      }
+    } else if (cleanSession && cleanSemester === 'ALL') {
+      const sessionAllKey = `${cleanSession}:ALL`;
+      if (sessionLockdowns[sessionAllKey] !== undefined) {
+        return Boolean(sessionLockdowns[sessionAllKey]);
+      }
+    } else if (cleanSession) {
+      const sessionAllKey = `${cleanSession}:ALL`;
+      if (sessionLockdowns[sessionAllKey] !== undefined) {
+        return Boolean(sessionLockdowns[sessionAllKey]);
+      }
+    }
+
+    // Fallback to global lockdown setting
     return localStorage.getItem('mnsuet_lockdown_disabled_v99') === 'true';
   }
 
-  public static setLockdownDisabled(disabled: boolean): void {
-    localStorage.setItem('mnsuet_lockdown_disabled_v99', disabled ? 'true' : 'false');
+  public static setLockdownDisabled(
+    disabled: boolean,
+    session?: string,
+    semester?: string,
+    applyToAllSemesters: boolean = false
+  ): void {
+    const cleanSession = (session || '').trim();
+    const cleanSemester = (semester || '').trim();
+    const sessionLockdowns = this.getSessionLockdowns();
+
+    if (cleanSession && (cleanSemester === 'ALL' || applyToAllSemesters)) {
+      // Apply to all semesters of this session
+      sessionLockdowns[`${cleanSession}:ALL`] = disabled;
+      for (let s = 1; s <= 8; s++) {
+        sessionLockdowns[`${cleanSession}:${s}`] = disabled;
+      }
+    } else if (cleanSession && cleanSemester) {
+      // Specifically set for this session and semester
+      sessionLockdowns[`${cleanSession}:${cleanSemester}`] = disabled;
+    } else {
+      // Global fallback
+      localStorage.setItem('mnsuet_lockdown_disabled_v99', disabled ? 'true' : 'false');
+    }
+
+    localStorage.setItem(SESSION_LOCKDOWNS_KEY, JSON.stringify(sessionLockdowns));
+
     try {
-      FirebaseStore.setLockdownDisabled(disabled);
-    } catch(e) {}
+      FirebaseStore.setScopeLockdowns(sessionLockdowns, disabled);
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: this.getSystemDeadline() }));
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_deadline_updated', {
+          detail: { session: cleanSession, semester: cleanSemester, disabled, type: 'lockdown' },
+        })
+      );
     }
   }
 
-  public static getSystemDeadline(): string | null {
-    return localStorage.getItem('mnsuet_system_deadline_v99');
+  public static setBatchLockdownDisabled(
+    disabled: boolean,
+    sessions: string[],
+    semesters: string[]
+  ): void {
+    const sessionLockdowns = this.getSessionLockdowns();
+    const effectiveSemesters =
+      semesters.length === 0 || semesters.includes('ALL')
+        ? ['1', '2', '3', '4', '5', '6', '7', '8']
+        : semesters;
+
+    sessions.forEach((sess) => {
+      const cleanSess = sess.trim();
+      if (!cleanSess) return;
+      if (semesters.includes('ALL') || semesters.length === 0) {
+        sessionLockdowns[`${cleanSess}:ALL`] = disabled;
+      }
+      effectiveSemesters.forEach((sem) => {
+        sessionLockdowns[`${cleanSess}:${sem.trim()}`] = disabled;
+      });
+    });
+
+    localStorage.setItem(SESSION_LOCKDOWNS_KEY, JSON.stringify(sessionLockdowns));
+
+    try {
+      FirebaseStore.setScopeLockdowns(sessionLockdowns, disabled);
+    } catch (e) {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated'));
+    }
   }
 
-  public static isSystemDeadlineExpired(): boolean {
-    if (this.getLockdownDisabled()) {
-      return false; // Lockdown explicitly turned OFF by Vice Chancellor
+  public static getSystemDeadline(session?: string, semester?: string): string | null {
+    const sessionDeadlines = this.getSessionDeadlines();
+    const cleanSession = (session || '').trim();
+    const cleanSemester = (semester || '').trim();
+
+    if (cleanSession && cleanSemester && cleanSemester !== 'ALL') {
+      const key = `${cleanSession}:${cleanSemester}`;
+      if (sessionDeadlines[key]) {
+        return sessionDeadlines[key];
+      }
+      const sessionAllKey = `${cleanSession}:ALL`;
+      if (sessionDeadlines[sessionAllKey]) {
+        return sessionDeadlines[sessionAllKey];
+      }
+    } else if (cleanSession) {
+      const sessionAllKey = `${cleanSession}:ALL`;
+      if (sessionDeadlines[sessionAllKey]) {
+        return sessionDeadlines[sessionAllKey];
+      }
     }
-    const stored = this.getSystemDeadline();
+
+    return localStorage.getItem(SYSTEM_DEADLINE_KEY);
+  }
+
+  public static isSystemDeadlineExpired(session?: string, semester?: string): boolean {
+    if (this.getLockdownDisabled(session, semester)) {
+      return false; // Lockdown explicitly turned OFF by Vice Chancellor for this scope
+    }
+    const stored = this.getSystemDeadline(session, semester);
     if (!stored) {
-      return false; 
+      return false;
     }
     return new Date(stored).getTime() - new Date().getTime() <= 0;
   }
 
+  public static setSystemDeadline(
+    isoString: string | null,
+    session?: string,
+    semester?: string,
+    applyToAllSemesters: boolean = false
+  ): void {
+    const cleanSession = (session || '').trim();
+    const cleanSemester = (semester || '').trim();
+    const sessionDeadlines = this.getSessionDeadlines();
 
-  
-  public static setSystemDeadline(isoString: string | null): void {
-    if (isoString) {
-      localStorage.setItem('mnsuet_system_deadline_v99', isoString);
-      try { FirebaseStore.setSystemDeadline(isoString); } catch(e) {}
+    if (cleanSession && (cleanSemester === 'ALL' || applyToAllSemesters)) {
+      if (isoString) {
+        sessionDeadlines[`${cleanSession}:ALL`] = isoString;
+        for (let s = 1; s <= 8; s++) {
+          sessionDeadlines[`${cleanSession}:${s}`] = isoString;
+        }
+      } else {
+        delete sessionDeadlines[`${cleanSession}:ALL`];
+        for (let s = 1; s <= 8; s++) {
+          delete sessionDeadlines[`${cleanSession}:${s}`];
+        }
+      }
+    } else if (cleanSession && cleanSemester) {
+      if (isoString) {
+        sessionDeadlines[`${cleanSession}:${cleanSemester}`] = isoString;
+      } else {
+        delete sessionDeadlines[`${cleanSession}:${cleanSemester}`];
+      }
     } else {
-      localStorage.removeItem('mnsuet_system_deadline_v99');
-      try { FirebaseStore.setSystemDeadline(null); } catch(e) {}
+      if (isoString) {
+        localStorage.setItem(SYSTEM_DEADLINE_KEY, isoString);
+      } else {
+        localStorage.removeItem(SYSTEM_DEADLINE_KEY);
+      }
     }
+
+    localStorage.setItem(SESSION_DEADLINES_KEY, JSON.stringify(sessionDeadlines));
+
+    try {
+      FirebaseStore.setScopeDeadlines(sessionDeadlines, isoString);
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mnsuet_deadline_updated', { detail: isoString }));
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_deadline_updated', {
+          detail: { session: cleanSession, semester: cleanSemester, deadline: isoString },
+        })
+      );
     }
+  }
+
+  public static getLockdownSummaryForSessions(sessions: string[]): Array<{
+    session: string;
+    semester: string;
+    isLockdownDisabled: boolean;
+    isExpired: boolean;
+    deadline: string | null;
+  }> {
+    const results: Array<{
+      session: string;
+      semester: string;
+      isLockdownDisabled: boolean;
+      isExpired: boolean;
+      deadline: string | null;
+    }> = [];
+
+    sessions.forEach((sess) => {
+      for (let s = 1; s <= 8; s++) {
+        const sem = s.toString();
+        const isLockdownDisabled = this.getLockdownDisabled(sess, sem);
+        const deadline = this.getSystemDeadline(sess, sem);
+        const isExpired = this.isSystemDeadlineExpired(sess, sem);
+        results.push({
+          session: sess,
+          semester: sem,
+          isLockdownDisabled,
+          isExpired,
+          deadline,
+        });
+      }
+    });
+
+    return results;
   }
 
 

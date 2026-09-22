@@ -251,6 +251,48 @@ export class FirebaseStore {
     }
   }
 
+  static async setScopeLockdowns(
+    sessionLockdowns: Record<string, boolean>,
+    globalDisabled?: boolean
+  ): Promise<void> {
+    if (this.isQuotaExhausted()) return;
+    try {
+      const docRef = doc(db, SYSTEM_DOC);
+      const updatePayload: Record<string, any> = {
+        sessionLockdowns,
+        updatedAt: new Date().toISOString(),
+      };
+      if (globalDisabled !== undefined) {
+        updatePayload.lockdownDisabled = globalDisabled;
+      }
+      await setDoc(docRef, updatePayload, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Scope Lockdown Configuration');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
+    }
+  }
+
+  static async setScopeDeadlines(
+    sessionDeadlines: Record<string, string>,
+    globalDeadline?: string | null
+  ): Promise<void> {
+    if (this.isQuotaExhausted()) return;
+    try {
+      const docRef = doc(db, SYSTEM_DOC);
+      const updatePayload: Record<string, any> = {
+        sessionDeadlines,
+        updatedAt: new Date().toISOString(),
+      };
+      if (globalDeadline !== undefined) {
+        updatePayload.deadline = globalDeadline;
+      }
+      await setDoc(docRef, updatePayload, { merge: true });
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Scope Deadlines Configuration');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, SYSTEM_DOC);
+    }
+  }
+
   static listenToSystemConfig(callback: (config: any) => void): () => void {
     if (this.isQuotaExhausted()) return () => {};
     return onSnapshot(

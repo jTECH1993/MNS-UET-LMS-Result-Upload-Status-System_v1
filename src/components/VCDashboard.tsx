@@ -1148,15 +1148,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                     onClick={() => {
                       let updated: string[];
                       if (isSelected) {
-                        if (activeSessions.length === 1) return; // Keep at least one
+                        if (activeSessions.length === 1) {
+                          setCurrentSession(sess);
+                          return;
+                        }
+                        if (currentSession !== sess) {
+                          setCurrentSession(sess);
+                          return;
+                        }
                         updated = activeSessions.filter((s) => s !== sess);
+                        if (currentSession === sess) {
+                          setCurrentSession(updated[0]);
+                        }
                       } else {
                         updated = [...activeSessions, sess];
+                        setCurrentSession(sess);
                       }
                       setActiveSessions(updated);
-                      if (!updated.includes(currentSession)) {
-                        setCurrentSession(updated[0]);
-                      }
                       StorageService.setActiveSessions(updated);
                     }}
                     className={`group relative px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
@@ -1397,7 +1405,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       {/* 3. Institutional Deadline Tracker Banner */}
       <div className="mb-2">
-        <DeadlineBanner currentSession={currentSession} semesterFilter={selectedSemesterFilter} isVC={true} />
+        <DeadlineBanner
+          currentSession={currentSession}
+          semesterFilter={selectedSemesterFilter}
+          activeSessions={activeSessions}
+          selectedSemesters={selectedSemesters}
+          isVC={true}
+        />
       </div>
 
       {/* 4. High-Level Executive Summary Cards: Key Institutional Metrics */}

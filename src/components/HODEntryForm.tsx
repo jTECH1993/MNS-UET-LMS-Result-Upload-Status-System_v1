@@ -131,12 +131,23 @@ export const HODEntryForm: React.FC<Props> = ({
   const isVC = currentUser?.role === 'VC';
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  const [isDeadlineExpired, setIsDeadlineExpired] = useState<boolean>(() => StorageService.isSystemDeadlineExpired());
+  const [session, setSession] = useState<string>(
+    selectedSessionProp || StorageService.getSelectedSession()
+  );
+  const [semester, setSemester] = useState<string>(selectedSemesterProp || '1');
+
+  const [isDeadlineExpired, setIsDeadlineExpired] = useState<boolean>(() =>
+    StorageService.isSystemDeadlineExpired(
+      selectedSessionProp || StorageService.getSelectedSession(),
+      selectedSemesterProp || '1'
+    )
+  );
 
   useEffect(() => {
     const handleDeadlineUpdated = () => {
-      setIsDeadlineExpired(StorageService.isSystemDeadlineExpired());
+      setIsDeadlineExpired(StorageService.isSystemDeadlineExpired(session, semester));
     };
+    handleDeadlineUpdated();
     // Re-check periodically just in case it crosses the threshold while they are typing
     const interval = setInterval(handleDeadlineUpdated, 10000);
     window.addEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
@@ -144,7 +155,7 @@ export const HODEntryForm: React.FC<Props> = ({
       clearInterval(interval);
       window.removeEventListener('mnsuet_deadline_updated', handleDeadlineUpdated);
     };
-  }, []);
+  }, [session, semester]);
 
   // Lock form if readonly, or if VC, or if deadline expired and NOT VC/ADMIN
   const isReadOnly = Boolean(readOnly || isVC || (isDeadlineExpired && !isVC && !isAdmin));
@@ -185,9 +196,6 @@ export const HODEntryForm: React.FC<Props> = ({
   }, []);
 
   // Generic Session State
-  const [session, setSession] = useState<string>(
-    selectedSessionProp || StorageService.getSelectedSession()
-  );
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
 
   // Filter to show only programs that belong to the selected session
@@ -326,7 +334,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [customSectionInput, setCustomSectionInput] = useState<string>('');
 
   // Semester selection (1 to 8) - strictly isolated institutional semester cycle
-  const [semester, setSemester] = useState<string>(selectedSemesterProp || '1');
+  // (semester state initialized at top of component)
 
   // Course search query & advanced columns toggle
   const [courseFilterQuery, setCourseFilterQuery] = useState<string>('');
@@ -2486,7 +2494,13 @@ export const HODEntryForm: React.FC<Props> = ({
       )}
 
       <div className="mb-4">
-        <DeadlineBanner currentSession={session} semesterFilter={semester} isVC={false} />
+        <DeadlineBanner
+          currentSession={session}
+          semesterFilter={semester}
+          activeSessions={[session]}
+          selectedSemesters={[semester]}
+          isVC={false}
+        />
       </div>
 
       {/* CARD 2: SELECT PROGRAM DETAILS (Screenshot 1) */}
@@ -4715,7 +4729,7 @@ export const HODEntryForm: React.FC<Props> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
                 {isDeadlineExpired && !isVC && !isAdmin 
-                  ? 'Deadline Expired • Form is Locked (Contact VC to Edit)'
+                  ? `Deadline Expired for Session ${session} (Semester ${semester}) • Form is Locked (Contact VC to Edit)`
                   : 'Vice Chancellor Academic Oversight • Read-Only Inspection Mode'}
               </span>
             </div>
