@@ -836,13 +836,14 @@ export class StorageService {
     } else {
       // 2. Default coordinator template: Include active programs for this session
       if (sessionName === '2023') {
-        activePrograms = dept.programs.filter((p) => p.session2023 !== false).map((p) => p.name);
+        activePrograms = dept.programs.filter((p) => p.session2023 === true).map((p) => p.name);
       } else {
         activePrograms = dept.programs.map((p) => p.name);
       }
     }
 
-    // 3. Dynamic Database inclusion ONLY IF not explicitly configured by admin/coordinator:
+    // 3. Dynamic Database inclusion ONLY IF not explicitly configured by admin/coordinator,
+    // and program belongs to official department offerings and has actual valid uploaded subjects:
     if (!isConfigured) {
       try {
         const records = customRecords || this.getAllSubmissions();
@@ -856,7 +857,24 @@ export class StorageService {
           ) {
             if (r.program) {
               const canonical = this.normalizeProgramName(r.program, departmentName);
-              if (canonical && !activePrograms.includes(canonical)) {
+              const officialProg = dept.programs.find(
+                (p) => this.normalizeProgramName(p.name, departmentName) === canonical
+              );
+              // For session 2023, do not auto-include programs that are explicitly inactive in 2023
+              const isAllowedForSession =
+                sessionName !== '2023' || (officialProg && officialProg.session2023 === true);
+              const hasValidSubjects =
+                Array.isArray(r.subjects) &&
+                r.subjects.some(
+                  (s: any) =>
+                    s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status === 'Uploaded')
+                );
+              if (
+                canonical &&
+                isAllowedForSession &&
+                hasValidSubjects &&
+                !activePrograms.includes(canonical)
+              ) {
                 activePrograms.push(canonical);
               }
             }
@@ -1091,6 +1109,15 @@ export class StorageService {
     // Immediately persist to Firestore Database so changes reflect across devices and users
     try {
       FirebaseStore.syncGlobalState(key, roster).catch(() => {});
+    } catch (e) {}
+
+    // Persist to backend SQLite database API as well
+    try {
+      fetch(`/api/session-roster/${encodeURIComponent(sessionName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: departmentName, programs: normProgs, roster }),
+      }).catch(() => {});
     } catch (e) {}
 
     if (typeof window !== 'undefined') {

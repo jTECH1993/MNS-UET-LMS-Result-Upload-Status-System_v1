@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { SubmissionRecord, AcademicShift } from '../types';
 import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS } from '../data/departmentsData';
 import { StorageService } from '../services/storageService';
@@ -80,6 +80,19 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     uni: true, // Root expanded by default
   });
+  const [rosterVersion, setRosterVersion] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setRosterVersion((v) => v + 1);
+    window.addEventListener('mnsuet_roster_updated', handleUpdate);
+    window.addEventListener('mnsuet_sessions_updated', handleUpdate);
+    window.addEventListener('mnsuet_storage_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('mnsuet_roster_updated', handleUpdate);
+      window.removeEventListener('mnsuet_sessions_updated', handleUpdate);
+      window.removeEventListener('mnsuet_storage_updated', handleUpdate);
+    };
+  }, []);
 
   const toggleNode = (id: string) => {
     setExpandedNodes((prev) => ({
@@ -142,23 +155,16 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
             allRecords
           );
 
-          // Check if this program is enrolled/active in this session or has records
+          // Check if this program is registered/active in this session
           const isEnrolledInSession = activeProgramsForSession.some(
-            (p) => p.trim().toLowerCase() === progNode.name.trim().toLowerCase()
+            (p) =>
+              StorageService.normalizeProgramName(p, deptNode.name) ===
+                StorageService.normalizeProgramName(progNode.name, deptNode.name) ||
+              p.trim().toLowerCase() === progNode.name.trim().toLowerCase()
           );
 
-          const hasRecordsInSession = allRecords.some(
-            (r) =>
-              r &&
-              r.department &&
-              r.program &&
-              StorageService._isDeptMatch(deptNode.name, r.department) &&
-              StorageService._isProgMatch(progNode.name, r.program) &&
-              ((r.session || '2023').trim() === sessId || (r.session || '2023').includes(sessId))
-          );
-
-          // Only include this session for the program if it is selected/enrolled in this session or has submissions
-          if (!isEnrolledInSession && !hasRecordsInSession) {
+          // Strictly enforce: Only include this session for the program if it is officially registered in this session roster
+          if (!isEnrolledInSession) {
             return;
           }
 
@@ -307,15 +313,16 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
                     }
                   }
 
+                  let foundValidSubjects = false;
                   if (secRecords.length > 0) {
                     secRecords.forEach((r) => {
-
                       const subs = r.subjects || [];
                       const validSubs = subs.filter(
                         (s) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
                       );
 
                       if (validSubs.length > 0) {
+                        foundValidSubjects = true;
                         validSubs.forEach((sub, idx) => {
                           const isUploaded = sub.status === 'Uploaded';
                           if (isUploaded) secUploaded++;
@@ -336,7 +343,9 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
                         });
                       }
                     });
-                  } else {
+                  }
+
+                  if (!foundValidSubjects) {
                     // Seed 5 pending courses to represent the unsubmitted curriculum courses
                     secTotal = 5;
                     for (let idx = 0; idx < 5; idx++) {
@@ -389,7 +398,7 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
     });
 
     return departmentsMap;
-  }, [allRecords, activeSessions, selectedSemesterFilter, selectedShiftFilter]);
+  }, [allRecords, activeSessions, selectedSemesterFilter, selectedShiftFilter, rosterVersion]);
 
   // Aggregate global university compliance stats across all real departments
   const universityStats = useMemo(() => {

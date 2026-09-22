@@ -25,6 +25,7 @@ import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { DirectiveService, InstitutionalDirective } from '../services/directiveService';
 import { StorageService } from '../services/storageService';
 import { VCExecutiveSummaryPanel } from './VCExecutiveSummaryPanel';
+import { AcademicShift } from '../types';
 
 interface Props {
   allRecords: any[];
@@ -61,6 +62,7 @@ export function ActionCenterPanel({
   });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [rosterVersion, setRosterVersion] = useState(0);
 
   const reloadDirectives = () => {
     setDirectives(DirectiveService.getDirectives());
@@ -68,9 +70,16 @@ export function ActionCenterPanel({
 
   useEffect(() => {
     reloadDirectives();
+    const handleRosterUpdate = () => setRosterVersion((v) => v + 1);
     window.addEventListener('mnsuet_directives_updated', reloadDirectives);
+    window.addEventListener('mnsuet_roster_updated', handleRosterUpdate);
+    window.addEventListener('mnsuet_sessions_updated', handleRosterUpdate);
+    window.addEventListener('mnsuet_storage_updated', handleRosterUpdate);
     return () => {
       window.removeEventListener('mnsuet_directives_updated', reloadDirectives);
+      window.removeEventListener('mnsuet_roster_updated', handleRosterUpdate);
+      window.removeEventListener('mnsuet_sessions_updated', handleRosterUpdate);
+      window.removeEventListener('mnsuet_storage_updated', handleRosterUpdate);
     };
   }, []);
 
@@ -85,38 +94,93 @@ export function ActionCenterPanel({
         new Set(StorageService.getSessionPrograms(dept.name, currentSession, allRecords))
       );
 
-      const targetPrograms = dept.programs.filter((prog) => activeProgNames.includes(prog.name));
+      const targetPrograms = dept.programs.filter((prog) =>
+        activeProgNames.some(
+          (p) =>
+            StorageService.normalizeProgramName(p, dept.name) ===
+              StorageService.normalizeProgramName(prog.name, dept.name) ||
+            p.trim().toLowerCase() === prog.name.trim().toLowerCase()
+        )
+      );
 
       if (targetPrograms.length === 0) return null;
 
-      const deptRecords = allRecords.filter((r) => {
-        const matchDept = StorageService._isDeptMatch(dept.name, r.department);
-        const matchSess = (r.session || '2023').includes(currentSession);
-        const matchSem = selectedSemesterFilter === 'ALL' || String(r.semester || '1') === String(selectedSemesterFilter);
-        const matchShift = selectedShiftFilter === 'ALL' || (r.shift || 'Morning').toLowerCase() === selectedShiftFilter.toLowerCase();
-        return matchDept && matchSess && matchSem && matchShift;
-      });
-
-      let totalSubjectsFromRecords = 0;
+      let totalSubjects = 0;
       let uploadedCount = 0;
+      let pendingCount = 0;
 
-      deptRecords.forEach((r) => {
-        if (r.subjects && Array.isArray(r.subjects)) {
-          totalSubjectsFromRecords += r.subjects.length;
-          uploadedCount += r.subjects.filter((s: any) => s.status === 'Uploaded').length;
-        }
+      const semList = selectedSemesterFilter === 'ALL' ? ['1'] : [String(selectedSemesterFilter)];
+
+      targetPrograms.forEach((prog) => {
+        const allowedShifts = StorageService.getProgramShifts(dept.name, prog.name);
+        const evalShifts =
+          selectedShiftFilter === 'ALL'
+            ? allowedShifts
+            : allowedShifts.filter((s) => s.toLowerCase() === selectedShiftFilter.toLowerCase());
+
+        const shiftsToLoop =
+          evalShifts.length > 0
+            ? evalShifts
+            : selectedShiftFilter === 'ALL'
+            ? ['Morning']
+            : [selectedShiftFilter as AcademicShift];
+
+        shiftsToLoop.forEach((shift) => {
+          semList.forEach((sem) => {
+            const sections = StorageService.getAvailableSectionsForCohort(
+              dept.name,
+              prog.name,
+              currentSession,
+              sem,
+              shift
+            );
+            const sectionsToLoop = sections.length > 0 ? sections : ['A'];
+
+            sectionsToLoop.forEach((sec) => {
+              // Find matching database submission for this active cohort
+              const rec = allRecords.find((r) => {
+                if (!r || !r.department || !r.program) return false;
+                const matchDept = StorageService._isDeptMatch(dept.name, r.department);
+                const matchProg = StorageService._isProgMatch(prog.name, r.program);
+                const matchSess =
+                  (r.session || '2023').trim() === currentSession.trim() ||
+                  (r.session || '2023').includes(currentSession);
+                const matchSem = String(r.semester || '1').trim() === String(sem).trim();
+                const matchShift = (r.shift || 'Morning').toLowerCase() === shift.toLowerCase();
+                const matchSec = (r.section || 'A').trim().toUpperCase() === sec.trim().toUpperCase();
+                return matchDept && matchProg && matchSess && matchSem && matchShift && matchSec;
+              });
+
+              const validSubs =
+                rec && Array.isArray(rec.subjects)
+                  ? rec.subjects.filter(
+                      (s: any) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status)
+                    )
+                  : [];
+
+              if (validSubs.length > 0) {
+                const up = validSubs.filter((s: any) => s.status === 'Uploaded').length;
+                const tot = Math.max(validSubs.length, 5);
+                const pend = Math.max(0, tot - up);
+                uploadedCount += up;
+                pendingCount += pend;
+                totalSubjects += tot;
+              } else {
+                // No submission record yet or 0 valid subjects: standard 5 curriculum subjects are pending
+                totalSubjects += 5;
+                pendingCount += 5;
+              }
+            });
+          });
+        });
       });
 
-      // Expected curriculum course count for active programs in session
-      const totalSubjects = totalSubjectsFromRecords > 0 ? totalSubjectsFromRecords : targetPrograms.length * 5;
-
-      const pendingCount = Math.max(0, totalSubjects - uploadedCount);
       const progressPct = totalSubjects > 0 ? Math.round((uploadedCount / totalSubjects) * 100) : 0;
 
       let status: 'On Track' | 'In Progress' | 'At Risk' | 'Complete' = 'In Progress';
-      if (progressPct >= 100) status = 'Complete';
+      if (progressPct >= 100 && pendingCount === 0) status = 'Complete';
       else if (progressPct >= 85) status = 'On Track';
-      else if (progressPct >= 60) status = 'In Progress';
+      else if (progressPct >= 50) status = 'In Progress';
       else status = 'At Risk';
 
       return {
@@ -132,7 +196,7 @@ export function ActionCenterPanel({
         status
       };
     }).filter(Boolean) as any[];
-  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter]);
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter, rosterVersion]);
 
   // Aggregate Top Bar Metrics from dynamic database calculations
   const aggregatedMetrics = useMemo(() => {
@@ -225,10 +289,16 @@ export function ActionCenterPanel({
   // Recent Activities Stream computed dynamically from database allRecords
   const recentActivitiesList = useMemo(() => {
     const activeRecords = allRecords.filter(r => {
+      if (!r || !r.department || !r.program) return false;
       const matchSess = (r.session || '2023').includes(currentSession);
       const matchSem = selectedSemesterFilter === 'ALL' || String(r.semester || '1') === String(selectedSemesterFilter);
       const matchDept = selectedDeptFilter === 'ALL' || StorageService._isDeptMatch(selectedDeptFilter, r.department);
-      return matchSess && matchSem && matchDept;
+      if (!matchSess || !matchSem || !matchDept) return false;
+
+      // Ensure program is actively registered in this session's roster
+      const deptProgs = StorageService.getSessionPrograms(r.department, currentSession, allRecords);
+      const matchProg = deptProgs.some(p => StorageService._isProgMatch(p, r.program));
+      return matchProg;
     });
 
     if (activeRecords.length === 0) {
@@ -250,19 +320,22 @@ export function ActionCenterPanel({
     });
 
     return sorted.slice(0, 5).map((r, i) => {
-      const uploadedSubjects = r.subjects ? r.subjects.filter((s: any) => s.status === 'Uploaded').length : 0;
-      const totalSubjects = r.subjects ? r.subjects.length : 0;
+      const validSubs = Array.isArray(r.subjects)
+        ? r.subjects.filter((s: any) => s && (s.courseCode?.trim() || s.subjectTitle?.trim() || s.status))
+        : [];
+      const uploadedSubjects = validSubs.filter((s: any) => s.status === 'Uploaded').length;
+      const totalCount = validSubs.length > 0 ? validSubs.length : 5;
       const formattedTime = r.updatedAt ? new Date(r.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recorded';
 
       return {
         id: `act-${r.id || i}`,
-        text: `${r.program} (${r.shift || 'Morning'}, Sem ${r.semester || '1'}): ${uploadedSubjects}/${totalSubjects} uploaded`,
+        text: `${r.program} (${r.shift || 'Morning'}, Sem ${r.semester || '1'}): ${uploadedSubjects}/${totalCount} uploaded`,
         by: `by ${r.submittedBy || 'HOD'} (${(r.department || '').replace('Department of ', '')})`,
         time: formattedTime,
-        type: uploadedSubjects === totalSubjects && totalSubjects > 0 ? 'success' : uploadedSubjects > 0 ? 'info' : 'alert'
+        type: uploadedSubjects === totalCount && totalCount > 0 ? 'success' : uploadedSubjects > 0 ? 'info' : 'alert'
       };
     });
-  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter]);
+  }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter, rosterVersion]);
 
   // Active database upload activity count for scope
   const todayUploadedCount = useMemo(() => {

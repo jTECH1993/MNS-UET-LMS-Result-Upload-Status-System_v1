@@ -17,6 +17,7 @@ import {
 } from './src/db/schema.js';
 import { eq, and, desc, or } from 'drizzle-orm';
 import path from 'path';
+import { UNIVERSITY_DEPARTMENTS } from './src/data/departmentsData.js';
 
 const app = express();
 app.use(cors());
@@ -269,6 +270,40 @@ app.post('/api/auth/reset-password', asyncHandler(async (req, res) => {
 app.get('/api/sessions', asyncHandler(async (req, res) => {
   const sess = await db.select().from(sessions);
   res.json(sess);
+}));
+
+app.get('/api/programs', asyncHandler(async (req, res) => {
+  const progs = await db.select().from(programs);
+  res.json(progs);
+}));
+
+app.get('/api/session-roster/:session', asyncHandler(async (req, res) => {
+  const { session } = req.params;
+  const progs = await db.select().from(programs);
+  const roster: Record<string, string[]> = {};
+  progs.forEach((p) => {
+    const isActive = session === '2023' ? p.session2023 : true;
+    if (isActive) {
+      if (!roster[p.department]) roster[p.department] = [];
+      roster[p.department].push(p.name);
+    }
+  });
+  res.json({ session, roster });
+}));
+
+app.post('/api/session-roster/:session', asyncHandler(async (req, res) => {
+  const { session } = req.params;
+  const { department, programs: activeList } = req.body;
+  if (session === '2023' && department && Array.isArray(activeList)) {
+    const progsInDept = await db.select().from(programs).where(eq(programs.department, department));
+    for (const p of progsInDept) {
+      const shouldBeActive = activeList.some(
+        (n: string) => n.trim().toLowerCase() === p.name.trim().toLowerCase()
+      );
+      await db.update(programs).set({ session2023: shouldBeActive }).where(eq(programs.id, p.id));
+    }
+  }
+  res.json({ success: true, session, department, count: activeList?.length || 0 });
 }));
 
 app.get('/api/submissions', asyncHandler(async (req, res) => {
@@ -726,8 +761,41 @@ If there are no issues, state that clearly. DO NOT invent or make up any records
   }
 }));
 
+async function initDatabaseDefaults() {
+  try {
+    const existingProgs = await db.select().from(programs).limit(1);
+    if (existingProgs.length === 0) {
+      for (const dept of UNIVERSITY_DEPARTMENTS) {
+        for (const prog of dept.programs) {
+          try {
+            await db.insert(programs).values({
+              id: `prog_${dept.code}_${prog.name.replace(/[^a-zA-Z0-9]/g, '_')}`,
+              name: prog.name,
+              department: dept.name,
+              degreeLevel: prog.degreeLevel,
+              session2023: prog.session2023 === true,
+            });
+          } catch (e) {}
+        }
+      }
+    }
+    const existingSessions = await db.select().from(sessions).limit(1);
+    if (existingSessions.length === 0) {
+      try {
+        await db.insert(sessions).values([
+          { id: '2023', name: 'Session 2023', isActive: true, startDate: '2023-09-01', endDate: '2027-06-30' },
+          { id: '2024', name: 'Session 2024', isActive: true, startDate: '2024-09-01', endDate: '2028-06-30' },
+        ]);
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('Error seeding database defaults:', e);
+  }
+}
+
 // Fallback for vite middleware in dev, or static files in prod
 async function startServer() {
+  await initDatabaseDefaults();
   if (process.env.NODE_ENV !== 'production') {
     const { createServer } = await import('vite');
     const vite = await createServer({
