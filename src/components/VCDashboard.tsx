@@ -38,6 +38,7 @@ import { SubmissionTrendCard } from './SubmissionTrendCard';
 import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { UniversityDigitalTwin } from './UniversityDigitalTwin';
+import { VCDashboardPDFExportModal } from './VCDashboardPDFExportModal';
 import { CircularProgress } from './CircularProgress';
 import {
   CompletionRadarService,
@@ -154,6 +155,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [rosterDept, setRosterDept] = useState<string>(UNIVERSITY_DEPARTMENTS[0].name);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState<boolean>(false);
+  const [isPDFExportModalOpen, setIsPDFExportModalOpen] = useState<boolean>(false);
   const [isDataSourceModalOpen, setIsDataSourceModalOpen] = useState<boolean>(false);
   const [lastRecalculationTime, setLastRecalculationTime] = useState<string>(() => {
     return new Date(Date.now() - 12000).toLocaleString(); // Last recalculated 12 seconds before loading dashboard
@@ -1032,6 +1034,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           >
             <Activity className="w-4 h-4 text-amber-400" />
             <span>Audit Trail / Change History</span>
+          </button>
+
+          <button
+            id="btn-open-pdf-export-modal"
+            type="button"
+            onClick={() => setIsPDFExportModalOpen(true)}
+            className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg border border-emerald-600 shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+            title="Export current filtered view of submission records into structured PDF document for official reporting"
+          >
+            <FileText className="w-4 h-4 text-emerald-300" />
+            <span>Export Filtered PDF Report</span>
           </button>
 
           <button
@@ -2779,11 +2792,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               </span>
             )}
           </div>
-          <span className="text-xs text-slate-300">
-            {selectedSemesterFilter === 'ALL'
-              ? 'Click any semester number [1]–[8] to inspect full results'
-              : `Showing genuine results for Semester ${selectedSemesterFilter}. Click "Inspect Sheet" to view course rows.`}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-300 hidden sm:inline">
+              {selectedSemesterFilter === 'ALL'
+                ? 'Click any semester number [1]–[8] to inspect full results'
+                : `Showing genuine results for Semester ${selectedSemesterFilter}. Click "Inspect Sheet" to view course rows.`}
+            </span>
+            <button
+              id="btn-export-filtered-roster-pdf"
+              type="button"
+              onClick={() => setIsPDFExportModalOpen(true)}
+              className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-md shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Export current filtered view of submission records into structured PDF document for official reporting"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export PDF ({filteredPrograms.length})</span>
+            </button>
+          </div>
         </div>
 
         {/* Mobile Responsive Program Cards (Visible on screens < 768px) */}
@@ -3683,6 +3708,24 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         onClose={() => setIsLockdownScopeModalOpen(false)}
         initialSession={currentSession}
         initialSemester={selectedSemesterFilter}
+      />
+
+      {/* Filtered Submission PDF Export Modal */}
+      <VCDashboardPDFExportModal
+        isOpen={isPDFExportModalOpen}
+        onClose={() => setIsPDFExportModalOpen(false)}
+        filteredPrograms={filteredPrograms}
+        allRecords={allRecords}
+        activeSessions={activeSessions}
+        currentSession={currentSession}
+        selectedSemesterFilter={selectedSemesterFilter}
+        selectedDeptFilter={selectedDeptFilter}
+        selectedShiftFilter={selectedShiftFilter}
+        selectedSectionFilter={selectedSectionFilter}
+        statusFilter={statusFilter}
+        searchQuery={searchQuery}
+        onlyGenuineSubmissions={onlyGenuineSubmissions}
+        stats={stats}
       />
     </div>
   );
