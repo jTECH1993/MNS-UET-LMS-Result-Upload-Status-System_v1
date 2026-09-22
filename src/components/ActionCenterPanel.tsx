@@ -6,6 +6,9 @@ import {
   ShieldAlert,
   CheckCircle2,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
   User,
   FileText,
   Send,
@@ -63,6 +66,7 @@ export function ActionCenterPanel({
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [rosterVersion, setRosterVersion] = useState(0);
+  const [expandedDeptCode, setExpandedDeptCode] = useState<string | null>(null);
 
   const reloadDirectives = () => {
     setDirectives(DirectiveService.getDirectives());
@@ -109,7 +113,21 @@ export function ActionCenterPanel({
       let uploadedCount = 0;
       let pendingCount = 0;
 
+      const programBreakdown: Array<{
+        programName: string;
+        degreeLevel: string;
+        totalSubjects: number;
+        uploadedCount: number;
+        pendingCount: number;
+        progressPct: number;
+        status: 'Complete' | 'In Progress' | 'At Risk';
+      }> = [];
+
       targetPrograms.forEach((prog) => {
+        let progTotal = 0;
+        let progUploaded = 0;
+        let progPending = 0;
+
         const isMasterOrPhd = prog.degreeLevel === 'MS' || prog.degreeLevel === 'PhD';
         const semList =
           selectedSemesterFilter === 'ALL'
@@ -168,16 +186,36 @@ export function ActionCenterPanel({
                 const up = validSubs.filter((s: any) => s.status === 'Uploaded').length;
                 const tot = Math.max(validSubs.length, 5);
                 const pend = Math.max(0, tot - up);
-                uploadedCount += up;
-                pendingCount += pend;
-                totalSubjects += tot;
+                progUploaded += up;
+                progPending += pend;
+                progTotal += tot;
               } else {
                 // No submission record yet or 0 valid subjects: standard 5 curriculum subjects are pending
-                totalSubjects += 5;
-                pendingCount += 5;
+                progTotal += 5;
+                progPending += 5;
               }
             });
           });
+        });
+
+        const progPct = progTotal > 0 ? Math.round((progUploaded / progTotal) * 100) : 0;
+        let progStat: 'Complete' | 'In Progress' | 'At Risk' = 'In Progress';
+        if (progPct >= 100 && progPending === 0) progStat = 'Complete';
+        else if (progPct >= 50) progStat = 'In Progress';
+        else progStat = 'At Risk';
+
+        uploadedCount += progUploaded;
+        pendingCount += progPending;
+        totalSubjects += progTotal;
+
+        programBreakdown.push({
+          programName: prog.name,
+          degreeLevel: prog.degreeLevel || 'BS',
+          totalSubjects: progTotal,
+          uploadedCount: progUploaded,
+          pendingCount: progPending,
+          progressPct: progPct,
+          status: progStat
         });
       });
 
@@ -189,6 +227,8 @@ export function ActionCenterPanel({
       else if (progressPct >= 50) status = 'In Progress';
       else status = 'At Risk';
 
+      const pendingPrograms = programBreakdown.filter(p => p.pendingCount > 0);
+
       return {
         id: index + 1,
         code: dept.code,
@@ -199,7 +239,9 @@ export function ActionCenterPanel({
         uploadedCount,
         pendingCount,
         progressPct,
-        status
+        status,
+        programBreakdown,
+        pendingPrograms
       };
     }).filter(Boolean) as any[];
   }, [allRecords, currentSession, selectedSemesterFilter, selectedDeptFilter, selectedShiftFilter, rosterVersion]);
@@ -223,6 +265,49 @@ export function ActionCenterPanel({
       atRiskDepts
     };
   }, [departmentStats]);
+
+  // Open directive modal pre-populated with program-specific pending status
+  const openDirectiveModal = (deptFullName: string, targetProg: string = 'ALL') => {
+    const deptObj = departmentStats.find(d => d.fullName === deptFullName);
+    const pendingProgs = deptObj ? deptObj.pendingPrograms : [];
+    const semText = selectedSemesterFilter === 'ALL' ? 'All Semesters' : `Semester ${selectedSemesterFilter}`;
+
+    let generatedMessage = '';
+    let generatedTitle = '';
+
+    if (targetProg !== 'ALL' && targetProg) {
+      const progInfo = deptObj?.programBreakdown.find(p => p.programName === targetProg);
+      const pendingCount = progInfo ? progInfo.pendingCount : 0;
+      const uploadedCount = progInfo ? progInfo.uploadedCount : 0;
+      const totalCount = progInfo ? progInfo.totalSubjects : 0;
+
+      generatedTitle = `LMS Submissions Review for ${targetProg}`;
+      generatedMessage = `Official Executive Directive for ${targetProg} (${deptFullName}):\n\nResult Upload Status for Session ${currentSession} (${semText}):\n• ${pendingCount} course subject(s) currently pending (${uploadedCount}/${totalCount} uploaded).\n\nThe HOD and Program Coordinator for ${targetProg} are directed to immediately complete, verify, and finalize all outstanding LMS course grade sheets without further delay.`;
+    } else {
+      generatedTitle = `LMS Submissions Review for ${deptFullName.replace('Department of ', '')}`;
+      if (pendingProgs.length > 0) {
+        const progListText = pendingProgs
+          .map(p => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
+          .join('\n');
+
+        generatedMessage = `Reviewing result uploads for ${deptFullName} (Session ${currentSession}, ${semText}).\n\nThe following degree program(s) remain incomplete:\n${progListText}\n\nAll concerned HODs and Program Coordinators are directed to ensure complete upload and verification of LMS grade sheets immediately.`;
+      } else {
+        generatedMessage = `Reviewing result uploads for ${deptFullName}. All degree program results are 100% uploaded and verified for Session ${currentSession}.`;
+      }
+    }
+
+    setSelectedDepartmentForDirective(deptFullName);
+    setDirectiveForm({
+      department: deptFullName,
+      program: targetProg,
+      title: generatedTitle,
+      customTitle: '',
+      message: generatedMessage,
+      priority: 'CRITICAL',
+      deadline: 'Today 5:00 PM'
+    });
+    setIsNewDirectiveModalOpen(true);
+  };
 
   // Handle Dispatching Directive Order
   const handleDispatchDirective = (e: React.FormEvent) => {
@@ -249,20 +334,26 @@ export function ActionCenterPanel({
   // Bulk reminder to pending departments
   const handleSendBulkReminder = () => {
     const pendingDepts = departmentStats.filter(d => d.pendingCount > 0);
+    const semText = selectedSemesterFilter === 'ALL' ? 'All Semesters' : `Semester ${selectedSemesterFilter}`;
+
     pendingDepts.forEach(dept => {
+      const progListText = dept.pendingPrograms
+        .map(p => `• ${p.programName}: ${p.pendingCount} subject(s) pending (${p.uploadedCount}/${p.totalSubjects} uploaded)`)
+        .join('\n');
+
       DirectiveService.createDirective({
         senderRole: 'VC',
         senderName: 'Vice Chancellor Office',
         targetDepartment: dept.fullName,
         targetRole: 'HOD',
-        title: `URGENT: LMS Result Submissions Pending`,
-        message: `Your department has ${dept.pendingCount} course result sheet(s) pending for Session ${currentSession} (Semester ${selectedSemesterFilter}). Kindly ensure immediate upload today.`,
+        title: `URGENT: LMS Result Submissions Pending (${dept.name})`,
+        message: `Your department has outstanding course result sheet(s) for Session ${currentSession} (${semText}).\n\nRemaining Pending Programs:\n${progListText}\n\nKindly ensure immediate upload and verification today.`,
         priority: 'CRITICAL',
         deadline: 'Today 5:00 PM'
       });
     });
 
-    setToastMessage(`Official Reminders sent to ${pendingDepts.length} HODs of pending departments!`);
+    setToastMessage(`Official Reminders sent to ${pendingDepts.length} HODs with program-specific pending status!`);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -281,15 +372,22 @@ export function ActionCenterPanel({
   const criticalActionsList = useMemo(() => {
     return departmentStats
       .filter(d => d.pendingCount > 0)
-      .map(d => ({
-        id: `ca-${d.code}`,
-        dept: d.name,
-        fullName: d.fullName,
-        detail: `${d.pendingCount} pending subject(s) (${d.uploadedCount}/${d.totalSubjects} uploaded)`,
-        status: d.uploadedCount === 0 ? 'Overdue' : 'Pending',
-        color: d.uploadedCount === 0 ? 'rose' : 'amber',
-        urgency: d.uploadedCount === 0 ? 'CRITICAL' : 'HIGH'
-      }));
+      .map(d => {
+        const progDetail = d.pendingPrograms.length > 0
+          ? d.pendingPrograms.map(p => `${p.programName}: ${p.pendingCount} pending`).join(', ')
+          : `${d.pendingCount} pending subject(s)`;
+
+        return {
+          id: `ca-${d.code}`,
+          dept: d.name,
+          fullName: d.fullName,
+          detail: progDetail,
+          pendingPrograms: d.pendingPrograms,
+          status: d.uploadedCount === 0 ? 'Overdue' : 'Pending',
+          color: d.uploadedCount === 0 ? 'rose' : 'amber',
+          urgency: d.uploadedCount === 0 ? 'CRITICAL' : 'HIGH'
+        };
+      });
   }, [departmentStats]);
 
   // Recent Activities Stream computed dynamically from database allRecords
@@ -728,62 +826,172 @@ export function ActionCenterPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium">
-                {departmentStats.map(dept => (
-                  <tr key={dept.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 px-2 text-slate-500 font-mono text-[10px]">{dept.id}</td>
-                    <td className="py-2.5 px-2 font-bold text-slate-200">{dept.name}</td>
-                    <td className="py-2.5 px-2 text-center text-slate-400 font-mono">{dept.programsCount}</td>
-                    <td className="py-2.5 px-2 text-center text-slate-300 font-mono">{dept.totalSubjects}</td>
-                    <td className="py-2.5 px-2 text-center text-slate-300 font-mono">{dept.uploadedCount}</td>
-                    <td className={`py-2.5 px-2 text-center font-bold font-mono ${dept.pendingCount > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
-                      {dept.pendingCount}
-                    </td>
-                    <td className="py-2.5 px-2 w-28">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              dept.status === 'Complete' ? 'bg-emerald-500' :
-                              dept.status === 'On Track' ? 'bg-blue-500' :
-                              dept.status === 'In Progress' ? 'bg-amber-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${dept.progressPct}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-mono font-bold text-slate-400">{dept.progressPct}%</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded uppercase ${
-                        dept.status === 'Complete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                        dept.status === 'On Track' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                        dept.status === 'In Progress' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                        'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                      }`}>
-                        {dept.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedDepartmentForDirective(dept.fullName);
-                          setDirectiveForm(prev => ({
-                            ...prev,
-                            department: dept.fullName,
-                            title: `LMS Submissions Review for ${dept.name}`,
-                            message: `Reviewing result uploads for ${dept.name}. ${dept.pendingCount} subjects currently pending.`
-                          }));
-                          setIsNewDirectiveModalOpen(true);
-                        }}
-                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 ml-auto cursor-pointer"
-                      >
-                        <span>View</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {departmentStats.map(dept => {
+                  const isExpanded = expandedDeptCode === dept.code;
+                  return (
+                    <React.Fragment key={dept.id}>
+                      <tr className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-2 text-slate-500 font-mono text-[10px]">{dept.id}</td>
+                        <td className="py-2.5 px-2 font-bold text-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedDeptCode(isExpanded ? null : dept.code)}
+                            className="flex items-center gap-1.5 hover:text-indigo-300 text-left cursor-pointer"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            )}
+                            <span>{dept.name}</span>
+                          </button>
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-slate-400 font-mono">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedDeptCode(isExpanded ? null : dept.code)}
+                            className="hover:underline hover:text-indigo-300 cursor-pointer"
+                          >
+                            {dept.programsCount}
+                          </button>
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-slate-300 font-mono">{dept.totalSubjects}</td>
+                        <td className="py-2.5 px-2 text-center text-slate-300 font-mono">{dept.uploadedCount}</td>
+                        <td className={`py-2.5 px-2 text-center font-bold font-mono ${dept.pendingCount > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+                          {dept.pendingCount}
+                        </td>
+                        <td className="py-2.5 px-2 w-28">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  dept.status === 'Complete' ? 'bg-emerald-500' :
+                                  dept.status === 'On Track' ? 'bg-blue-500' :
+                                  dept.status === 'In Progress' ? 'bg-amber-500' : 'bg-rose-500'
+                                }`}
+                                style={{ width: `${dept.progressPct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-slate-400">{dept.progressPct}%</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded uppercase ${
+                            dept.status === 'Complete' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                            dept.status === 'On Track' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                            dept.status === 'In Progress' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                          }`}>
+                            {dept.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedDeptCode(isExpanded ? null : dept.code)}
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-md border border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+                              title="View granular program breakdown for this department"
+                            >
+                              <GraduationCap className="w-3 h-3 text-indigo-400" />
+                              <span>{isExpanded ? 'Hide' : 'Programs'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openDirectiveModal(dept.fullName, 'ALL')}
+                              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Issue executive directive order for this department"
+                            >
+                              <span>Direct Order</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expanded Program Breakdown Sub-Table */}
+                      {isExpanded && (
+                        <tr className="bg-slate-900/95 border-b border-indigo-500/30">
+                          <td colSpan={9} className="p-4 bg-slate-950/80">
+                            <div className="space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <GraduationCap className="w-4 h-4 text-indigo-400" />
+                                  <span className="text-xs font-black text-white uppercase tracking-wide">
+                                    Degree Program Compliance Breakdown ({dept.name})
+                                  </span>
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-bold">
+                                    {dept.pendingPrograms.length} Pending Program(s)
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openDirectiveModal(dept.fullName, 'ALL')}
+                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Send className="w-3 h-3" />
+                                  <span>Dispatch Directive for All Pending Programs</span>
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                {dept.programBreakdown.map((prog: any, pIdx: number) => (
+                                  <div
+                                    key={pIdx}
+                                    className={`p-3 rounded-xl border transition-all ${
+                                      prog.pendingCount > 0
+                                        ? 'bg-rose-950/20 border-rose-500/40 hover:border-rose-500/70'
+                                        : 'bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-bold text-white">{prog.programName}</span>
+                                          <span className="text-[9px] font-mono px-1.5 py-0.2 bg-slate-800 text-slate-300 rounded font-bold">
+                                            {prog.degreeLevel}
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
+                                          <span>Uploaded: <strong className="text-white">{prog.uploadedCount}/{prog.totalSubjects}</strong></span>
+                                          <span>•</span>
+                                          <span className={prog.pendingCount > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                            {prog.pendingCount > 0 ? `${prog.pendingCount} Subject(s) Pending` : '100% Complete'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span
+                                        className={`text-[9px] font-black px-2 py-0.5 rounded uppercase ${
+                                          prog.pendingCount > 0
+                                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                        }`}
+                                      >
+                                        {prog.pendingCount > 0 ? 'Pending' : 'Uploaded'}
+                                      </span>
+                                    </div>
+
+                                    {prog.pendingCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openDirectiveModal(dept.fullName, prog.programName)}
+                                        className="w-full mt-2.5 py-1 px-2 bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white font-bold text-[10px] rounded-lg border border-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                      >
+                                        <Send className="w-3 h-3 text-indigo-400" />
+                                        <span>Issue Order for {prog.programName}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -883,19 +1091,47 @@ export function ActionCenterPanel({
 
             <form onSubmit={handleDispatchDirective} className="p-5 space-y-4">
               
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 uppercase block">
-                  Target Department
-                </label>
-                <select
-                  value={directiveForm.department}
-                  onChange={e => setDirectiveForm(prev => ({ ...prev, department: e.target.value }))}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                >
-                  {UNIVERSITY_DEPARTMENTS.map(d => (
-                    <option key={d.code} value={d.name}>{d.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 uppercase block">
+                    Target Department
+                  </label>
+                  <select
+                    value={directiveForm.department}
+                    onChange={e => {
+                      const newDept = e.target.value;
+                      openDirectiveModal(newDept, 'ALL');
+                    }}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {UNIVERSITY_DEPARTMENTS.map(d => (
+                      <option key={d.code} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 uppercase block">
+                    Target Degree Program
+                  </label>
+                  <select
+                    value={directiveForm.program || 'ALL'}
+                    onChange={e => {
+                      const newProg = e.target.value;
+                      openDirectiveModal(directiveForm.department, newProg);
+                    }}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="ALL">All Programs in Department</option>
+                    {departmentStats
+                      .find(d => d.fullName === directiveForm.department)
+                      ?.programBreakdown.map((p: any) => (
+                        <option key={p.programName} value={p.programName}>
+                          {p.programName} ({p.pendingCount > 0 ? `${p.pendingCount} Pending` : '100% Uploaded'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -907,7 +1143,7 @@ export function ActionCenterPanel({
                   value={directiveForm.title}
                   onChange={e => setDirectiveForm(prev => ({ ...prev, title: e.target.value }))}
                   required
-                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-bold"
                 />
               </div>
 
@@ -938,15 +1174,24 @@ export function ActionCenterPanel({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 uppercase block">
-                  Directive Message Body
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 uppercase block">
+                    Directive Message Body
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openDirectiveModal(directiveForm.department, directiveForm.program || 'ALL')}
+                    className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    🔄 Auto-Generate Text
+                  </button>
+                </div>
                 <textarea
-                  rows={4}
+                  rows={5}
                   value={directiveForm.message}
                   onChange={e => setDirectiveForm(prev => ({ ...prev, message: e.target.value }))}
                   required
-                  className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                  className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
                 />
               </div>
 
