@@ -21,6 +21,7 @@ import {
   sortSessions,
 } from '../data/departmentsData';
 import { FirebaseStore, SubmissionChangeEvent } from '../lib/firebaseStore';
+import { FirestoreUsageService } from './firestoreUsageService';
 
 const STORAGE_KEY = 'mnsuet_lms_result_records_v99';
 const USER_KEY = 'mnsuet_lms_active_user_v99';
@@ -42,6 +43,172 @@ export class StorageService {
   private static _isSyncing = false;
   private static _cachedStore: Record<string, SubmissionRecord> | null = null;
   private static submissionsMap: Map<string, SubmissionRecord> = new Map<string, SubmissionRecord>();
+
+  // Internal Operation Telemetry Counters (Distinguishes actual Firestore network ops from memory cache hits)
+  private static _actualReads = 0;
+  private static _actualWrites = 0;
+  private static _actualDeletes = 0;
+  private static _memoryCacheHits = 0;
+  private static _duplicateWritesAvoided = 0;
+
+  // Observable Counter Subscription Listeners
+  private static _counterListeners: Set<(counters: {
+    firestoreReadCount: number;
+    firestoreWriteCount: number;
+    cacheHitCount: number;
+    actualDeletes: number;
+    duplicateWritesAvoided: number;
+  }) => void> = new Set();
+
+  /**
+   * Granular static getter for network-bound Firestore read count
+   */
+  public static get firestoreReadCount(): number {
+    const stats = FirestoreUsageService.getUsageStats();
+    return Math.max(this._actualReads, stats.reads || 0);
+  }
+
+  /**
+   * Granular static getter for network-bound Firestore write count
+   */
+  public static get firestoreWriteCount(): number {
+    const stats = FirestoreUsageService.getUsageStats();
+    return Math.max(this._actualWrites, stats.writes || 0);
+  }
+
+  /**
+   * Granular static getter for zero-cost in-memory cache hit count
+   */
+  public static get cacheHitCount(): number {
+    const stats = FirestoreUsageService.getUsageStats();
+    return Math.max(this._memoryCacheHits, stats.cacheHits || 0);
+  }
+
+  /**
+   * Observable subscription listener for real-time counter changes
+   */
+  public static subscribeToCounters(
+    listener: (counters: {
+      firestoreReadCount: number;
+      firestoreWriteCount: number;
+      cacheHitCount: number;
+      actualDeletes: number;
+      duplicateWritesAvoided: number;
+    }) => void
+  ): () => void {
+    this._counterListeners.add(listener);
+    listener({
+      firestoreReadCount: this.firestoreReadCount,
+      firestoreWriteCount: this.firestoreWriteCount,
+      cacheHitCount: this.cacheHitCount,
+      actualDeletes: Math.max(this._actualDeletes, FirestoreUsageService.getUsageStats().deletes || 0),
+      duplicateWritesAvoided: Math.max(this._duplicateWritesAvoided, FirestoreUsageService.getUsageStats().duplicateWritesAvoided || 0),
+    });
+    return () => {
+      this._counterListeners.delete(listener);
+    };
+  }
+
+  private static notifyCounterListeners(): void {
+    const data = {
+      firestoreReadCount: this.firestoreReadCount,
+      firestoreWriteCount: this.firestoreWriteCount,
+      cacheHitCount: this.cacheHitCount,
+      actualDeletes: Math.max(this._actualDeletes, FirestoreUsageService.getUsageStats().deletes || 0),
+      duplicateWritesAvoided: Math.max(this._duplicateWritesAvoided, FirestoreUsageService.getUsageStats().duplicateWritesAvoided || 0),
+    };
+    this._counterListeners.forEach((listener) => {
+      try {
+        listener(data);
+      } catch (e) {
+        console.error('Error in StorageService counter subscriber:', e);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('mnsuet_counters_updated', { detail: data })
+      );
+    }
+  }
+
+  public static recordFirestoreRead(count = 1, collection = 'records', details?: string): void {
+    this._actualReads += count;
+    FirestoreUsageService.recordOperation('READ', collection, count, details);
+    this.notifyCounterListeners();
+  }
+
+  public static recordFirestoreWrite(count = 1, collection = 'records', details?: string): void {
+    this._actualWrites += count;
+    FirestoreUsageService.recordOperation('WRITE', collection, count, details);
+    this.notifyCounterListeners();
+  }
+
+  public static recordFirestoreDelete(count = 1, collection = 'records', details?: string): void {
+    this._actualDeletes += count;
+    FirestoreUsageService.recordOperation('DELETE', collection, count, details);
+    this.notifyCounterListeners();
+  }
+
+  public static recordMemoryCacheHit(count = 1, collection = 'records', details?: string): void {
+    this._memoryCacheHits += count;
+    FirestoreUsageService.recordCacheHit(collection, count, details);
+    this.notifyCounterListeners();
+  }
+
+  public static recordDuplicateWriteAvoided(count = 1, collection = 'records', details?: string): void {
+    this._duplicateWritesAvoided += count;
+    FirestoreUsageService.recordDuplicateWriteAvoided(collection, count, details);
+    this.notifyCounterListeners();
+  }
+
+  public static getOperationCounters(): {
+    actualReads: number;
+    actualWrites: number;
+    actualDeletes: number;
+    memoryCacheHits: number;
+    duplicateWritesAvoided: number;
+    totalNetworkOps: number;
+    totalRequests: number;
+    cacheHitRatioPercent: number;
+    firestoreReadCount: number;
+    firestoreWriteCount: number;
+    cacheHitCount: number;
+  } {
+    const firestoreReadCount = this.firestoreReadCount;
+    const firestoreWriteCount = this.firestoreWriteCount;
+    const cacheHitCount = this.cacheHitCount;
+    const actualDeletes = Math.max(this._actualDeletes, FirestoreUsageService.getUsageStats().deletes || 0);
+    const duplicateWritesAvoided = Math.max(this._duplicateWritesAvoided, FirestoreUsageService.getUsageStats().duplicateWritesAvoided || 0);
+
+    const totalNetworkOps = firestoreReadCount + firestoreWriteCount + actualDeletes;
+    const totalRequests = totalNetworkOps + cacheHitCount + duplicateWritesAvoided;
+    const totalReads = firestoreReadCount + cacheHitCount;
+    const cacheHitRatioPercent = totalReads > 0 ? Math.round((cacheHitCount / totalReads) * 1000) / 10 : 100;
+
+    return {
+      actualReads: firestoreReadCount,
+      actualWrites: firestoreWriteCount,
+      actualDeletes,
+      memoryCacheHits: cacheHitCount,
+      duplicateWritesAvoided,
+      totalNetworkOps,
+      totalRequests,
+      cacheHitRatioPercent,
+      firestoreReadCount,
+      firestoreWriteCount,
+      cacheHitCount,
+    };
+  }
+
+  public static resetOperationCounters(): void {
+    this._actualReads = 0;
+    this._actualWrites = 0;
+    this._actualDeletes = 0;
+    this._memoryCacheHits = 0;
+    this._duplicateWritesAvoided = 0;
+    FirestoreUsageService.resetDailyCounters();
+    this.notifyCounterListeners();
+  }
   
   public static initFirebaseSync(): void {
     if (this._isSyncing) return;
@@ -1425,6 +1592,7 @@ export class StorageService {
     let changed = false;
 
     if (changes && changes.length > 0) {
+      this.recordFirestoreRead(changes.length, 'records', 'Firestore onSnapshot real-time document change stream');
       changes.forEach((change) => {
         const { type, id, record } = change;
         if (type === 'added' || type === 'modified') {

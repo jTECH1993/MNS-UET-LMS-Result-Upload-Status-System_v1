@@ -46,6 +46,7 @@ import {
   FirebasePlanTier,
 } from '../services/firestoreUsageService';
 import { FirebaseStore } from '../lib/firebaseStore';
+import { StorageService } from '../services/storageService';
 
 interface Props {
   isOpen: boolean;
@@ -106,7 +107,13 @@ export const FirestoreUsageModal: React.FC<Props> = ({
     };
   }, [sevenDayHistory]);
 
-  // Auto-refresh stats and countdown timer
+  const [liveCounters, setLiveCounters] = useState(() => ({
+    firestoreReadCount: StorageService.firestoreReadCount,
+    firestoreWriteCount: StorageService.firestoreWriteCount,
+    cacheHitCount: StorageService.cacheHitCount,
+  }));
+
+  // Auto-refresh stats, StorageService granular counters, and countdown timer
   useEffect(() => {
     if (!isOpen) return;
 
@@ -115,19 +122,32 @@ export const FirestoreUsageModal: React.FC<Props> = ({
     };
 
     updateStats();
-    const unsub = FirestoreUsageService.subscribe(setStats);
+    const unsubUsage = FirestoreUsageService.subscribe(setStats);
+    const unsubCounters = StorageService.subscribeToCounters((c) => {
+      setLiveCounters({
+        firestoreReadCount: c.firestoreReadCount,
+        firestoreWriteCount: c.firestoreWriteCount,
+        cacheHitCount: c.cacheHitCount,
+      });
+    });
 
     const timer = setInterval(() => {
       setCountdown(FirestoreUsageService.getTimeUntilReset());
     }, 1000);
 
     return () => {
-      unsub();
+      unsubUsage();
+      unsubCounters();
       clearInterval(timer);
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const opCounters = StorageService.getOperationCounters();
+  const firestoreReadCount = StorageService.firestoreReadCount;
+  const firestoreWriteCount = StorageService.firestoreWriteCount;
+  const cacheHitCount = StorageService.cacheHitCount;
 
   const currentLimits = selectedPlan === 'BLAZE' ? BLAZE_LIMITS : SPARK_LIMITS;
   const writesUsed = stats.writes;
@@ -162,7 +182,7 @@ export const FirestoreUsageModal: React.FC<Props> = ({
   const handleResetCounters = () => {
     if (window.confirm('Reset local daily Firestore operation counters for today?')) {
       FirebaseStore.setQuotaExhausted(false);
-      FirestoreUsageService.resetDailyCounters();
+      StorageService.resetOperationCounters();
       setStats(FirestoreUsageService.getUsageStats());
       setActionNotice('Local operation counter reset to 0 for today.');
       setTimeout(() => setActionNotice(null), 3000);
@@ -486,6 +506,107 @@ export const FirestoreUsageModal: React.FC<Props> = ({
                   </div>
                 </div>
 
+              </div>
+
+              {/* STORAGE SERVICE OPERATION COUNTERS & MEMORY CACHE TELEMETRY */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 text-white shadow-lg space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-500/20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+                      <Zap className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-extrabold text-sm sm:text-base text-white tracking-wide">
+                          StorageService Operation Counter &amp; Cache Telemetry
+                        </h4>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {opCounters.cacheHitRatioPercent}% Cache Efficiency
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        Accurate operational tracking distinguishing actual Cloud Firestore network read/write/delete calls from zero-cost in-memory cache hits.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs font-mono bg-slate-950/80 px-3 py-1.5 rounded-xl border border-indigo-500/20 self-start sm:self-center">
+                    <span className="text-slate-400">Total Requests:</span>
+                    <strong className="text-indigo-300 font-bold">{opCounters.totalRequests.toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                  {/* 1. Actual Network Reads */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <div className="text-[10px] uppercase font-extrabold text-indigo-400 tracking-wider flex items-center justify-between">
+                      <span>Network Reads</span>
+                      <Cloud className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                    <div className="text-lg font-black text-white tabular-nums">
+                      {(firestoreReadCount || liveCounters.firestoreReadCount).toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-tight">
+                      Actual Firestore network read ops
+                    </div>
+                  </div>
+
+                  {/* 2. Actual Network Writes */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <div className="text-[10px] uppercase font-extrabold text-rose-400 tracking-wider flex items-center justify-between">
+                      <span>Network Writes</span>
+                      <BarChart2 className="w-3.5 h-3.5 text-rose-400" />
+                    </div>
+                    <div className="text-lg font-black text-white tabular-nums">
+                      {(firestoreWriteCount || liveCounters.firestoreWriteCount).toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-tight">
+                      Actual Firestore network write ops
+                    </div>
+                  </div>
+
+                  {/* 3. In-Memory Cache Hits */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <div className="text-[10px] uppercase font-extrabold text-emerald-400 tracking-wider flex items-center justify-between">
+                      <span>Memory Cache Hits</span>
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <div className="text-lg font-black text-emerald-300 tabular-nums">
+                      {(cacheHitCount || liveCounters.cacheHitCount).toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-emerald-400/80 leading-tight font-medium">
+                      Zero cost • Served from RAM
+                    </div>
+                  </div>
+
+                  {/* 4. Duplicate Writes Avoided */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <div className="text-[10px] uppercase font-extrabold text-amber-400 tracking-wider flex items-center justify-between">
+                      <span>Deduplicated Writes</span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
+                    <div className="text-lg font-black text-amber-300 tabular-nums">
+                      {opCounters.duplicateWritesAvoided.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-amber-400/80 leading-tight">
+                      Unchanged payload writes blocked
+                    </div>
+                  </div>
+
+                  {/* 5. Actual Network Deletes */}
+                  <div className="col-span-2 lg:col-span-1 bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                    <div className="text-[10px] uppercase font-extrabold text-sky-400 tracking-wider flex items-center justify-between">
+                      <span>Network Deletes</span>
+                      <Activity className="w-3.5 h-3.5 text-sky-400" />
+                    </div>
+                    <div className="text-lg font-black text-white tabular-nums">
+                      {opCounters.actualDeletes.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-tight">
+                      Network delete operations
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* API USAGE HEALTH VISUALIZER (7-DAY SPARKLINE CHART & ANOMALY DETECTOR) */}
