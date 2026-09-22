@@ -14,9 +14,11 @@ import {
   RotateCcw,
   Sparkles,
   History,
+  BarChart3,
 } from 'lucide-react';
 import { StorageService } from '../services/storageService';
 import { LockdownLogSection } from './LockdownLogSection';
+import { LockdownAnalyticsSection } from './LockdownAnalyticsSection';
 
 interface Props {
   currentSession: string;
@@ -85,7 +87,7 @@ export const DeadlineBanner: React.FC<Props> = ({
 
   // Lockdown Log Section States
   const [showInlineLogs, setShowInlineLogs] = useState(false);
-  const [matrixModalTab, setMatrixModalTab] = useState<'matrix' | 'logs'>('matrix');
+  const [matrixModalTab, setMatrixModalTab] = useState<'matrix' | 'logs' | 'analytics'>('matrix');
   const [logCount, setLogCount] = useState<number>(() => StorageService.getLockdownLogs().length);
 
   useEffect(() => {
@@ -597,13 +599,21 @@ export const DeadlineBanner: React.FC<Props> = ({
             <div className="p-4 sm:p-5 bg-slate-800/80 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-                  {matrixModalTab === 'logs' ? <History className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
+                  {matrixModalTab === 'logs' ? (
+                    <History className="w-5 h-5" />
+                  ) : matrixModalTab === 'analytics' ? (
+                    <BarChart3 className="w-5 h-5" />
+                  ) : (
+                    <Layers className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                     <span>
                       {matrixModalTab === 'logs'
                         ? 'Institutional Lockdown Log & Audit Trail'
+                        : matrixModalTab === 'analytics'
+                        ? 'Institutional Lockdown Analytics & Disruption Patterns'
                         : 'Institutional Session & Semester Lockdown Matrix'}
                     </span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
@@ -613,6 +623,8 @@ export const DeadlineBanner: React.FC<Props> = ({
                   <p className="text-xs text-slate-400 mt-0.5">
                     {matrixModalTab === 'logs'
                       ? 'Historical log of past lockdown events, specific academic sessions, semesters, start timestamps, and admin triggers.'
+                      : matrixModalTab === 'analytics'
+                      ? 'Visualize the frequency of lockdowns per semester cohort to identify recurring academic disruption patterns.'
                       : 'Configure and inspect granular lockdown states and deadlines for every academic session and semester cohort.'}
                   </p>
                 </div>
@@ -645,6 +657,18 @@ export const DeadlineBanner: React.FC<Props> = ({
                     <History className="w-3.5 h-3.5" />
                     <span>Lockdown Log ({logCount})</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setMatrixModalTab('analytics')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      matrixModalTab === 'analytics'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>Analytics</span>
+                  </button>
                 </div>
 
                 <button
@@ -661,6 +685,13 @@ export const DeadlineBanner: React.FC<Props> = ({
             {matrixModalTab === 'logs' ? (
               <div className="p-4 sm:p-5 overflow-auto flex-1">
                 <LockdownLogSection
+                  currentSession={primarySession}
+                  currentSemester={primarySemester}
+                />
+              </div>
+            ) : matrixModalTab === 'analytics' ? (
+              <div className="p-4 sm:p-5 overflow-auto flex-1">
+                <LockdownAnalyticsSection
                   currentSession={primarySession}
                   currentSemester={primarySemester}
                 />
