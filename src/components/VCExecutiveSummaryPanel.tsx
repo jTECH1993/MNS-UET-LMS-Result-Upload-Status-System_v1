@@ -582,7 +582,7 @@ export function VCExecutiveSummaryPanel({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 font-sans space-y-5">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 font-sans space-y-5 w-full overflow-hidden">
       
       {/* Toast Feedback */}
       {copiedType && (

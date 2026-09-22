@@ -170,7 +170,7 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
   const trailingDepts = useMemo(() => deptStats.filter((d) => d.isTrailing && !d.isZeroPercent), [deptStats]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4 w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
@@ -253,19 +253,19 @@ export const DepartmentSubmissionSummaryWidget: React.FC<DepartmentSubmissionSum
 
       {/* Critical Alert Box for Departments with 0% Upload Progress */}
       {zeroPercentDepts.length > 0 && filterMode !== 'COMPLETED' && (
-        <div className="bg-rose-100/90 dark:bg-rose-950/80 border-2 border-rose-500 rounded-xl p-3.5 text-xs text-rose-950 dark:text-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-pulse">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="bg-rose-100/90 dark:bg-rose-950/80 border-2 border-rose-500 rounded-xl p-3.5 text-xs text-rose-950 dark:text-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-pulse min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="p-1.5 rounded-lg bg-rose-600 text-white shrink-0">
               <AlertTriangle className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <p className="font-black text-rose-950 dark:text-rose-100 uppercase tracking-wide flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-rose-950 dark:text-rose-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
                 <span>Critical Attention Required: 0% Upload Progress</span>
-                <span className="text-[10px] font-mono font-black bg-rose-700 text-white px-2 py-0.2 rounded">
+                <span className="text-[10px] font-mono font-black bg-rose-700 text-white px-2 py-0.5 rounded">
                   0 RESULTS IN LMS
                 </span>
               </p>
-              <p className="text-[11px] font-bold text-rose-900 dark:text-rose-200 mt-0.5 truncate">
+              <p className="text-[11px] font-bold text-rose-900 dark:text-rose-200 mt-0.5 line-clamp-2 break-words">
                 Missing Submissions in: {zeroPercentDepts.map((d) => d.fullDisplayName).join(' • ')}
               </p>
             </div>

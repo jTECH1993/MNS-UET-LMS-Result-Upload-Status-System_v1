@@ -23,7 +23,6 @@ import { VCAuditFeed } from './VCAuditFeed';
 import { MnsUetLogo } from './MnsUetLogo';
 import { DeadlineBanner } from './DeadlineBanner';
 import { LockdownScopeModal } from './LockdownScopeModal';
-import { DataIntegritySyncDashboard } from './DataIntegritySyncDashboard';
 import { DepartmentCompletionHeatmap } from './DepartmentCompletionHeatmap';
 import { DepartmentDrillDownModal } from './DepartmentDrillDownModal';
 import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
@@ -174,7 +173,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return () => window.removeEventListener('mnsuet_storage_updated', handleRecalc);
   }, []);
 
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'DATA_INTEGRITY'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER'>('COMMAND_CENTER');
   const [isLockdownScopeModalOpen, setIsLockdownScopeModalOpen] = useState<boolean>(false);
 
   // Change History / Audit Trail Modal State
@@ -1000,7 +999,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   ]);
 
   return (
-    <div id="vc-admin-dashboard" className="space-y-6">
+    <div id="vc-admin-dashboard" className="space-y-6 w-full overflow-hidden">
       {/* VC Dashboard Header Banner with University Emblem */}
       <div className="bg-slate-900 text-white p-5 rounded-lg border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3.5">
@@ -1604,9 +1603,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                     }, 100);
                   }}
                   title={`${d.deptName} (${d.deptCode}) - ${d.percentage}%`}
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-300 hover:bg-rose-200"
+                  className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-300 hover:bg-rose-200 max-w-full truncate inline-block"
                 >
-                  {d.deptName} ({d.deptCode}) • {d.percentage}%
+                  {d.deptCode || d.deptName} • {d.percentage}%
                 </span>
               ))}
               {executiveSummaryMetrics.attentionDeptsList.length > 4 && (
@@ -1865,23 +1864,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping ml-0.5" />
             )}
           </button>
-
-          <button
-            id="btn-vc-mode-data-integrity"
-            type="button"
-            onClick={() => setDashboardViewMode('DATA_INTEGRITY')}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-              dashboardViewMode === 'DATA_INTEGRITY'
-                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400 scale-[1.02]'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <Database className="w-4 h-4 text-indigo-300" />
-            <span>6. Data Integrity & Sync Status</span>
-            {dashboardViewMode === 'DATA_INTEGRITY' && (
-              <span className="w-2 h-2 rounded-full bg-indigo-300 animate-ping ml-0.5" />
-            )}
-          </button>
         </div>
       </div>
 
@@ -1894,7 +1876,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             {dashboardViewMode === 'ACTIVITY' && <Activity className="w-6 h-6 text-sky-400" />}
             {dashboardViewMode === 'DIGITAL_TWIN' && <Building2 className="w-6 h-6 text-indigo-400" />}
             {dashboardViewMode === 'ACTION_CENTER' && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
-            {dashboardViewMode === 'DATA_INTEGRITY' && <Database className="w-6 h-6 text-indigo-400" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -1912,7 +1893,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && '3. System Audit Trail & Real-Time Security Logs'}
               {dashboardViewMode === 'DIGITAL_TWIN' && '4. University Digital Twin Architecture Matrix'}
               {dashboardViewMode === 'ACTION_CENTER' && '5. VC Executive Action Center & Circular Directives'}
-              {dashboardViewMode === 'DATA_INTEGRITY' && '6. Data Integrity & Firestore Quota Metrics'}
             </h2>
             <p className="text-xs text-slate-300 mt-0.5">
               {dashboardViewMode === 'COMMAND_CENTER' && 'Comprehensive overview of institutional bottlenecks, high-level upload stats, and interactive completion radar.'}
@@ -1920,7 +1900,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && 'Live event stream tracking coordinator logins, HOD verifications, and result upload timestamps.'}
               {dashboardViewMode === 'DIGITAL_TWIN' && 'Interactive hierarchical view of departments, degree programs, academic sessions, and semesters.'}
               {dashboardViewMode === 'ACTION_CENTER' && 'Department compliance overview, official Vice Chancellor result upload summaries, and circular dispatch.'}
-              {dashboardViewMode === 'DATA_INTEGRITY' && 'Real-time database read/write operation metrics against daily subscription quotas and optimization savings.'}
             </p>
           </div>
         </div>
@@ -2365,13 +2344,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       )}
 
-      {/* Data Integrity & Sync Status Tab */}
-      {dashboardViewMode === 'DATA_INTEGRITY' && (
-        <div className="mt-2">
-          <DataIntegritySyncDashboard />
-        </div>
-      )}
-
       {/* Live Activity Feed Section (Rendered in ACTIVITY mode) */}
       {dashboardViewMode === 'ACTIVITY' && (
         <div className="mt-4">
@@ -2540,7 +2512,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           </div>
         </div>
 
-        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {filteredDepartmentStats.length === 0 ? (
             <div className="col-span-full py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-300 p-4">
               <p className="font-semibold text-slate-600">No departments or programs match &quot;{searchQuery}&quot;.</p>
@@ -2568,27 +2540,27 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                       document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                   }}
-                  className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col justify-between group ${
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group overflow-hidden ${
                     isSelected
                       ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'
                       : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         {/* Circular Progress Indicator next to department name */}
                         <CircularProgress
                           percentage={dept.percentage}
-                          size={34}
+                          size={36}
                           strokeWidth={3.5}
                         />
-                        <div className="min-w-0">
-                          <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors block truncate" title={`${dept.deptName} (${dept.deptCode})`}>
-                            {dept.deptName} ({dept.deptCode})
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-black text-slate-900 group-hover:text-emerald-800 transition-colors block line-clamp-2 leading-tight" title={`${dept.deptName} (${dept.deptCode})`}>
+                            {dept.deptName}
                           </span>
-                          <h4 className="text-[10.5px] font-medium text-slate-500 line-clamp-1">
-                            {dept.programsCount} Programs • {dept.totalCohorts} Batches
+                          <h4 className="text-[10px] font-bold text-slate-500 mt-0.5 truncate">
+                            {dept.deptCode} • {dept.programsCount} Progs • {dept.totalCohorts} Batches
                           </h4>
                         </div>
                       </div>

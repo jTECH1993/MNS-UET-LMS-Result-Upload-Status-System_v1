@@ -178,7 +178,7 @@ export interface CourseFileAuditRecord extends BaseInstitutionalEntity {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6 w-full overflow-hidden animate-in fade-in duration-200">
       {/* Top Banner with Strict Zero-Dummy-Data Notice */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-5 sm:p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">

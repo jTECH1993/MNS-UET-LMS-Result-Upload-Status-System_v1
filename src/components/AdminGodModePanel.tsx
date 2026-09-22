@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, ArrowRightLeft, UserCheck, Merge, Trash2, CheckSquare, AlertTriangle, Cpu, Network, History, Check, X, Award, BarChart4 } from 'lucide-react';
+import { Shield, ArrowRightLeft, UserCheck, Merge, Trash2, CheckSquare, AlertTriangle, Cpu, Network, History, Check, X, Award, BarChart4, Database } from 'lucide-react';
+import { DataIntegritySyncDashboard } from './DataIntegritySyncDashboard';
 
 interface SafeguardRequest {
   id: string;
@@ -116,9 +117,49 @@ export function AdminGodModePanel({ allRecords, onDataUpdate }: { allRecords: an
     }));
   };
 
+  const [adminTab, setAdminTab] = useState<'GOD_MODE' | 'DATA_INTEGRITY'>('GOD_MODE');
+
   return (
-    <div className="space-y-6">
-      
+    <div className="space-y-6 w-full overflow-hidden">
+      {/* ADMIN PANEL TOP TABS BAR */}
+      <div className="bg-slate-900 p-2 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminTab('GOD_MODE')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+              adminTab === 'GOD_MODE'
+                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Shield className="w-4 h-4 text-indigo-300" />
+            <span>1. God Mode Safeguards & Structure</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAdminTab('DATA_INTEGRITY')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+              adminTab === 'DATA_INTEGRITY'
+                ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4 text-emerald-300" />
+            <span>2. Data Integrity & Sync Status</span>
+          </button>
+        </div>
+
+        <span className="text-xs text-slate-400 font-mono font-bold px-3 py-1 bg-slate-950 rounded-lg border border-slate-800">
+          Administrator Privileged Console
+        </span>
+      </div>
+
+      {adminTab === 'DATA_INTEGRITY' ? (
+        <DataIntegritySyncDashboard />
+      ) : (
+        <>
       {/* SECTION 1: ADMIN GOD MODE & FOUR-EYES APPROVALS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
@@ -389,6 +430,8 @@ export function AdminGodModePanel({ allRecords, onDataUpdate }: { allRecords: an
         </div>
 
       </div>
+      </>
+      )}
 
     </div>
   );

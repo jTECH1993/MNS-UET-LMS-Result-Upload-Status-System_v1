@@ -520,7 +520,7 @@ export default function App() {
       />
 
       {/* Main Workspace Column */}
-      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen w-full overflow-hidden">
         {/* Institutional Top Navigation Header */}
         <Header
           activeView={activeView}
@@ -551,7 +551,7 @@ export default function App() {
         />
 
         {/* Main Container */}
-        <main className="max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
+        <main className="max-w-7xl w-full overflow-hidden mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-6">
           {/* Admin Role Simulation & Perspective Guide Bar (Visible to Administrator) */}
           {isRootAdmin && (
             <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-xl border border-indigo-500/30 shadow-md flex flex-wrap items-center justify-between gap-3 text-xs">

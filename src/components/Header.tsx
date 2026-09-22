@@ -97,7 +97,7 @@ export const Header: React.FC<Props> = ({
   };
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-800 shadow-xs sticky top-0 z-30 transition-colors">
+    <header className="bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-800 shadow-xs sticky top-0 z-30 transition-colors w-full overflow-hidden">
       <div className="bg-emerald-900 dark:bg-emerald-950 px-3 py-1 flex flex-wrap items-center justify-between gap-2 shadow-inner">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-1.5">

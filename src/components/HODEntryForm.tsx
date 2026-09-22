@@ -2032,7 +2032,7 @@ export const HODEntryForm: React.FC<Props> = ({
   };
 
   return (
-    <div id="hod-entry-interface" className="space-y-6">
+    <div id="hod-entry-interface" className="space-y-6 w-full overflow-hidden">
       {/* Toast Notification Stack (Floating Bottom-Right) */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
         {/* Real-Time Auto-Save Toast Notification */}
