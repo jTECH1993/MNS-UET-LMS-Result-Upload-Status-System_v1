@@ -2212,6 +2212,83 @@ export const HODEntryForm: React.FC<Props> = ({
     setIsExportModalOpen(true);
   };
 
+  // Header Quota Progress Bar for Department, Shift & Session
+  const headerQuotaProgress = useMemo(() => {
+    const allStore = StorageService.getAllSubmissions();
+    const currentVirtualRec: SubmissionRecord = {
+      id: 'current-active',
+      department,
+      program,
+      degreeLevel,
+      shift,
+      section,
+      session,
+      semester,
+      hodCoordinator,
+      submissionDate,
+      subjects,
+      accessedBy: currentUser?.name || 'HOD / Coordinator',
+      userDesignation: currentUser?.designation || 'HOD',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Filter matching records for selected department, shift, and session
+    const deptMatches = allStore.filter(
+      (r) =>
+        StorageService._isDeptMatch(department, r.department) &&
+        (r.shift || 'Morning') === shift &&
+        String(r.session || '2023').trim() === String(session).trim()
+    );
+
+    // Merge current form contents if matching
+    const hasCurrentInStore = deptMatches.some(
+      (r) =>
+        StorageService._isProgMatch(program, r.program) &&
+        String(r.semester) === String(semester) &&
+        String(r.section || 'A') === String(section)
+    );
+
+    let recordsToEvaluate: SubmissionRecord[] = [];
+    if (hasCurrentInStore) {
+      recordsToEvaluate = deptMatches.map((r) =>
+        StorageService._isProgMatch(program, r.program) &&
+        String(r.semester) === String(semester) &&
+        String(r.section || 'A') === String(section)
+          ? currentVirtualRec
+          : r
+      );
+    } else {
+      recordsToEvaluate = [currentVirtualRec, ...deptMatches];
+    }
+
+    let totalSubjects = 0;
+    let uploadedCount = 0;
+    let inProgressCount = 0;
+
+    recordsToEvaluate.forEach((r) => {
+      const activeRows = (r.subjects || []).filter(
+        (s) => (s.courseCode && s.courseCode.trim()) || (s.subjectTitle && s.subjectTitle.trim()) || s.status
+      );
+      activeRows.forEach((s) => {
+        totalSubjects++;
+        if (s.status === 'Uploaded') uploadedCount++;
+        else if (s.status === 'In Progress') inProgressCount++;
+      });
+    });
+
+    const percentage = totalSubjects > 0 ? Math.round((uploadedCount / totalSubjects) * 100) : 0;
+
+    return {
+      uploaded: uploadedCount,
+      total: totalSubjects,
+      inProgress: inProgressCount,
+      percentage,
+      shift,
+      session,
+    };
+  }, [department, program, degreeLevel, shift, section, session, semester, hodCoordinator, submissionDate, subjects, currentUser, storageVersion]);
+
   const handleSessionChangeFromModal = (newSess: string) => {
     setSession(newSess);
     if (onSessionChangedProp) onSessionChangedProp(newSess);
@@ -2476,16 +2553,54 @@ export const HODEntryForm: React.FC<Props> = ({
             </span>
           </div>
 
-          {/* Export Departmental Summary PDF Report (Morning & Evening Merged) */}
+          {/* Header Quota Progress Bar Visualization */}
+          <div
+            id="header-quota-progress-bar"
+            className="inline-flex flex-col justify-center px-3 py-1 bg-white border border-slate-200 rounded-lg shadow-2xs min-w-[170px]"
+            title={`Department Quota Progress: ${headerQuotaProgress.uploaded} of ${headerQuotaProgress.total} subjects uploaded for ${shift} shift (Session ${session})`}
+          >
+            <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-800 mb-0.5">
+              <span className="flex items-center gap-1 text-slate-700">
+                <span className={`w-1.5 h-1.5 rounded-full ${headerQuotaProgress.percentage === 100 ? 'bg-emerald-500' : 'bg-emerald-500 animate-pulse'}`}></span>
+                <span>Quota Progress</span>
+              </span>
+              <span className={headerQuotaProgress.percentage === 100 ? 'text-emerald-700 font-extrabold' : 'text-slate-900 font-extrabold'}>
+                {headerQuotaProgress.percentage}%
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  headerQuotaProgress.percentage === 100
+                    ? 'bg-emerald-600'
+                    : headerQuotaProgress.percentage > 50
+                    ? 'bg-blue-600'
+                    : headerQuotaProgress.percentage > 0
+                    ? 'bg-amber-500'
+                    : 'bg-slate-300'
+                }`}
+                style={{ width: `${Math.min(100, headerQuotaProgress.percentage)}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between items-center text-[9px] text-slate-500 mt-0.5 font-medium">
+              <span>{headerQuotaProgress.uploaded} / {headerQuotaProgress.total} Subjects</span>
+              <span className="font-semibold text-slate-600">{shift} {session}</span>
+            </div>
+          </div>
+
+          {/* Export Report Button (PDF / CSV summary for current department, session & shift) */}
           <button
-            id="btn-export-department-report-top"
+            id="btn-export-report-header"
             type="button"
             onClick={() => handleOpenPDFReport('ENTIRE_DEPARTMENT')}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
-            title="Generate official signed PDF report of departmental summary merging Morning and Evening shifts"
+            title={`Export official summary PDF or CSV report for ${department} (Session ${session}, ${shift} Shift)`}
           >
-            <Printer className="w-3.5 h-3.5 shrink-0" />
-            <span>Export Departmental PDF Report (Morning &amp; Evening)</span>
+            <Download className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
+            <span>Export Report</span>
+            <span className="text-[10px] bg-emerald-900/60 text-emerald-100 px-1.5 py-0.2 rounded font-semibold border border-emerald-500/30">
+              PDF / CSV
+            </span>
           </button>
 
           {/* VC View Link: Return button if read-only, otherwise switch link */}
