@@ -91,17 +91,40 @@ export const DepartmentExportModal: React.FC<Props> = ({
           StorageService._isProgMatch(program, r.program) &&
           String(r.session || '2023').trim() === String(session).trim()
       );
-      // If current in-memory record has data and isn't yet saved in store, include or override it
+
       const hasCurrent = progMatches.some(
         (r) =>
           String(r.semester) === String(semester) &&
           String(r.shift) === String(shift) &&
           String(r.section || 'A') === String(section)
       );
-      if (!hasCurrent && currentSubjects.some((s) => s.courseCode || s.subjectTitle)) {
-        return [currentVirtualRec, ...progMatches];
+
+      let mergedList: SubmissionRecord[] = [];
+      if (hasCurrent) {
+        mergedList = progMatches.map((r) => {
+          if (
+            String(r.semester) === String(semester) &&
+            String(r.shift) === String(shift) &&
+            String(r.section || 'A') === String(section)
+          ) {
+            return currentVirtualRec;
+          }
+          return r;
+        });
+      } else if (currentSubjects.some((s) => s.courseCode || s.subjectTitle)) {
+        mergedList = [currentVirtualRec, ...progMatches];
+      } else {
+        mergedList = progMatches.length > 0 ? progMatches : [currentVirtualRec];
       }
-      return progMatches.length > 0 ? progMatches : [currentVirtualRec];
+
+      return mergedList.sort((a, b) => {
+        if (a.shift !== b.shift) {
+          if (a.shift === 'Morning') return -1;
+          if (b.shift === 'Morning') return 1;
+        }
+        if (a.semester !== b.semester) return String(a.semester).localeCompare(String(b.semester));
+        return (a.section || 'A').localeCompare(b.section || 'A');
+      });
     }
 
     // ENTIRE_DEPARTMENT
@@ -118,10 +141,35 @@ export const DepartmentExportModal: React.FC<Props> = ({
         String(r.shift) === String(shift) &&
         String(r.section || 'A') === String(section)
     );
-    if (!hasCurrent && currentSubjects.some((s) => s.courseCode || s.subjectTitle)) {
-      return [currentVirtualRec, ...deptMatches];
+
+    let mergedDeptList: SubmissionRecord[] = [];
+    if (hasCurrent) {
+      mergedDeptList = deptMatches.map((r) => {
+        if (
+          StorageService._isProgMatch(program, r.program) &&
+          String(r.semester) === String(semester) &&
+          String(r.shift) === String(shift) &&
+          String(r.section || 'A') === String(section)
+        ) {
+          return currentVirtualRec;
+        }
+        return r;
+      });
+    } else if (currentSubjects.some((s) => s.courseCode || s.subjectTitle)) {
+      mergedDeptList = [currentVirtualRec, ...deptMatches];
+    } else {
+      mergedDeptList = deptMatches.length > 0 ? deptMatches : [currentVirtualRec];
     }
-    return deptMatches.length > 0 ? deptMatches : [currentVirtualRec];
+
+    return mergedDeptList.sort((a, b) => {
+      if (a.program !== b.program) return a.program.localeCompare(b.program);
+      if (a.shift !== b.shift) {
+        if (a.shift === 'Morning') return -1;
+        if (b.shift === 'Morning') return 1;
+      }
+      if (a.semester !== b.semester) return String(a.semester).localeCompare(String(b.semester));
+      return (a.section || 'A').localeCompare(b.section || 'A');
+    });
   }, [
     exportScope,
     department,

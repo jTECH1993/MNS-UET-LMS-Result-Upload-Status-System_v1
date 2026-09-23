@@ -2003,10 +2003,10 @@ export const HODEntryForm: React.FC<Props> = ({
     }
   };
 
-  // Export current program CSV
+  // Export current program / department comprehensive CSV (Merging Morning & Evening shifts)
   const handleExportCurrent = () => {
     const currentRec: SubmissionRecord = {
-      id: 'current',
+      id: 'current-active',
       department,
       program,
       degreeLevel,
@@ -2022,8 +2022,60 @@ export const HODEntryForm: React.FC<Props> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    StorageService.exportCSV([currentRec]);
-    showFeedback('success', `Exported CSV sheet for ${program} [${shift} Shift – Section ${section}].`);
+
+    const allStore = StorageService.getAllSubmissions();
+    const deptMatches = allStore.filter(
+      (r) =>
+        StorageService._isDeptMatch(department, r.department) &&
+        String(r.session || '2023').trim() === String(session).trim()
+    );
+
+    let mergedRecords: SubmissionRecord[] = [];
+    const hasCurrentInStore = deptMatches.some(
+      (r) =>
+        StorageService._isProgMatch(program, r.program) &&
+        String(r.semester) === String(semester) &&
+        String(r.shift) === String(shift) &&
+        String(r.section || 'A') === String(section)
+    );
+
+    if (hasCurrentInStore) {
+      mergedRecords = deptMatches.map((r) => {
+        if (
+          StorageService._isProgMatch(program, r.program) &&
+          String(r.semester) === String(semester) &&
+          String(r.shift) === String(shift) &&
+          String(r.section || 'A') === String(section)
+        ) {
+          return currentRec;
+        }
+        return r;
+      });
+    } else {
+      mergedRecords = [currentRec, ...deptMatches];
+    }
+
+    // Sort by Program, Shift (Morning first, Evening second), Semester, Section
+    mergedRecords.sort((a, b) => {
+      if (a.program !== b.program) return a.program.localeCompare(b.program);
+      if (a.shift !== b.shift) {
+        if (a.shift === 'Morning') return -1;
+        if (b.shift === 'Morning') return 1;
+      }
+      if (a.semester !== b.semester) return String(a.semester).localeCompare(String(b.semester));
+      return (a.section || 'A').localeCompare(b.section || 'A');
+    });
+
+    const morningCount = mergedRecords.filter((r) => r.shift === 'Morning').length;
+    const eveningCount = mergedRecords.filter((r) => r.shift === 'Evening').length;
+
+    const filename = `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_Session_${session}_Comprehensive_Report.csv`;
+    StorageService.exportCSV(mergedRecords, filename);
+
+    showFeedback(
+      'success',
+      `Exported comprehensive summary report for ${department} [Session ${session}] merging ${morningCount} Morning & ${eveningCount} Evening shift offering(s).`
+    );
   };
 
   const handleSessionChangeFromModal = (newSess: string) => {
