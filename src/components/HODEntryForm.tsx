@@ -2603,6 +2603,20 @@ export const HODEntryForm: React.FC<Props> = ({
             </span>
           </button>
 
+          {/* Download All Departments Master Report Button for VC / Admin */}
+          {(currentUser?.role === 'ADMIN' || currentUser?.role === 'VC' || isVC) && (
+            <button
+              id="btn-export-all-departments-header"
+              type="button"
+              onClick={() => handleOpenPDFReport('ALL_DEPARTMENTS')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              title="Download master CSV / PDF report of ALL university departments"
+            >
+              <Building2 className="w-3.5 h-3.5 shrink-0 text-amber-200" />
+              <span>Download All Departments</span>
+            </button>
+          )}
+
           {/* VC View Link: Return button if read-only, otherwise switch link */}
           {onSwitchToVC && (currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') && (
             <button

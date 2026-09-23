@@ -18,7 +18,7 @@ import {
   Award,
 } from 'lucide-react';
 
-export type ExportScope = 'CURRENT_OFFERING' | 'CURRENT_PROGRAM' | 'ENTIRE_DEPARTMENT';
+export type ExportScope = 'CURRENT_OFFERING' | 'CURRENT_PROGRAM' | 'ENTIRE_DEPARTMENT' | 'ALL_DEPARTMENTS';
 
 interface Props {
   isOpen: boolean;
@@ -87,6 +87,52 @@ export const DepartmentExportModal: React.FC<Props> = ({
       createdAt: currentRecord?.createdAt || new Date().toISOString(),
       updatedAt: currentRecord?.updatedAt || new Date().toISOString(),
     };
+
+    if (exportScope === 'ALL_DEPARTMENTS') {
+      const universityMatches = allStore.filter(
+        (r) => String(r.session || '2023').trim() === String(session).trim()
+      );
+
+      const hasCurrent = universityMatches.some(
+        (r) =>
+          StorageService._isDeptMatch(department, r.department) &&
+          StorageService._isProgMatch(program, r.program) &&
+          String(r.semester) === String(semester) &&
+          String(r.shift) === String(shift) &&
+          String(r.section || 'A') === String(section)
+      );
+
+      let mergedUniList: SubmissionRecord[] = [];
+      if (hasCurrent) {
+        mergedUniList = universityMatches.map((r) => {
+          if (
+            StorageService._isDeptMatch(department, r.department) &&
+            StorageService._isProgMatch(program, r.program) &&
+            String(r.semester) === String(semester) &&
+            String(r.shift) === String(shift) &&
+            String(r.section || 'A') === String(section)
+          ) {
+            return currentVirtualRec;
+          }
+          return r;
+        });
+      } else if (currentSubjects.some((s) => s.courseCode || s.subjectTitle)) {
+        mergedUniList = [currentVirtualRec, ...universityMatches];
+      } else {
+        mergedUniList = universityMatches.length > 0 ? universityMatches : [currentVirtualRec];
+      }
+
+      return mergedUniList.sort((a, b) => {
+        if (a.department !== b.department) return a.department.localeCompare(b.department);
+        if (a.program !== b.program) return a.program.localeCompare(b.program);
+        if (a.shift !== b.shift) {
+          if (a.shift === 'Morning') return -1;
+          if (b.shift === 'Morning') return 1;
+        }
+        if (a.semester !== b.semester) return String(a.semester).localeCompare(String(b.semester));
+        return (a.section || 'A').localeCompare(b.section || 'A');
+      });
+    }
 
     if (exportScope === 'CURRENT_OFFERING') {
       return [currentVirtualRec];
@@ -232,7 +278,10 @@ export const DepartmentExportModal: React.FC<Props> = ({
 
   // Handle CSV Download
   const handleDownloadCSV = () => {
-    const filename = `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_${exportScope}_Session_${session}_${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename =
+      exportScope === 'ALL_DEPARTMENTS'
+        ? `MNS_UET_Master_All_Departments_LMS_Report_Session_${session}_${new Date().toISOString().slice(0, 10)}.csv`
+        : `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_${exportScope}_Session_${session}_${new Date().toISOString().slice(0, 10)}.csv`;
     StorageService.exportCSV(targetRecords, filename);
   };
 
@@ -301,6 +350,19 @@ export const DepartmentExportModal: React.FC<Props> = ({
                 Export Target Scope:
               </span>
               <div className="inline-flex bg-white rounded-lg border border-slate-300 p-0.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setExportScope('ALL_DEPARTMENTS')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                    exportScope === 'ALL_DEPARTMENTS'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-amber-900 hover:bg-amber-50'
+                  }`}
+                  title="Download Master report of ALL university departments"
+                >
+                  <Building2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Download All Departments (Master)</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setExportScope('ENTIRE_DEPARTMENT')}
