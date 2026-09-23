@@ -749,35 +749,6 @@ export const HODEntryForm: React.FC<Props> = ({
     if (onSemesterChangedProp) onSemesterChangedProp(newSem);
   };
 
-  // Status of Morning and Evening shifts for the currently selected program & semester
-  const shiftStatuses = useMemo(() => {
-    const morningRec = StorageService.getSubmission(
-      department,
-      program,
-      degreeLevel,
-      'Morning',
-      session,
-      semester,
-      section
-    );
-    const eveningRec = StorageService.getSubmission(
-      department,
-      program,
-      degreeLevel,
-      'Evening',
-      session,
-      semester,
-      section
-    );
-    const morningCount = morningRec?.subjects?.filter((s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status).length || 0;
-    const eveningCount = eveningRec?.subjects?.filter((s) => s.courseCode.trim() || s.subjectTitle.trim() || s.status).length || 0;
-
-    return {
-      morning: { hasRecord: Boolean(morningRec && morningCount > 0), courseCount: morningCount },
-      evening: { hasRecord: Boolean(eveningRec && eveningCount > 0), courseCount: eveningCount },
-    };
-  }, [department, program, degreeLevel, session, semester, section, lastSavedTime, isExistingRecord, storageVersion]);
-
   // Helper to resolve Program Coordinator name for current program
   const resolveProgramCoordinatorName = useCallback((dept: string, prog: string, targetShift?: AcademicShift, savedCoord?: string): string => {
     // 1. If logged-in user is a Coordinator, use their own name
@@ -825,6 +796,163 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Rows state: starts with 8 clean rows ready for fast data entry matching MNS-UET form
   const [subjects, setSubjects] = useState<SubjectRow[]>(() => createInitialBlankRows(1, 'Morning', '1', 'A'));
+
+  // Evaluate real-time shift completion status for Morning and Evening shifts
+  const shiftStatuses = useMemo(() => {
+    const supportedShifts = StorageService.getProgramShifts(department, program);
+    const allStore = StorageService.getAllSubmissions();
+
+    const currentVirtualRec: SubmissionRecord = {
+      id: 'current-active',
+      department,
+      program,
+      degreeLevel,
+      shift,
+      section,
+      session,
+      semester,
+      hodCoordinator,
+      submissionDate,
+      subjects,
+      accessedBy: currentUser?.name || 'HOD / Coordinator',
+      userDesignation: currentUser?.designation || 'HOD',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const getShiftMetrics = (targetShift: 'Morning' | 'Evening') => {
+      const isOffered = supportedShifts.includes(targetShift);
+      if (!isOffered) {
+        return {
+          isOffered: false,
+          status: 'NOT_OFFERED' as const,
+          label: 'Not Offered',
+          displayText: 'N/A',
+          hasRecord: false,
+          courseCount: 0,
+          uploaded: 0,
+          total: 0,
+        };
+      }
+
+      const matching = allStore.filter(
+        (r) =>
+          StorageService._isDeptMatch(department, r.department) &&
+          StorageService._isProgMatch(program, r.program) &&
+          (r.shift || 'Morning') === targetShift &&
+          String(r.session || '2023').trim() === String(session).trim()
+      );
+
+      const isCurrentThisShift = shift === targetShift;
+      let recordsToEvaluate: SubmissionRecord[] = [];
+
+      if (isCurrentThisShift) {
+        const hasCurrentInStore = matching.some(
+          (r) =>
+            String(r.semester) === String(semester) &&
+            String(r.section || 'A') === String(section)
+        );
+        if (hasCurrentInStore) {
+          recordsToEvaluate = matching.map((r) =>
+            String(r.semester) === String(semester) && String(r.section || 'A') === String(section)
+              ? currentVirtualRec
+              : r
+          );
+        } else {
+          recordsToEvaluate = [currentVirtualRec, ...matching];
+        }
+      } else {
+        recordsToEvaluate = matching;
+      }
+
+      let totalSubjects = 0;
+      let uploadedCount = 0;
+      let inProgressCount = 0;
+
+      recordsToEvaluate.forEach((r) => {
+        const activeRows = (r.subjects || []).filter(
+          (s) => (s.courseCode && s.courseCode.trim()) || (s.subjectTitle && s.subjectTitle.trim()) || s.status
+        );
+        activeRows.forEach((s) => {
+          totalSubjects++;
+          if (s.status === 'Uploaded') uploadedCount++;
+          else if (s.status === 'In Progress') inProgressCount++;
+        });
+      });
+
+      const hasRecord = recordsToEvaluate.length > 0 && totalSubjects > 0;
+
+      if (recordsToEvaluate.length === 0 || totalSubjects === 0) {
+        return {
+          isOffered: true,
+          status: 'PENDING' as const,
+          label: 'Pending',
+          displayText: 'Pending',
+          hasRecord: false,
+          courseCount: 0,
+          uploaded: 0,
+          total: 0,
+        };
+      }
+
+      if (uploadedCount === totalSubjects && totalSubjects > 0) {
+        return {
+          isOffered: true,
+          status: 'COMPLETE' as const,
+          label: 'Complete',
+          displayText: `Complete (${uploadedCount}/${totalSubjects})`,
+          hasRecord,
+          courseCount: totalSubjects,
+          uploaded: uploadedCount,
+          total: totalSubjects,
+        };
+      }
+
+      if (uploadedCount > 0 || inProgressCount > 0) {
+        return {
+          isOffered: true,
+          status: 'IN_PROGRESS' as const,
+          label: 'In Progress',
+          displayText: `In Progress (${uploadedCount}/${totalSubjects})`,
+          hasRecord,
+          courseCount: totalSubjects,
+          uploaded: uploadedCount,
+          total: totalSubjects,
+        };
+      }
+
+      return {
+        isOffered: true,
+        status: 'PENDING' as const,
+        label: 'Pending',
+        displayText: `Pending (${uploadedCount}/${totalSubjects})`,
+        hasRecord,
+        courseCount: totalSubjects,
+        uploaded: uploadedCount,
+        total: totalSubjects,
+      };
+    };
+
+    return {
+      morning: getShiftMetrics('Morning'),
+      evening: getShiftMetrics('Evening'),
+    };
+  }, [
+    department,
+    program,
+    degreeLevel,
+    shift,
+    section,
+    session,
+    semester,
+    hodCoordinator,
+    submissionDate,
+    subjects,
+    currentUser,
+    lastSavedTime,
+    isExistingRecord,
+    storageVersion,
+  ]);
 
   // Sync props if changed externally (e.g. from VC Dashboard "Inspect Record" or parent)
   useEffect(() => {
@@ -2290,6 +2418,63 @@ export const HODEntryForm: React.FC<Props> = ({
             <Layers className="w-3.5 h-3.5 text-slate-500 shrink-0" />
             <span>SEMESTER {semester}</span>
           </span>
+
+          {/* Shift Status Badges (Morning & Evening) */}
+          <div className="inline-flex flex-wrap items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200">
+            {/* Morning Shift Badge */}
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] border ${
+                shiftStatuses.morning.isOffered
+                  ? shiftStatuses.morning.status === 'COMPLETE'
+                    ? 'bg-emerald-100 text-emerald-950 border-emerald-400 font-extrabold'
+                    : shiftStatuses.morning.status === 'IN_PROGRESS'
+                    ? 'bg-blue-100 text-blue-950 border-blue-400 font-extrabold'
+                    : 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}
+              title={`Morning Shift Status: ${shiftStatuses.morning.displayText}`}
+            >
+              <Sun className="w-3 h-3 text-amber-600 shrink-0" />
+              <span>Morning:</span>
+              <span className="font-extrabold">{shiftStatuses.morning.displayText}</span>
+              {shiftStatuses.morning.status === 'COMPLETE' && (
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0 ml-0.5" />
+              )}
+              {shiftStatuses.morning.status === 'IN_PROGRESS' && (
+                <Clock className="w-3 h-3 text-blue-600 shrink-0 ml-0.5" />
+              )}
+              {shiftStatuses.morning.status === 'PENDING' && (
+                <Clock className="w-3 h-3 text-amber-600 shrink-0 ml-0.5" />
+              )}
+            </span>
+
+            {/* Evening Shift Badge */}
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] border ${
+                shiftStatuses.evening.isOffered
+                  ? shiftStatuses.evening.status === 'COMPLETE'
+                    ? 'bg-emerald-100 text-emerald-950 border-emerald-400 font-extrabold'
+                    : shiftStatuses.evening.status === 'IN_PROGRESS'
+                    ? 'bg-blue-100 text-blue-950 border-blue-400 font-extrabold'
+                    : 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}
+              title={`Evening Shift Status: ${shiftStatuses.evening.displayText}`}
+            >
+              <Moon className="w-3 h-3 text-indigo-600 shrink-0" />
+              <span>Evening:</span>
+              <span className="font-extrabold">{shiftStatuses.evening.displayText}</span>
+              {shiftStatuses.evening.status === 'COMPLETE' && (
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0 ml-0.5" />
+              )}
+              {shiftStatuses.evening.status === 'IN_PROGRESS' && (
+                <Clock className="w-3 h-3 text-blue-600 shrink-0 ml-0.5" />
+              )}
+              {shiftStatuses.evening.status === 'PENDING' && (
+                <Clock className="w-3 h-3 text-amber-600 shrink-0 ml-0.5" />
+              )}
+            </span>
+          </div>
 
           {/* Export Departmental Summary PDF Report (Morning & Evening Merged) */}
           <button

@@ -105,7 +105,14 @@ export function VCExecutiveSummaryPanel({
       );
 
       // 2. Filter programs so ONLY programs part of activeSess are included
-      const targetPrograms = dept.programs.filter((prog) => activeProgNames.includes(prog.name));
+      const targetPrograms = dept.programs.filter((prog) =>
+        activeProgNames.some(
+          (p) =>
+            StorageService.normalizeProgramName(p, dept.name) ===
+              StorageService.normalizeProgramName(prog.name, dept.name) ||
+            StorageService._isProgMatch(prog.name, p)
+        )
+      );
 
       if (targetPrograms.length === 0) {
         return null;
