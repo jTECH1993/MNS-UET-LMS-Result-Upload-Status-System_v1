@@ -957,6 +957,9 @@ export class StorageService {
 
   public static setSelectedSession(session: string): void {
     localStorage.setItem('mnsuet_current_active_session_v99', session);
+    try {
+      FirebaseStore.syncGlobalState('mnsuet_current_active_session_v99', session).catch(() => {});
+    } catch (e) {}
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: [session] }));
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
@@ -982,7 +985,13 @@ export class StorageService {
     localStorage.setItem('mnsuet_active_sessions_list_v99', JSON.stringify(sorted));
     if (sorted.length > 0) {
       localStorage.setItem('mnsuet_current_active_session_v99', sorted[0]);
+      try {
+        FirebaseStore.syncGlobalState('mnsuet_current_active_session_v99', sorted[0]).catch(() => {});
+      } catch (e) {}
     }
+    try {
+      FirebaseStore.syncGlobalState('mnsuet_active_sessions_list_v99', sorted).catch(() => {});
+    } catch (e) {}
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mnsuet_sessions_updated', { detail: sorted }));
       window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
