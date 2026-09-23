@@ -50,39 +50,19 @@ export class NotificationService {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          return parsed;
+          // Filter out legacy fake seed reminders
+          const cleanReminders = parsed.filter((r) => r.id !== 'rem-seed-1');
+          if (cleanReminders.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanReminders));
+          }
+          return cleanReminders;
         }
       }
     } catch (e) {
       console.error('Failed to parse faculty reminders', e);
     }
 
-    // Default sample reminders
-    const defaultReminders: FacultyReminderNotification[] = [
-      {
-        id: 'rem-seed-1',
-        senderName: 'Dr. Najam-ul-Islam',
-        senderRole: 'HOD',
-        department: 'Department of Computer Science',
-        program: 'BS Computer Science',
-        shift: 'Morning',
-        session: '2023',
-        semester: '1',
-        section: 'A',
-        title: 'Action Required: Pending Result Uploads for BS Computer Science',
-        message: 'Dear Faculty Members & Course Instructors, please ensure all pending course result rosters for BS CS (Semester 1) are submitted and synchronized into LMS.',
-        deadline: 'Today by 5:00 PM',
-        createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-        active: true,
-        dismissedBy: [],
-      },
-    ];
-
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultReminders));
-    } catch (e) {}
-
-    return defaultReminders;
+    return [];
   }
 
   public static dispatchReminder(reminderData: {

@@ -216,25 +216,7 @@ export class CompletionRadarService {
       }
     } catch (e) {}
 
-    const defaultHODs: Record<string, string> = {
-      'Department of Computer Science': 'Dr. Najam-ul-Islam',
-      'Department of Electrical Engineering & Technology': 'Dr. Muhammad Tariq',
-      'Department of Mechanical Engineering & Technology': 'Dr. Hafiz Muhammad Umar',
-      'Department of Civil Engineering & Technology': 'Dr. Tariq Mahmood',
-      'Department of Chemical Engineering & Technology': 'Dr. M. Mubeen',
-      'Department of Management Sciences': 'Dr. M. Fahad',
-      'Department of Basic Sciences & Humanities': 'Dr. M. Fahad',
-    };
-
-    const matchedKey = Object.keys(defaultHODs).find(
-      (k) => k.toLowerCase() === deptName.trim().toLowerCase()
-    );
-
-    if (matchedKey) {
-      return { isRegistered: true, name: defaultHODs[matchedKey] };
-    }
-
-    return { isRegistered: false, name: 'Not Registered' };
+    return { isRegistered: false, name: 'HOD Unassigned' };
   }
 
   /**

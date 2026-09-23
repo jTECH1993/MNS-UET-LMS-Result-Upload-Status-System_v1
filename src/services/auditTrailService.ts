@@ -220,26 +220,18 @@ export class AuditTrailService {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          existing = parsed;
+          // Filter out legacy fake seed records
+          existing = parsed.filter((r) => !r.id.startsWith('audit_seed_'));
         }
       }
     } catch (e) {}
 
-    const defaults = generateDefaultAuditLogs();
-    
-    // Combine defaults with existing non-duplicate entries
     const existingIds = new Set(existing.map((e) => e.id));
     const merged = [...existing];
 
-    defaults.forEach((def) => {
-      if (!existingIds.has(def.id)) {
-        merged.push(def);
-      }
-    });
-
-    // Also derive from active result store if available
+    // Also derive authentic audit events from real result records stored in database
     try {
-      const rawStore = localStorage.getItem('mnsuet_lms_db_v99') || localStorage.getItem('mnsuet_lms_db_v100');
+      const rawStore = localStorage.getItem('mnsuet_lms_db_v100') || localStorage.getItem('mnsuet_lms_db_v99');
       if (rawStore) {
         const parsedStore = JSON.parse(rawStore);
         if (parsedStore && typeof parsedStore === 'object') {
@@ -254,7 +246,7 @@ export class AuditTrailService {
                   action: 'UPDATED',
                   actorName: r.accessedBy || r.hodCoordinator || 'Program Coordinator',
                   actorRole: r.userDesignation || 'Program Coordinator',
-                  department: r.department || 'Department of Computer Science & IT',
+                  department: r.department || 'Department of Computer Science',
                   program: r.program,
                   shift: r.shift || 'Morning',
                   semester: r.semester || '1',

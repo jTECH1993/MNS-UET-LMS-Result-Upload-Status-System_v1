@@ -48,59 +48,20 @@ export class DirectiveService {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const clean = parsed.filter((d) => d.id !== 'dir-101' && d.id !== 'dir-102');
+          if (clean.length !== parsed.length) {
+            DirectiveService.saveDirectives(clean);
+          }
+          return clean;
+        }
       }
     } catch (e) {
       console.error('Failed to load directives from localStorage', e);
     }
 
-    // Default sample directives matching institutional workflow
-    const initialDirectives: InstitutionalDirective[] = [
-      {
-        id: 'dir-101',
-        senderRole: 'VC',
-        senderName: 'Prof. Dr. Vice Chancellor',
-        targetDepartment: 'Department of Mechanical Engineering & Technology',
-        targetProgram: 'B.Sc. Mechanical Engineering',
-        targetRole: 'HOD',
-        title: 'LMS Result Uploads Completed & Verified',
-        message: 'All course grade result sheets for Department of Mechanical Engineering & Technology have been uploaded, verified, and synchronized into LMS.',
-        priority: 'CRITICAL',
-        deadline: 'Today 5:00 PM',
-        status: 'RESOLVED',
-        createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-        updatedAt: new Date().toISOString(),
-        resolutionDetails: {
-          resolvedBy: 'Dr. Hafiz Muhammad Umar (HOD Mechanical)',
-          resolvedAt: new Date().toISOString(),
-          completionNote: '100% course result sheets uploaded, verified, and synchronized into LMS database.',
-        },
-      },
-      {
-        id: 'dir-102',
-        senderRole: 'VC',
-        senderName: 'Exam Cell Controller',
-        targetDepartment: 'Department of Chemical Engineering & Technology',
-        targetProgram: 'B.Sc. Chemical Engineering',
-        targetRole: 'HOD',
-        title: 'Resolve Missing Practical Marks in CHE-302',
-        message: '3 course result sheets are currently pending. Please contact program coordinator and ensure immediate tabulation.',
-        priority: 'HIGH',
-        deadline: 'Tomorrow 12:00 PM',
-        status: 'FORWARDED',
-        createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-        updatedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-        forwardedByHOD: {
-          hodName: 'Dr. Chemical HOD',
-          forwardedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-          coordinatorName: 'Chemical Program Coordinator',
-          noteToCoordinator: 'Engr. Sahib, please review CHE-302 practical grades and finalize LMS upload as requested by VC Office.'
-        }
-      }
-    ];
-
-    DirectiveService.saveDirectives(initialDirectives);
-    return initialDirectives;
+    return [];
   }
 
   /**

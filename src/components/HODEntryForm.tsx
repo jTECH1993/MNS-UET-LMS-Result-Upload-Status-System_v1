@@ -2514,16 +2514,6 @@ export const HODEntryForm: React.FC<Props> = ({
         />
       )}
 
-      {/* SYSTEM-WIDE FACULTY UPLOAD REMINDER NOTIFICATION BANNER */}
-      <FacultyReminderBanner
-        currentUser={currentUser}
-        onNavigateToProgram={(dept, prog, sh) => {
-          if (dept && dept !== department) setDepartment(dept);
-          if (prog) setProgram(prog);
-          if (sh && (sh === 'Morning' || sh === 'Evening')) setShift(sh);
-        }}
-      />
-
       {/* CARD 1: TOP BANNER (Matching Screenshot 1) */}
       <div
         id="hod-header-banner"
