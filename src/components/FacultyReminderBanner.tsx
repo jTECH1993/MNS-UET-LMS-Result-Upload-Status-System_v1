@@ -37,15 +37,38 @@ export const FacultyReminderBanner: React.FC<Props> = ({
       // If user is ADMIN or VC, show all active reminders
       if (currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') return true;
 
-      // If department matches or target is ALL
+      // Check department match
+      const userDept = (currentUser?.department || '').toLowerCase().trim();
+      const remDept = (r.department || '').toLowerCase().trim();
       const matchDept =
         !r.department ||
-        r.department === 'ALL' ||
-        !currentUser?.department ||
-        currentUser.department.toLowerCase().trim().includes(r.department.toLowerCase().trim()) ||
-        r.department.toLowerCase().trim().includes((currentUser.department || '').toLowerCase().trim());
+        remDept === 'all' ||
+        !userDept ||
+        userDept.includes(remDept) ||
+        remDept.includes(userDept);
 
-      return matchDept;
+      if (!matchDept) return false;
+
+      // If HOD, HOD sees all reminders within their department
+      if (currentUser?.role === 'HOD') return true;
+
+      // For Coordinators, Lecturers, Visiting Lecturers: check program match
+      if (r.program && r.program.toUpperCase() !== 'ALL') {
+        const remProg = r.program.toLowerCase().trim();
+        const userProgs = [
+          currentUser?.program,
+          ...(currentUser?.assignedPrograms || [])
+        ].filter(Boolean).map((p) => (p as string).toLowerCase().trim());
+
+        if (userProgs.length > 0) {
+          const hasProgMatch = userProgs.some(
+            (up) => up === remProg || up.includes(remProg) || remProg.includes(up)
+          );
+          if (!hasProgMatch) return false;
+        }
+      }
+
+      return true;
     });
 
     setReminders(filtered);

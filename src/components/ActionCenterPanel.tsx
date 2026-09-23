@@ -27,6 +27,7 @@ import {
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { DirectiveService, InstitutionalDirective } from '../services/directiveService';
 import { StorageService } from '../services/storageService';
+import { AuthService } from '../services/authService';
 import { VCExecutiveSummaryPanel } from './VCExecutiveSummaryPanel';
 import { AcademicShift } from '../types';
 
@@ -54,14 +55,19 @@ export function ActionCenterPanel({
   const [selectedDepartmentForDirective, setSelectedDepartmentForDirective] = useState<string>('');
 
   // Directive Form State
-  const [directiveForm, setDirectiveForm] = useState({
-    department: 'Department of Computer Science',
-    program: 'BS Computer Science',
-    title: 'Accelerate LMS Grade Sheet Uploads',
-    customTitle: '',
-    message: 'Kindly ensure all course grade sheets for your department are uploaded and verified without further delay.',
-    priority: 'CRITICAL' as 'CRITICAL' | 'HIGH' | 'MEDIUM',
-    deadline: 'Today 5:00 PM'
+  const [directiveForm, setDirectiveForm] = useState(() => {
+    const session = AuthService.getCurrentSession();
+    const userDept = session?.department || 'Department of Computer Science';
+    const userProg = session?.program || (session?.assignedPrograms && session.assignedPrograms.length > 0 ? session.assignedPrograms[0] : 'BS Artificial Intelligence');
+    return {
+      department: userDept,
+      program: userProg,
+      title: 'Accelerate LMS Grade Sheet Uploads',
+      customTitle: '',
+      message: 'Kindly ensure all course grade sheets for your department are uploaded and verified without further delay.',
+      priority: 'CRITICAL' as 'CRITICAL' | 'HIGH' | 'MEDIUM',
+      deadline: 'Today 5:00 PM'
+    };
   });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);

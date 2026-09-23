@@ -108,13 +108,22 @@ export default function App() {
   // Program, Shift, and Semester selection state
   const [targetDept, setTargetDept] = useState<string>(() => {
     const session = AuthService.getCurrentSession();
-    if (session?.role === 'HOD' && session.department) {
+    if (session?.department) {
       return session.department;
     }
     return 'Department of Computer Science';
   });
 
-  const [targetProg, setTargetProg] = useState<string>('BS Computer Science');
+  const [targetProg, setTargetProg] = useState<string>(() => {
+    const session = AuthService.getCurrentSession();
+    if (session?.program) {
+      return session.program;
+    }
+    if (session?.assignedPrograms && session.assignedPrograms.length > 0) {
+      return session.assignedPrograms[0];
+    }
+    return 'BS Artificial Intelligence';
+  });
   const [targetShift, setTargetShift] = useState<AcademicShift>('Morning');
   const [targetSession, setTargetSession] = useState<string>(() => StorageService.getSelectedSession());
   const [activeSessions, setActiveSessions] = useState<string[]>(() => StorageService.getActiveSessions());
@@ -261,6 +270,8 @@ export default function App() {
 
         if (currentUser.program) {
           setTargetProg(currentUser.program);
+        } else if (currentUser.assignedPrograms && currentUser.assignedPrograms.length > 0) {
+          setTargetProg(currentUser.assignedPrograms[0]);
         } else {
           const deptObj = UNIVERSITY_DEPARTMENTS.find((d) => d.name.trim().toLowerCase() === (currentUser.department || '').trim().toLowerCase()) || UNIVERSITY_DEPARTMENTS[0];
           if (deptObj && deptObj.programs.length > 0) {
@@ -701,7 +712,7 @@ export default function App() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-teal-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                 <GraduationCap className="w-3.5 h-3.5 text-teal-300" />
-                Coordinated Program: {currentUser.program || targetProg}
+                Coordinated Program: {currentUser.program || (currentUser.assignedPrograms && currentUser.assignedPrograms.length > 0 ? currentUser.assignedPrograms[0] : targetProg)}
               </span>
               <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
                 {currentUser.department}
@@ -711,7 +722,7 @@ export default function App() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-sky-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                 <BookOpen className="w-3.5 h-3.5 text-sky-300" />
-                Lecturer: {currentUser.program || targetProg}
+                Lecturer: {currentUser.program || (currentUser.assignedPrograms && currentUser.assignedPrograms.length > 0 ? currentUser.assignedPrograms[0] : targetProg)}
               </span>
               <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
                 {currentUser.department}
@@ -721,7 +732,7 @@ export default function App() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-amber-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                 <Briefcase className="w-3.5 h-3.5 text-amber-300" />
-                Visiting Lecturer: {currentUser.program || targetProg}
+                Visiting Lecturer: {currentUser.program || (currentUser.assignedPrograms && currentUser.assignedPrograms.length > 0 ? currentUser.assignedPrograms[0] : targetProg)}
               </span>
               <span className="text-slate-800 dark:text-slate-200 font-bold text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-300 dark:border-slate-700">
                 {currentUser.department}
