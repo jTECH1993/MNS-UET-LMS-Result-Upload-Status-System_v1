@@ -755,6 +755,46 @@ export default function App() {
                     const isActive = targetDept === dept.name;
                     const isMenuOpen = openDeptDropdown === dept.name;
 
+                    // Calculate upload status across all programs in this department for selected session(s)
+                    const deptProgDetails = dept.programs.map((prog) => ({
+                      prog,
+                      detail: StorageService.getProgramSessionDetail(
+                        dept.name,
+                        prog.name,
+                        activeSessions,
+                        allRecords
+                      ),
+                      shiftDetails: StorageService.getProgramShiftDetails(
+                        dept.name,
+                        prog.name,
+                        activeSessions,
+                        allRecords
+                      ),
+                    }));
+
+                    const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
+                    const activeEvalList = enrolled.length > 0 ? enrolled : deptProgDetails;
+                    const totalProgsCount = activeEvalList.length;
+
+                    // Count programs with completed result uploads across allRecords
+                    const completedProgsCount = activeEvalList.filter((d) => {
+                      const progRecords = allRecords.filter(
+                        (r) =>
+                          StorageService._isDeptMatch(r.department || '', dept.name) &&
+                          StorageService._isProgMatch(r.program || '', d.prog.name) &&
+                          activeSessions.includes(r.session || '2023')
+                      );
+                      if (progRecords.length === 0) return false;
+                      const totalSubjects = progRecords.reduce((acc, r) => acc + (r.subjects ? r.subjects.length : 0), 0);
+                      const submittedSubjects = progRecords.reduce(
+                        (acc, r) => acc + (r.subjects ? r.subjects.filter((s) => s.status === 'Uploaded').length : 0),
+                        0
+                      );
+                      return totalSubjects > 0 && submittedSubjects === totalSubjects;
+                    }).length;
+
+                    const completionPct = totalProgsCount > 0 ? Math.round((completedProgsCount / totalProgsCount) * 100) : 0;
+
                     return (
                       <div key={dept.name} className="relative">
                         <button
@@ -780,14 +820,74 @@ export default function App() {
                             }
                             setOpenDeptDropdown((prev) => (prev === dept.name ? null : dept.name));
                           }}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
                             isActive
                               ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-2 ring-emerald-500/50'
                               : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-emerald-400'
                           }`}
-                          title={`Click to select ${dept.name} (${dept.code}) and view its ${dept.programs.length} programs`}
+                          title={`${dept.name} (${dept.code}): ${completedProgsCount} of ${totalProgsCount} programs uploaded (${completionPct}% complete)`}
                         >
+                          {/* Circular SVG Completion Ring Indicator */}
+                          <div className="relative w-4 h-4 flex items-center justify-center shrink-0" title={`${completionPct}% Upload Complete`}>
+                            <svg className="w-4 h-4 transform -rotate-90" viewBox="0 0 24 24">
+                              {/* Background Track Circle */}
+                              <circle
+                                cx="12"
+                                cy="12"
+                                r="8.5"
+                                className={isActive ? "stroke-emerald-900/50" : "stroke-slate-200 dark:stroke-slate-700"}
+                                strokeWidth="3"
+                                fill="transparent"
+                              />
+                              {/* Progress Circle */}
+                              <circle
+                                cx="12"
+                                cy="12"
+                                r="8.5"
+                                className={
+                                  completionPct === 100
+                                    ? "stroke-emerald-400 dark:stroke-emerald-300"
+                                    : completionPct > 50
+                                    ? "stroke-blue-400 dark:stroke-blue-300"
+                                    : completionPct > 0
+                                    ? "stroke-amber-400 dark:stroke-amber-300"
+                                    : "stroke-slate-300 dark:stroke-slate-600"
+                                }
+                                strokeWidth="3"
+                                strokeDasharray={53.4}
+                                strokeDashoffset={53.4 - (53.4 * completionPct) / 100}
+                                strokeLinecap="round"
+                                fill="transparent"
+                              />
+                            </svg>
+                            {completionPct === 100 && (
+                              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-emerald-300">
+                                ✓
+                              </span>
+                            )}
+                          </div>
+
                           <span>{dept.code}</span>
+
+                          {/* Program Upload Ratio Badge */}
+                          <span
+                            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full border ${
+                              completionPct === 100
+                                ? isActive
+                                  ? 'bg-emerald-900/60 text-emerald-200 border-emerald-400/50'
+                                  : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                                : completionPct > 0
+                                ? isActive
+                                  ? 'bg-amber-900/60 text-amber-200 border-amber-400/50'
+                                  : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                : isActive
+                                ? 'bg-emerald-900/40 text-emerald-100 border-emerald-500/30'
+                                : 'bg-slate-100 dark:bg-slate-750 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {completedProgsCount}/{totalProgsCount}
+                          </span>
+
                           <ChevronDown
                             className={`w-3 h-3 transition-transform ${
                               isMenuOpen ? 'rotate-180 text-emerald-300' : 'opacity-70'
@@ -797,22 +897,6 @@ export default function App() {
 
                         {/* Dropdown Menu showing programs for this department with session and shift awareness */}
                         {isMenuOpen && (() => {
-                          const deptProgDetails = dept.programs.map((prog) => ({
-                            prog,
-                            detail: StorageService.getProgramSessionDetail(
-                              dept.name,
-                              prog.name,
-                              activeSessions,
-                              allRecords
-                            ),
-                            shiftDetails: StorageService.getProgramShiftDetails(
-                              dept.name,
-                              prog.name,
-                              activeSessions,
-                              allRecords
-                            ),
-                          }));
-                          const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
                           const isMulti = activeSessions.length > 1;
 
                           return (
@@ -829,7 +913,35 @@ export default function App() {
                                     {dept.programs.length} Offerings
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-750 text-[11px]">
+
+                                {/* Visual Progress Bar inside Dropdown Header */}
+                                <div className="mt-2 pt-2 border-t border-slate-200/80 dark:border-slate-750 space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] font-bold">
+                                    <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                      <span className={`w-2 h-2 rounded-full ${completionPct === 100 ? 'bg-emerald-500' : completionPct > 0 ? 'bg-amber-500' : 'bg-slate-400'}`}></span>
+                                      <span>Result Upload Progress</span>
+                                    </span>
+                                    <span className={completionPct === 100 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-slate-800 dark:text-slate-200 font-extrabold'}>
+                                      {completedProgsCount} of {totalProgsCount} Programs Uploaded ({completionPct}%)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-300/60 dark:border-slate-700">
+                                    <div
+                                      className={`h-full transition-all duration-500 ${
+                                        completionPct === 100
+                                          ? 'bg-emerald-500'
+                                          : completionPct > 50
+                                          ? 'bg-blue-500'
+                                          : completionPct > 0
+                                          ? 'bg-amber-500'
+                                          : 'bg-slate-300 dark:bg-slate-600'
+                                      }`}
+                                      style={{ width: `${Math.max(4, completionPct)}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-750 text-[11px]">
                                   <span className="text-slate-600 dark:text-slate-400 font-medium">
                                     {isMulti ? (
                                       <span>Sessions: <strong className="text-emerald-700 dark:text-emerald-400">{activeSessions.join(' & ')}</strong></span>

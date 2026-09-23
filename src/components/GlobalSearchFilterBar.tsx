@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SubmissionRecord, SubjectRow, AcademicShift } from '../types';
+import { StorageService } from '../services/storageService';
 
 export type SearchScope = 'ALL' | 'SUBJECT' | 'CODE' | 'LECTURER' | 'DEPT';
 
@@ -476,6 +477,34 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
 
           {UNIVERSITY_DEPARTMENTS.map((dept) => {
             const selected = isDeptSelected(dept.name) && selectedDeptFilters.length > 0;
+
+            // Calculate department program upload statistics
+            const deptProgDetails = dept.programs.map((prog) => ({
+              prog,
+              detail: StorageService.getProgramSessionDetail(dept.name, prog.name, ['2023'], allRecords),
+            }));
+
+            const enrolled = deptProgDetails.filter((d) => d.detail.isApplicableInSelected);
+            const activeEvalList = enrolled.length > 0 ? enrolled : deptProgDetails;
+            const totalProgsCount = activeEvalList.length;
+
+            const completedProgsCount = activeEvalList.filter((d) => {
+              const progRecords = allRecords.filter(
+                (r) =>
+                  StorageService._isDeptMatch(r.department || '', dept.name) &&
+                  StorageService._isProgMatch(r.program || '', d.prog.name)
+              );
+              if (progRecords.length === 0) return false;
+              const totalSubjects = progRecords.reduce((acc, r) => acc + (r.subjects ? r.subjects.length : 0), 0);
+              const submittedSubjects = progRecords.reduce(
+                (acc, r) => acc + (r.subjects ? r.subjects.filter((s) => s.status === 'Uploaded').length : 0),
+                0
+              );
+              return totalSubjects > 0 && submittedSubjects === totalSubjects;
+            }).length;
+
+            const completionPct = totalProgsCount > 0 ? Math.round((completedProgsCount / totalProgsCount) * 100) : 0;
+
             return (
               <button
                 key={dept.name}
@@ -486,8 +515,56 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
                     ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'
                 }`}
+                title={`${dept.name}: ${completedProgsCount}/${totalProgsCount} programs uploaded (${completionPct}%)`}
               >
+                {/* Circular Progress Ring */}
+                <div className="relative w-3.5 h-3.5 flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5 transform -rotate-90" viewBox="0 0 24 24">
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="8.5"
+                      className={selected ? "stroke-indigo-300/40" : "stroke-slate-200 dark:stroke-slate-700"}
+                      strokeWidth="3"
+                      fill="transparent"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="8.5"
+                      className={
+                        completionPct === 100
+                          ? selected ? "stroke-emerald-200" : "stroke-emerald-500"
+                          : completionPct > 50
+                          ? selected ? "stroke-blue-200" : "stroke-blue-500"
+                          : completionPct > 0
+                          ? selected ? "stroke-amber-200" : "stroke-amber-500"
+                          : selected ? "stroke-indigo-300" : "stroke-slate-300 dark:stroke-slate-600"
+                      }
+                      strokeWidth="3"
+                      strokeDasharray={53.4}
+                      strokeDashoffset={53.4 - (53.4 * completionPct) / 100}
+                      strokeLinecap="round"
+                      fill="transparent"
+                    />
+                  </svg>
+                </div>
+
                 <span>{dept.code || dept.name}</span>
+
+                {/* Ratio Badge */}
+                <span
+                  className={`text-[9px] font-extrabold px-1 rounded-full border ${
+                    selected
+                      ? 'bg-indigo-700 text-indigo-100 border-indigo-500'
+                      : completionPct === 100
+                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  {completedProgsCount}/{totalProgsCount}
+                </span>
+
                 {selected && <Check className="w-3 h-3 text-white shrink-0 stroke-[3]" />}
               </button>
             );
