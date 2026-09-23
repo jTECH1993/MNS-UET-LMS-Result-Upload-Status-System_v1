@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Send, CheckCircle2, Clock, ShieldAlert, AlertCircle, Sparkles, MessageSquare, CornerDownRight, X } from 'lucide-react';
+import { Send, CheckCircle2, Clock, ShieldAlert, AlertCircle, Sparkles, MessageSquare, CornerDownRight, X, Megaphone } from 'lucide-react';
 import { DirectiveService, InstitutionalDirective } from '../services/directiveService';
+import { SendFacultyReminderModal } from './SendFacultyReminderModal';
 
 interface Props {
   departmentName?: string;
@@ -23,6 +24,7 @@ export const CoordinatorDirectivePanel: React.FC<Props> = ({
   const [selectedToResolve, setSelectedToResolve] = useState<InstitutionalDirective | null>(null);
   const [completionNote, setCompletionNote] = useState<string>('LMS course result sheets uploaded and verified successfully.');
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState<boolean>(false);
 
   const loadDirectives = () => {
     if (!departmentName) return;
@@ -100,6 +102,15 @@ export const CoordinatorDirectivePanel: React.FC<Props> = ({
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsReminderModalOpen(true)}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-black rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <Megaphone className="w-3.5 h-3.5 animate-pulse text-amber-200" />
+            <span>Remind Instructors</span>
+          </button>
         </div>
 
         <div className="space-y-3">
@@ -205,6 +216,30 @@ export const CoordinatorDirectivePanel: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Send Faculty Upload Reminder Modal */}
+      <SendFacultyReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={() => setIsReminderModalOpen(false)}
+        currentUser={currentUser ? {
+          id: currentUser.email || 'coord',
+          username: currentUser.email || 'coord',
+          password: '',
+          name: currentUser.name,
+          email: currentUser.email,
+          department: departmentName,
+          designation: 'Program Coordinator',
+          role: currentUser.role as any,
+          program: programName,
+          createdAt: new Date().toISOString()
+        } : null}
+        defaultDepartment={departmentName}
+        defaultProgram={programName}
+        onSuccess={() => {
+          setSuccessToast('Reminder dispatched to program faculty members!');
+          setTimeout(() => setSuccessToast(null), 4000);
+        }}
+      />
     </div>
   );
 };

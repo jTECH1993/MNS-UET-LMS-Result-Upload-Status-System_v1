@@ -29,6 +29,8 @@ import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { DepartmentExportModal, ExportScope } from './DepartmentExportModal';
 import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
+import { SendFacultyReminderModal } from './SendFacultyReminderModal';
+import { FacultyReminderBanner } from './FacultyReminderBanner';
 import {
   Save,
   Trash2,
@@ -67,6 +69,7 @@ import {
   CheckCheck,
   Wand2,
   MessageSquare,
+  Megaphone,
   Edit3,
   CheckSquare,
   Square,
@@ -205,6 +208,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [rosterVersion, setRosterVersion] = useState<number>(0);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState<boolean>(false);
+  const [isSendReminderModalOpen, setIsSendReminderModalOpen] = useState<boolean>(false);
 
   // Available programs for current department (guaranteed to include all department offerings)
   const currentDeptPrograms = useMemo(() => {
@@ -2510,6 +2514,16 @@ export const HODEntryForm: React.FC<Props> = ({
         />
       )}
 
+      {/* SYSTEM-WIDE FACULTY UPLOAD REMINDER NOTIFICATION BANNER */}
+      <FacultyReminderBanner
+        currentUser={currentUser}
+        onNavigateToProgram={(dept, prog, sh) => {
+          if (dept && dept !== department) setDepartment(dept);
+          if (prog) setProgram(prog);
+          if (sh && (sh === 'Morning' || sh === 'Evening')) setShift(sh);
+        }}
+      />
+
       {/* CARD 1: TOP BANNER (Matching Screenshot 1) */}
       <div
         id="hod-header-banner"
@@ -2665,6 +2679,20 @@ export const HODEntryForm: React.FC<Props> = ({
               PDF / CSV
             </span>
           </button>
+
+          {/* Trigger Faculty Upload Reminder Notification Modal (HOD / Coordinator / Admin / VC) */}
+          {(currentUser?.role === 'HOD' || currentUser?.role === 'COORDINATOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'VC' || isPrivilegedUser) && (
+            <button
+              id="btn-trigger-faculty-reminder"
+              type="button"
+              onClick={() => setIsSendReminderModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition-all shadow-2xs cursor-pointer hover:scale-[1.02]"
+              title="Dispatch system-wide pending result upload reminder notification to program faculty members"
+            >
+              <Megaphone className="w-3.5 h-3.5 shrink-0 animate-pulse text-amber-200" />
+              <span>Send Faculty Reminder</span>
+            </button>
+          )}
 
           {/* Download All Departments Master Report Button for VC / Admin */}
           {(currentUser?.role === 'ADMIN' || currentUser?.role === 'VC' || isVC) && (
@@ -5938,6 +5966,22 @@ export const HODEntryForm: React.FC<Props> = ({
         currentRecord={loadedRecord}
         currentUser={currentUser}
         defaultScope={exportDefaultScope}
+      />
+
+      {/* Send System-Wide Faculty Upload Reminder Modal */}
+      <SendFacultyReminderModal
+        isOpen={isSendReminderModalOpen}
+        onClose={() => setIsSendReminderModalOpen(false)}
+        currentUser={currentUser}
+        defaultDepartment={department}
+        defaultProgram={program}
+        defaultShift={shift}
+        defaultSession={session}
+        defaultSemester={semester}
+        defaultSection={section}
+        onSuccess={(notification) => {
+          showFeedback('success', `Faculty Reminder notification dispatched to ${notification.program} instructors!`);
+        }}
       />
     </div>
   );

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Send, MessageSquare, AlertTriangle, CheckCircle2, Clock, ShieldAlert, UserCheck, ArrowRight, CornerDownRight, X, Sparkles } from 'lucide-react';
+import { Send, MessageSquare, AlertTriangle, CheckCircle2, Clock, ShieldAlert, UserCheck, ArrowRight, CornerDownRight, X, Sparkles, Megaphone } from 'lucide-react';
 import { DirectiveService, InstitutionalDirective } from '../services/directiveService';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { UserAccount } from '../types';
 import { AuthService } from '../services/authService';
+import { SendFacultyReminderModal } from './SendFacultyReminderModal';
 
 interface Props {
   departmentName: string;
@@ -28,6 +29,7 @@ export const HODDirectivePanel: React.FC<Props> = ({
   const [selectedCoordinatorEmail, setSelectedCoordinatorEmail] = useState<string>('');
   const [customNote, setCustomNote] = useState<string>('');
   const [isSuccessToast, setIsSuccessToast] = useState<string | null>(null);
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState<boolean>(false);
 
   const loadDirectives = () => {
     if (!departmentName) return;
@@ -130,6 +132,15 @@ export const HODDirectivePanel: React.FC<Props> = ({
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsReminderModalOpen(true)}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-black rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <Megaphone className="w-3.5 h-3.5 animate-pulse text-amber-200" />
+            <span>Send Faculty Reminder</span>
+          </button>
         </div>
 
         {/* Directives List */}
@@ -316,6 +327,28 @@ export const HODDirectivePanel: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Send Faculty Upload Reminder Modal */}
+      <SendFacultyReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={() => setIsReminderModalOpen(false)}
+        currentUser={currentUser ? {
+          id: currentUser.email || 'hod',
+          username: currentUser.email || 'hod',
+          password: '',
+          name: currentUser.name,
+          email: currentUser.email,
+          department: departmentName,
+          designation: 'Head of Department',
+          role: currentUser.role as any,
+          createdAt: new Date().toISOString()
+        } : null}
+        defaultDepartment={departmentName}
+        onSuccess={() => {
+          setIsSuccessToast('Faculty upload reminder dispatched successfully!');
+          setTimeout(() => setIsSuccessToast(null), 4000);
+        }}
+      />
     </div>
   );
 };

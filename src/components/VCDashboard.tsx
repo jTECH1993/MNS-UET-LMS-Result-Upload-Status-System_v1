@@ -41,6 +41,7 @@ import { VCDashboardPDFExportModal } from './VCDashboardPDFExportModal';
 import { DepartmentUploadVelocityTrend } from './DepartmentUploadVelocityTrend';
 import { GlobalSearchFilterBar, SearchScope } from './GlobalSearchFilterBar';
 import { CircularProgress } from './CircularProgress';
+import { AcademicHealthTab } from './AcademicHealthTab';
 import {
   CompletionRadarService,
   BottleneckInfo,
@@ -173,7 +174,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return () => window.removeEventListener('mnsuet_storage_updated', handleRecalc);
   }, []);
 
-  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER'>('COMMAND_CENTER');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ACADEMIC_HEALTH'>('COMMAND_CENTER');
   const [isLockdownScopeModalOpen, setIsLockdownScopeModalOpen] = useState<boolean>(false);
 
   // Change History / Audit Trail Modal State
@@ -1864,6 +1865,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping ml-0.5" />
             )}
           </button>
+
+          <button
+            id="btn-vc-mode-academic-health"
+            type="button"
+            onClick={() => setDashboardViewMode('ACADEMIC_HEALTH')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+              dashboardViewMode === 'ACADEMIC_HEALTH'
+                ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400 scale-[1.02]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-300" />
+            <span>6. Academic Health</span>
+            {dashboardViewMode === 'ACADEMIC_HEALTH' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping ml-0.5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -1876,6 +1894,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             {dashboardViewMode === 'ACTIVITY' && <Activity className="w-6 h-6 text-sky-400" />}
             {dashboardViewMode === 'DIGITAL_TWIN' && <Building2 className="w-6 h-6 text-indigo-400" />}
             {dashboardViewMode === 'ACTION_CENTER' && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+            {dashboardViewMode === 'ACADEMIC_HEALTH' && <Activity className="w-6 h-6 text-emerald-400" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -1893,6 +1912,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && '3. System Audit Trail & Real-Time Security Logs'}
               {dashboardViewMode === 'DIGITAL_TWIN' && '4. University Digital Twin Architecture Matrix'}
               {dashboardViewMode === 'ACTION_CENTER' && '5. VC Executive Action Center & Circular Directives'}
+              {dashboardViewMode === 'ACADEMIC_HEALTH' && '6. Institutional Academic Health & Upload Completeness Matrix'}
             </h2>
             <p className="text-xs text-slate-300 mt-0.5">
               {dashboardViewMode === 'COMMAND_CENTER' && 'Comprehensive overview of institutional bottlenecks, high-level upload stats, and interactive completion radar.'}
@@ -1900,6 +1920,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               {dashboardViewMode === 'ACTIVITY' && 'Live event stream tracking coordinator logins, HOD verifications, and result upload timestamps.'}
               {dashboardViewMode === 'DIGITAL_TWIN' && 'Interactive hierarchical view of departments, degree programs, academic sessions, and semesters.'}
               {dashboardViewMode === 'ACTION_CENTER' && 'Department compliance overview, official Vice Chancellor result upload summaries, and circular dispatch.'}
+              {dashboardViewMode === 'ACADEMIC_HEALTH' && 'Visual distribution of result upload completeness across all departments using stacked bar charts.'}
             </p>
           </div>
         </div>
@@ -2340,6 +2361,25 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedSemesterFilter={selectedSemesterFilter}
             selectedDeptFilter={selectedDeptFilter}
             selectedShiftFilter={selectedShiftFilter}
+          />
+        </div>
+      )}
+
+      {/* Academic Health Tab */}
+      {dashboardViewMode === 'ACADEMIC_HEALTH' && (
+        <div className="mt-2">
+          <AcademicHealthTab
+            allRecords={allRecords}
+            activeSessions={activeSessions}
+            selectedSemesterFilter={selectedSemesterFilter}
+            selectedShiftFilter={selectedShiftFilter}
+            onSelectDepartment={(deptName) => {
+              setSelectedDeptFilter(deptName);
+              setDashboardViewMode('ROSTER');
+              setTimeout(() => {
+                document.getElementById('lms-roster-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
         </div>
       )}

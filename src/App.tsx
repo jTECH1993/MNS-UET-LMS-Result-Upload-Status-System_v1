@@ -22,6 +22,7 @@ import { QuotaExceededModal } from './components/QuotaExceededModal';
 import { SplashScreen } from './components/SplashScreen';
 import { JtechLogo } from './components/JtechLogo';
 import { RolePerspectiveComparisonModal } from './components/RolePerspectiveComparisonModal';
+import { FacultyReminderBanner } from './components/FacultyReminderBanner';
 import { UserAccount } from './types';
 import {
   CheckCircle2,
@@ -679,6 +680,19 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+              {/* SYSTEM-WIDE FACULTY UPLOAD REMINDER BANNER */}
+              <FacultyReminderBanner
+                currentUser={effectiveUser}
+                onNavigateToProgram={(dept, prog, sh) => {
+                  setTargetDept(dept);
+                  setTargetProg(prog);
+                  if (sh && (sh === 'Morning' || sh === 'Evening')) {
+                    setTargetShift(sh as AcademicShift);
+                  }
+                  setActiveView('HOD');
+                }}
+              />
 
         {/* Department Quick Switcher Bar */}
         <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-300 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
