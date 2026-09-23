@@ -17,6 +17,8 @@ import {
   Layers,
   ShieldCheck,
   Clock,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface Props {
@@ -124,7 +126,24 @@ export const ExecutiveReportModal: React.FC<Props> = ({
     return activePrograms.map((prog) => {
       const supportedShifts = prog.supportedShifts && prog.supportedShifts.length > 0
         ? prog.supportedShifts
-        : ['Morning'];
+        : StorageService.getProgramShifts(prog.department, prog.program);
+
+      const isMorningSupported = supportedShifts.includes('Morning');
+      const isEveningSupported = supportedShifts.includes('Evening');
+
+      const shiftOfferingType: 'BOTH' | 'MORNING_ONLY' | 'EVENING_ONLY' =
+        isMorningSupported && isEveningSupported
+          ? 'BOTH'
+          : isEveningSupported
+          ? 'EVENING_ONLY'
+          : 'MORNING_ONLY';
+
+      const shiftOfferingLabel =
+        shiftOfferingType === 'BOTH'
+          ? 'Morning & Evening'
+          : shiftOfferingType === 'EVENING_ONLY'
+          ? 'Evening Only'
+          : 'Morning Only';
 
       // Find active sections for this program from allRecords
       const matchingRecords = allRecords.filter((r) =>
@@ -239,6 +258,8 @@ export const ExecutiveReportModal: React.FC<Props> = ({
       return {
         prog,
         sectionsList,
+        shiftOfferingType,
+        shiftOfferingLabel,
         morningDetail,
         eveningDetail,
         totalUploaded,
@@ -478,6 +499,7 @@ Director, Academic Affairs & Examination Directorate`;
                         <th className="py-2.5 px-3">#</th>
                         <th className="py-2.5 px-3">Department &amp; Program</th>
                         <th className="py-2.5 px-3 text-center">Level</th>
+                        <th className="py-2.5 px-3 text-center">Offered Shift(s)</th>
                         <th className="py-2.5 px-3 text-center">Sections</th>
                         <th className="py-2.5 px-3 text-center">Morning Shift</th>
                         <th className="py-2.5 px-3 text-center">Evening Shift</th>
@@ -486,7 +508,7 @@ Director, Academic Affairs & Examination Directorate`;
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {programMetrics.map((item, idx) => {
-                        const { prog, sectionsList, morningDetail, eveningDetail, pct, isComplete } = item;
+                        const { prog, sectionsList, shiftOfferingType, morningDetail, eveningDetail, pct, isComplete } = item;
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50/70">
@@ -499,6 +521,26 @@ Director, Academic Affairs & Examination Directorate`;
                               <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
                                 {prog.degreeLevel}
                               </span>
+                            </td>
+                            <td className="py-2 px-3 text-center shrink-0 whitespace-nowrap">
+                              {shiftOfferingType === 'BOTH' && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-950 border border-emerald-300 px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
+                                  <Layers className="w-2.5 h-2.5 text-emerald-700" />
+                                  Morning &amp; Evening
+                                </span>
+                              )}
+                              {shiftOfferingType === 'MORNING_ONLY' && (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
+                                  <Sun className="w-2.5 h-2.5 text-amber-700" />
+                                  Morning
+                                </span>
+                              )}
+                              {shiftOfferingType === 'EVENING_ONLY' && (
+                                <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-950 border border-indigo-300 px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
+                                  <Moon className="w-2.5 h-2.5 text-indigo-700" />
+                                  Evening
+                                </span>
+                              )}
                             </td>
                             <td className="py-2 px-3 text-center">
                               <div className="flex items-center justify-center gap-1 flex-wrap">
@@ -514,24 +556,32 @@ Director, Academic Affairs & Examination Directorate`;
                             </td>
                             <td className="py-2 px-3 text-center">
                               {!morningDetail.isOffered ? (
-                                <span className="text-slate-400 text-[10px] italic">N/A (Not Offered)</span>
+                                <span className="text-slate-400 text-[10px] italic font-medium bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  N/A (Not Offered)
+                                </span>
                               ) : morningDetail.hasSubmission ? (
-                                <span className="font-semibold text-emerald-800 text-[11px]">
+                                <span className="font-extrabold text-emerald-900 text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 inline-block">
                                   {morningDetail.displayText}
                                 </span>
                               ) : (
-                                <span className="text-slate-400 text-[11px]">No Entry</span>
+                                <span className="text-amber-800 text-[11px] font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block">
+                                  No Entry
+                                </span>
                               )}
                             </td>
                             <td className="py-2 px-3 text-center">
                               {!eveningDetail.isOffered ? (
-                                <span className="text-slate-400 text-[10px] italic">N/A (Not Offered)</span>
+                                <span className="text-slate-400 text-[10px] italic font-medium bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  N/A (Not Offered)
+                                </span>
                               ) : eveningDetail.hasSubmission ? (
-                                <span className="font-semibold text-emerald-800 text-[11px]">
+                                <span className="font-extrabold text-emerald-900 text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 inline-block">
                                   {eveningDetail.displayText}
                                 </span>
                               ) : (
-                                <span className="text-slate-400 text-[11px]">No Entry</span>
+                                <span className="text-amber-800 text-[11px] font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block">
+                                  No Entry
+                                </span>
                               )}
                             </td>
                             <td className="py-2 px-3 text-center">
@@ -614,11 +664,18 @@ Director, Academic Affairs & Examination Directorate`;
                 {/* List of Pending Programs */}
                 <div className="bg-white p-3 rounded-lg border border-slate-200 my-2 max-h-48 overflow-y-auto">
                   <ol className="list-decimal list-inside space-y-1 font-semibold text-slate-900">
-                    {pendingPrograms.map((p, idx) => (
-                      <li key={idx} className="text-xs">
-                        {p.program} ({p.deptCode}) – <span className="text-slate-600 font-normal">{p.department}</span>
-                      </li>
-                    ))}
+                    {pendingPrograms.map((p, idx) => {
+                      const shifts = StorageService.getProgramShifts(p.department, p.program);
+                      const shiftStr = shifts.length === 1 ? `${shifts[0]} Shift Only` : 'Morning & Evening Shifts';
+                      return (
+                        <li key={idx} className="text-xs py-0.5">
+                          <span className="font-bold">{p.program}</span> ({p.deptCode}) – <span className="text-slate-600 font-normal">{p.department}</span>{' '}
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 ml-1">
+                            [{shiftStr}]
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ol>
                 </div>
 
