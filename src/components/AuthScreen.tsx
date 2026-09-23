@@ -510,12 +510,12 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               }}
               className={`py-3.5 px-4 flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
                 tab === 'LOGIN'
-                  ? 'border-emerald-600 bg-white text-emerald-900 shadow-2xs font-extrabold'
+                  ? 'border-emerald-600 bg-white text-emerald-950 shadow-2xs font-extrabold'
                   : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
             >
-              <LogIn className="w-4 h-4" />
-              <span>Sign In (Authorized Users)</span>
+              <LogIn className="w-4 h-4 text-emerald-600" />
+              <span>Sign In</span>
             </button>
             <button
               type="button"
@@ -526,12 +526,12 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               }}
               className={`py-3.5 px-4 flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
                 tab === 'REGISTER'
-                  ? 'border-emerald-600 bg-white text-emerald-900 shadow-2xs font-extrabold'
+                  ? 'border-emerald-600 bg-white text-emerald-950 shadow-2xs font-extrabold'
                   : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Create New Account (HOD / Coord)</span>
+              <UserPlus className="w-4 h-4 text-emerald-600" />
+              <span>New Registration</span>
             </button>
           </div>
         ) : (
@@ -592,14 +592,23 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
 
         {/* TAB 1: SIGN IN */}
         {tab === 'LOGIN' && (
-          <div className="p-6 sm:p-8 space-y-6">
+          <div className="p-6 sm:p-8 space-y-5">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Welcome Back
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">
+                Sign in to access the Central Monitoring Portal
+              </p>
+            </div>
+
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                   Username or Registered Email
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <User className="w-4 h-4" />
                   </div>
                   <input
@@ -608,14 +617,14 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
                     placeholder="e.g. admin, VC, or your email"
-                    className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden transition-all font-medium"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden transition-all font-medium placeholder:text-slate-400 shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">
                     Password
                   </label>
                   <button
@@ -626,13 +635,13 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                       setErrorMessage('');
                       setSuccessMessage('');
                     }}
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+                    className="text-xs font-extrabold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
                   >
                     Forgot Password?
                   </button>
                 </div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <KeyRound className="w-4 h-4" />
                   </div>
                   <input
@@ -641,12 +650,12 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Enter your account password"
-                    className="w-full pl-9 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden transition-all font-mono"
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 outline-hidden transition-all font-mono placeholder:text-slate-400 shadow-2xs"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -656,10 +665,10 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               <button
                 type="submit"
                 disabled={isSubmitting || lockoutRemainingSeconds > 0}
-                className={`w-full py-3 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
+                className={`w-full py-3 text-white font-extrabold rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
                   lockoutRemainingSeconds > 0
                     ? 'bg-slate-400 cursor-not-allowed'
-                    : 'bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 cursor-pointer'
+                    : 'bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 cursor-pointer'
                 }`}
               >
                 <LogIn className="w-4 h-4" />
@@ -673,13 +682,27 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
               </button>
             </form>
 
+            {/* Authorized Users Banner */}
+            <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-xl flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-full bg-slate-200/80 text-slate-800 shrink-0 flex items-center justify-center">
+                <GraduationCap className="w-6 h-6 text-slate-700" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                  Authorized University Users Only
+                </h4>
+                <p className="text-xs text-slate-500 font-medium mt-0.5 leading-relaxed">
+                  Access departmental submissions, track progress, and manage academic data efficiently.
+                </p>
+              </div>
+            </div>
+
             {/* Anti-Hacking Security Badge */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-[11px] text-slate-600">
-              <span className="flex items-center gap-1.5 font-medium">
+            <div className="px-3.5 py-2.5 bg-slate-50/70 border border-slate-200/80 rounded-lg flex items-center justify-between text-[11px] text-slate-600">
+              <span className="flex items-center gap-1.5 font-semibold">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 Anti-Brute Force &amp; Intrusion Defense Active
               </span>
-              
             </div>
           </div>
         )}
