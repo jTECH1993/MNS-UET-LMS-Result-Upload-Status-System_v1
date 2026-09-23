@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
-import { NotificationService, FacultyReminderNotification } from '../services/notificationService';
+import { NotificationService, FacultyReminderNotification, TargetAudienceType } from '../services/notificationService';
+import { AuthService } from '../services/authService';
 import { UserAccount, ActiveUserSession, AcademicShift } from '../types';
 import {
   Bell,
@@ -13,7 +14,10 @@ import {
   CheckCircle2,
   Eye,
   Megaphone,
-  UserCheck
+  UserCheck,
+  Users,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 
 interface Props {
@@ -43,12 +47,14 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
 }) => {
   const initialDept =
     defaultDepartment ||
-    (currentUser?.role === 'HOD' ? currentUser.department : UNIVERSITY_DEPARTMENTS[0].name);
+    (currentUser?.role === 'HOD' || currentUser?.department ? currentUser.department : UNIVERSITY_DEPARTMENTS[0].name);
 
   const initialProg =
     defaultProgram ||
-    (currentUser?.role === 'COORDINATOR' && currentUser.program
+    (currentUser?.program
       ? currentUser.program
+      : currentUser?.assignedPrograms && currentUser.assignedPrograms.length > 0
+      ? currentUser.assignedPrograms[0]
       : UNIVERSITY_DEPARTMENTS[0].programs[0].name);
 
   const [department, setDepartment] = useState<string>(initialDept);
@@ -59,6 +65,28 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
   const [section, setSection] = useState<string>(defaultSection);
   const [deadline, setDeadline] = useState<string>('Today by 5:00 PM');
   const [customDeadline, setCustomDeadline] = useState<string>('');
+
+  // Target Recipient Audience State
+  const [targetAudienceType, setTargetAudienceType] = useState<TargetAudienceType>('ALL_PROGRAM');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [targetRole, setTargetRole] = useState<string>('COORDINATOR');
+
+  // Fetch registered user accounts for targeting
+  const allAccounts = useMemo(() => AuthService.getAccounts(), []);
+  
+  // Filter registered users belonging to current department
+  const deptMembers = useMemo(() => {
+    return allAccounts.filter((a) => {
+      if (!a.department) return true;
+      const d1 = a.department.toLowerCase().trim();
+      const d2 = department.toLowerCase().trim();
+      return d1.includes(d2) || d2.includes(d1);
+    });
+  }, [allAccounts, department]);
+
+  const selectedTargetUser = useMemo(() => {
+    return allAccounts.find((a) => a.id === selectedUserId) || null;
+  }, [allAccounts, selectedUserId]);
 
   const [title, setTitle] = useState<string>(
     `Action Required: Pending Result Upload Reminder for ${initialProg}`
@@ -79,9 +107,25 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
   const handleProgramChange = (progName: string) => {
     setProgram(progName);
     setTitle(`Action Required: Pending Result Upload Reminder for ${progName}`);
-    setMessage(
-      `Dear Faculty Members & Course Instructors, please be reminded to finalize and upload all pending course result rosters for ${progName} (${shift} Shift, Session ${session}) into the LMS database as soon as possible.`
-    );
+    if (targetAudienceType === 'INDIVIDUAL_MEMBER' && selectedTargetUser) {
+      setMessage(
+        `Dear ${selectedTargetUser.name}, please be reminded to finalize and upload pending course result rosters for ${progName} (${shift} Shift, Session ${session}) into the LMS database as soon as possible.`
+      );
+    } else {
+      setMessage(
+        `Dear Faculty Members & Course Instructors, please be reminded to finalize and upload all pending course result rosters for ${progName} (${shift} Shift, Session ${session}) into the LMS database as soon as possible.`
+      );
+    }
+  };
+
+  const handleTargetUserSelect = (userId: string) => {
+    setSelectedUserId(userId);
+    const user = allAccounts.find((a) => a.id === userId);
+    if (user) {
+      setMessage(
+        `Dear ${user.name}, please be reminded to finalize and upload pending course result rosters for ${program} (${shift} Shift, Session ${session}) into the LMS database as soon as possible.`
+      );
+    }
   };
 
   const handleSend = (e: React.FormEvent) => {
@@ -103,7 +147,7 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
 
     const created = NotificationService.dispatchReminder({
       senderId: currentUser?.id,
-      senderName: currentUser?.name || 'Head of Department / Coordinator',
+      senderName: currentUser?.name || 'Academic Administrator',
       senderRole,
       department,
       program,
@@ -114,6 +158,13 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
       title: title.trim(),
       message: message.trim(),
       deadline: finalDeadline.trim() || undefined,
+      
+      // Target recipient metadata
+      targetAudienceType,
+      targetUserId: targetAudienceType === 'INDIVIDUAL_MEMBER' ? selectedTargetUser?.id : undefined,
+      targetUserName: targetAudienceType === 'INDIVIDUAL_MEMBER' ? selectedTargetUser?.name : undefined,
+      targetUserEmail: targetAudienceType === 'INDIVIDUAL_MEMBER' ? selectedTargetUser?.email : undefined,
+      targetRole: targetAudienceType === 'SPECIFIC_ROLE' ? targetRole : undefined,
     });
 
     setIsSubmitting(false);
@@ -154,6 +205,166 @@ export const SendFacultyReminderModal: React.FC<Props> = ({
 
         {/* Body Form */}
         <form onSubmit={handleSend} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
+          {/* Target Recipient Audience Group Selection */}
+          <div className="bg-indigo-50/70 border border-indigo-200 p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-extrabold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-indigo-600" />
+                Target Recipient Audience (Who will see this message?)
+              </label>
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200">
+                Audience Control
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetAudienceType('ALL_PROGRAM');
+                  setMessage(
+                    `Dear Faculty Members & Course Instructors, please be reminded to finalize and upload all pending course result rosters for ${program} (${shift} Shift, Session ${session}) into the LMS database as soon as possible.`
+                  );
+                }}
+                className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                  targetAudienceType === 'ALL_PROGRAM'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : 'bg-white text-slate-800 border-slate-300 hover:bg-indigo-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold text-[11px]">
+                  <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+                  <span>Program Faculty</span>
+                </div>
+                <span className={`text-[9px] mt-1 ${targetAudienceType === 'ALL_PROGRAM' ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  Instructors of {program.length > 15 ? program.substring(0, 15) + '...' : program}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetAudienceType('ALL_DEPARTMENT');
+                  setMessage(
+                    `Dear Department Faculty & Staff, please be reminded to finalize and upload all pending course result rosters into the LMS database.`
+                  );
+                }}
+                className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                  targetAudienceType === 'ALL_DEPARTMENT'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : 'bg-white text-slate-800 border-slate-300 hover:bg-indigo-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold text-[11px]">
+                  <Building2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Entire Department</span>
+                </div>
+                <span className={`text-[9px] mt-1 ${targetAudienceType === 'ALL_DEPARTMENT' ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  All members in {department.replace('Department of ', '')}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetAudienceType('SPECIFIC_ROLE');
+                  setMessage(
+                    `Dear ${targetRole}s, please ensure all course grade result sheets for ${program} are finalized and uploaded.`
+                  );
+                }}
+                className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                  targetAudienceType === 'SPECIFIC_ROLE'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : 'bg-white text-slate-800 border-slate-300 hover:bg-indigo-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold text-[11px]">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Specific Role</span>
+                </div>
+                <span className={`text-[9px] mt-1 ${targetAudienceType === 'SPECIFIC_ROLE' ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  Target by Role Designation
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetAudienceType('INDIVIDUAL_MEMBER');
+                  if (deptMembers.length > 0) {
+                    handleTargetUserSelect(deptMembers[0].id);
+                  }
+                }}
+                className={`p-2.5 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                  targetAudienceType === 'INDIVIDUAL_MEMBER'
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : 'bg-white text-slate-800 border-slate-300 hover:bg-indigo-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold text-[11px]">
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span>Individual Person</span>
+                </div>
+                <span className={`text-[9px] mt-1 ${targetAudienceType === 'INDIVIDUAL_MEMBER' ? 'text-indigo-100' : 'text-slate-500'}`}>
+                  Direct to 1 Specific Member
+                </span>
+              </button>
+            </div>
+
+            {/* Sub-selector for INDIVIDUAL_MEMBER */}
+            {targetAudienceType === 'INDIVIDUAL_MEMBER' && (
+              <div className="pt-2 border-t border-indigo-200/80 animate-in fade-in">
+                <label className="block text-[11px] font-bold text-slate-800 mb-1 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  Select Individual Recipient Member from Department:
+                </label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => handleTargetUserSelect(e.target.value)}
+                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg bg-white text-slate-900 font-bold focus:ring-2 focus:ring-indigo-500 shadow-2xs text-xs"
+                >
+                  <option value="">-- Choose Individual Faculty Member / Coordinator --</option>
+                  {deptMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.designation || m.role}) — {m.program || m.department || 'Staff Member'}
+                    </option>
+                  ))}
+                </select>
+                {deptMembers.length === 0 && (
+                  <p className="text-[10px] text-amber-700 font-semibold mt-1">
+                    No other registered members found in this department. Message will be targeted to recipient email/name when registered.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Sub-selector for SPECIFIC_ROLE */}
+            {targetAudienceType === 'SPECIFIC_ROLE' && (
+              <div className="pt-2 border-t border-indigo-200/80 animate-in fade-in">
+                <label className="block text-[11px] font-bold text-slate-800 mb-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  Select Target Designation Role:
+                </label>
+                <select
+                  value={targetRole}
+                  onChange={(e) => {
+                    const r = e.target.value;
+                    setTargetRole(r);
+                    setMessage(
+                      `Dear ${r}s, please ensure all course grade result sheets for ${program} are finalized and uploaded into LMS.`
+                    );
+                  }}
+                  className="w-full px-3 py-1.5 border border-indigo-300 rounded-lg bg-white text-slate-900 font-bold focus:ring-1 focus:ring-indigo-500 text-xs"
+                >
+                  <option value="COORDINATOR">Program Coordinators Only</option>
+                  <option value="LECTURER">Regular Lecturers / Instructors Only</option>
+                  <option value="VISITING_LECTURER">Visiting Lecturers Only</option>
+                  <option value="HOD">Head of Department (HOD) Only</option>
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* Target Department & Program Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
             <div>

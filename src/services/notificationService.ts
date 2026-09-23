@@ -1,6 +1,8 @@
 import { FirebaseStore } from '../lib/firebaseStore';
 import { AuditTrailService } from './auditTrailService';
 
+export type TargetAudienceType = 'ALL_DEPARTMENT' | 'ALL_PROGRAM' | 'SPECIFIC_ROLE' | 'INDIVIDUAL_MEMBER';
+
 export interface FacultyReminderNotification {
   id: string;
   senderId?: string;
@@ -18,6 +20,13 @@ export interface FacultyReminderNotification {
   createdAt: string;
   active: boolean;
   dismissedBy?: string[]; // List of user IDs or emails
+
+  // Target Recipient Audience Parameters
+  targetAudienceType?: TargetAudienceType;
+  targetUserId?: string;
+  targetUserName?: string;
+  targetUserEmail?: string;
+  targetRole?: string;
 }
 
 const STORAGE_KEY = 'mnsuet_faculty_reminder_notifications_v1';
@@ -78,6 +87,12 @@ export class NotificationService {
     title: string;
     message: string;
     deadline?: string;
+
+    targetAudienceType?: TargetAudienceType;
+    targetUserId?: string;
+    targetUserName?: string;
+    targetUserEmail?: string;
+    targetRole?: string;
   }): FacultyReminderNotification {
     this.init();
     const reminders = this.getReminders();

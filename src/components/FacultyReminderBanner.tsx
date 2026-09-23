@@ -34,10 +34,31 @@ export const FacultyReminderBanner: React.FC<Props> = ({
       if (r.dismissedBy && r.dismissedBy.includes(userId)) return false;
 
       // Check matching scope:
-      // If user is ADMIN or VC, show all active reminders
+      // 1. Sender always sees their own dispatched reminder
+      const isSender =
+        (r.senderId && currentUser?.id === r.senderId) ||
+        (r.senderName && currentUser?.name && currentUser.name.toLowerCase().trim() === r.senderName.toLowerCase().trim());
+      if (isSender) return true;
+
+      // 2. VC and ADMIN see all executive communications
       if (currentUser?.role === 'ADMIN' || currentUser?.role === 'VC') return true;
 
-      // Check department match
+      // 3. Check Individual Recipient Targeting
+      if (r.targetAudienceType === 'INDIVIDUAL_MEMBER') {
+        const isTargetUser =
+          (r.targetUserId && currentUser?.id === r.targetUserId) ||
+          (r.targetUserEmail && currentUser?.email && currentUser.email.toLowerCase().trim() === r.targetUserEmail.toLowerCase().trim()) ||
+          (r.targetUserName && currentUser?.name && currentUser.name.toLowerCase().trim() === r.targetUserName.toLowerCase().trim());
+
+        return Boolean(isTargetUser);
+      }
+
+      // 4. Check Specific Role Designation Targeting
+      if (r.targetAudienceType === 'SPECIFIC_ROLE') {
+        if (currentUser?.role !== r.targetRole) return false;
+      }
+
+      // 5. Department match check
       const userDept = (currentUser?.department || '').toLowerCase().trim();
       const remDept = (r.department || '').toLowerCase().trim();
       const matchDept =
@@ -49,10 +70,13 @@ export const FacultyReminderBanner: React.FC<Props> = ({
 
       if (!matchDept) return false;
 
-      // If HOD, HOD sees all reminders within their department
+      // If target audience is ALL_DEPARTMENT, everyone in department sees it
+      if (r.targetAudienceType === 'ALL_DEPARTMENT') return true;
+
+      // 6. If HOD, HOD sees department level communications
       if (currentUser?.role === 'HOD') return true;
 
-      // For Coordinators, Lecturers, Visiting Lecturers: check program match
+      // 7. For Program Instructors / Coordinators: check program match
       if (r.program && r.program.toUpperCase() !== 'ALL') {
         const remProg = r.program.toLowerCase().trim();
         const userProgs = [
@@ -121,6 +145,24 @@ export const FacultyReminderBanner: React.FC<Props> = ({
                   <span className="text-[11px] font-bold text-amber-200/90 bg-amber-900/50 px-2.5 py-0.5 rounded-full border border-amber-700/60">
                     From: <strong>{rem.senderName}</strong> ({rem.senderRole})
                   </span>
+
+                  {rem.targetAudienceType === 'INDIVIDUAL_MEMBER' && rem.targetUserName && (
+                    <span className="text-[11px] font-extrabold text-sky-200 bg-sky-900/60 px-2.5 py-0.5 rounded-full border border-sky-500/50">
+                      Direct To: <strong>{rem.targetUserName}</strong>
+                    </span>
+                  )}
+
+                  {rem.targetAudienceType === 'SPECIFIC_ROLE' && rem.targetRole && (
+                    <span className="text-[11px] font-extrabold text-indigo-200 bg-indigo-900/60 px-2.5 py-0.5 rounded-full border border-indigo-500/50">
+                      Target Role: <strong>{rem.targetRole}</strong>
+                    </span>
+                  )}
+
+                  {rem.targetAudienceType === 'ALL_DEPARTMENT' && (
+                    <span className="text-[11px] font-extrabold text-teal-200 bg-teal-900/60 px-2.5 py-0.5 rounded-full border border-teal-500/50">
+                      Target: <strong>All Department Members</strong>
+                    </span>
+                  )}
 
                   {rem.deadline && (
                     <span className="text-[11px] font-extrabold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-400/40 flex items-center gap-1">
