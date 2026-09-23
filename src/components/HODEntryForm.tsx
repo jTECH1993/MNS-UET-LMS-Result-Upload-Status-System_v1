@@ -2201,6 +2201,11 @@ export const HODEntryForm: React.FC<Props> = ({
 
   // Export current program / department comprehensive CSV (Merging Morning & Evening shifts)
   const handleExportCurrent = () => {
+    const isCoord =
+      currentUser?.role === 'COORDINATOR' ||
+      currentUser?.role === 'LECTURER' ||
+      currentUser?.role === 'VISITING_LECTURER';
+
     const currentRec: SubmissionRecord = {
       id: 'current-active',
       department,
@@ -2214,20 +2219,31 @@ export const HODEntryForm: React.FC<Props> = ({
       submissionDate,
       subjects,
       accessedBy: currentUser?.name || 'HOD / Coordinator',
-      userDesignation: currentUser?.designation || 'HOD',
+      userDesignation: currentUser?.designation || (isCoord ? 'Coordinator' : 'HOD'),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     const allStore = StorageService.getAllSubmissions();
-    const deptMatches = allStore.filter(
-      (r) =>
-        StorageService._isDeptMatch(department, r.department) &&
-        String(r.session || '2023').trim() === String(session).trim()
-    );
+
+    // Strict Role Scoping:
+    // Coordinator: ONLY active program for active session & active semester
+    // HOD: ALL programs in department for active session & active semester
+    const scopedMatches = allStore.filter((r) => {
+      const matchDept = StorageService._isDeptMatch(department, r.department);
+      const matchSess = String(r.session || '2023').trim() === String(session).trim();
+      const matchSem = String(r.semester || '1').trim() === String(semester).trim();
+
+      if (!matchDept || !matchSess || !matchSem) return false;
+
+      if (isCoord) {
+        return StorageService._isProgMatch(program, r.program);
+      }
+      return true; // HOD sees all programs in department
+    });
 
     let mergedRecords: SubmissionRecord[] = [];
-    const hasCurrentInStore = deptMatches.some(
+    const hasCurrentInStore = scopedMatches.some(
       (r) =>
         StorageService._isProgMatch(program, r.program) &&
         String(r.semester) === String(semester) &&
@@ -2236,7 +2252,7 @@ export const HODEntryForm: React.FC<Props> = ({
     );
 
     if (hasCurrentInStore) {
-      mergedRecords = deptMatches.map((r) => {
+      mergedRecords = scopedMatches.map((r) => {
         if (
           StorageService._isProgMatch(program, r.program) &&
           String(r.semester) === String(semester) &&
@@ -2248,7 +2264,7 @@ export const HODEntryForm: React.FC<Props> = ({
         return r;
       });
     } else {
-      mergedRecords = [currentRec, ...deptMatches];
+      mergedRecords = [currentRec, ...scopedMatches];
     }
 
     // Sort by Program, Shift (Morning first, Evening second), Semester, Section
@@ -2258,24 +2274,30 @@ export const HODEntryForm: React.FC<Props> = ({
         if (a.shift === 'Morning') return -1;
         if (b.shift === 'Morning') return 1;
       }
-      if (a.semester !== b.semester) return String(a.semester).localeCompare(String(b.semester));
+      if (a.semester !== b.semester) return String(a.semester).localeCompare(String(a.semester));
       return (a.section || 'A').localeCompare(b.section || 'A');
     });
 
-    const morningCount = mergedRecords.filter((r) => r.shift === 'Morning').length;
-    const eveningCount = mergedRecords.filter((r) => r.shift === 'Evening').length;
+    const filename = isCoord
+      ? `MNS_UET_${program.replace(/[^a-zA-Z0-9]/g, '_')}_Session_${session}_Sem_${semester}_Report.csv`
+      : `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_Session_${session}_Sem_${semester}_All_Programs_Report.csv`;
 
-    const filename = `MNS_UET_${department.replace(/[^a-zA-Z0-9]/g, '_')}_Session_${session}_Comprehensive_Report.csv`;
     StorageService.exportCSV(mergedRecords, filename);
 
-    showFeedback(
-      'success',
-      `Exported comprehensive summary report for ${department} [Session ${session}] merging ${morningCount} Morning & ${eveningCount} Evening shift offering(s).`
-    );
+    const message = isCoord
+      ? `Exported result summary for ${program} [Session ${session}, Semester ${semester}].`
+      : `Exported comprehensive report for all programs in ${department} [Session ${session}, Semester ${semester}].`;
+
+    showFeedback('success', message);
   };
 
   const handleOpenPDFReport = (scope: ExportScope = 'ENTIRE_DEPARTMENT') => {
-    setExportDefaultScope(scope);
+    const isCoord =
+      currentUser?.role === 'COORDINATOR' ||
+      currentUser?.role === 'LECTURER' ||
+      currentUser?.role === 'VISITING_LECTURER';
+    
+    setExportDefaultScope(isCoord ? 'CURRENT_PROGRAM' : scope);
     setIsExportModalOpen(true);
   };
 

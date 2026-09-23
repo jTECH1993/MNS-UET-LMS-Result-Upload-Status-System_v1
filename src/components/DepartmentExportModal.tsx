@@ -63,9 +63,22 @@ export const DepartmentExportModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (isOpen) {
-      setExportScope(defaultScope);
+      const isCoord =
+        currentUser?.role === 'COORDINATOR' ||
+        currentUser?.role === 'LECTURER' ||
+        currentUser?.role === 'VISITING_LECTURER';
+      if (isCoord) {
+        setExportScope('CURRENT_PROGRAM');
+      } else {
+        setExportScope(defaultScope);
+      }
     }
-  }, [isOpen, defaultScope]);
+  }, [isOpen, defaultScope, currentUser]);
+
+  const isCoordinatorRole =
+    currentUser?.role === 'COORDINATOR' ||
+    currentUser?.role === 'LECTURER' ||
+    currentUser?.role === 'VISITING_LECTURER';
 
   // Retrieve records based on selected scope
   const targetRecords = useMemo(() => {
@@ -88,9 +101,17 @@ export const DepartmentExportModal: React.FC<Props> = ({
       updatedAt: currentRecord?.updatedAt || new Date().toISOString(),
     };
 
-    if (exportScope === 'ALL_DEPARTMENTS') {
+    const effectiveScope = isCoordinatorRole
+      ? exportScope === 'ALL_DEPARTMENTS' || exportScope === 'ENTIRE_DEPARTMENT'
+        ? 'CURRENT_PROGRAM'
+        : exportScope
+      : exportScope;
+
+    if (effectiveScope === 'ALL_DEPARTMENTS') {
       const universityMatches = allStore.filter(
-        (r) => String(r.session || '2023').trim() === String(session).trim()
+        (r) =>
+          String(r.session || '2023').trim() === String(session).trim() &&
+          String(r.semester || '1').trim() === String(semester).trim()
       );
 
       const hasCurrent = universityMatches.some(
@@ -134,16 +155,17 @@ export const DepartmentExportModal: React.FC<Props> = ({
       });
     }
 
-    if (exportScope === 'CURRENT_OFFERING') {
+    if (effectiveScope === 'CURRENT_OFFERING') {
       return [currentVirtualRec];
     }
 
-    if (exportScope === 'CURRENT_PROGRAM') {
+    if (effectiveScope === 'CURRENT_PROGRAM') {
       const progMatches = allStore.filter(
         (r) =>
           StorageService._isDeptMatch(department, r.department) &&
           StorageService._isProgMatch(program, r.program) &&
-          String(r.session || '2023').trim() === String(session).trim()
+          String(r.session || '2023').trim() === String(session).trim() &&
+          String(r.semester || '1').trim() === String(semester).trim()
       );
 
       const hasCurrent = progMatches.some(
@@ -185,7 +207,8 @@ export const DepartmentExportModal: React.FC<Props> = ({
     const deptMatches = allStore.filter(
       (r) =>
         StorageService._isDeptMatch(department, r.department) &&
-        String(r.session || '2023').trim() === String(session).trim()
+        String(r.session || '2023').trim() === String(session).trim() &&
+        String(r.semester || '1').trim() === String(semester).trim()
     );
 
     const hasCurrent = deptMatches.some(
@@ -226,6 +249,7 @@ export const DepartmentExportModal: React.FC<Props> = ({
     });
   }, [
     exportScope,
+    isCoordinatorRole,
     department,
     program,
     degreeLevel,
@@ -350,30 +374,34 @@ export const DepartmentExportModal: React.FC<Props> = ({
                 Export Target Scope:
               </span>
               <div className="inline-flex bg-white rounded-lg border border-slate-300 p-0.5 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setExportScope('ALL_DEPARTMENTS')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                    exportScope === 'ALL_DEPARTMENTS'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-amber-900 hover:bg-amber-50'
-                  }`}
-                  title="Download Master report of ALL university departments"
-                >
-                  <Building2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Download All Departments (Master)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportScope('ENTIRE_DEPARTMENT')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                    exportScope === 'ENTIRE_DEPARTMENT'
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Entire Department ({department})
-                </button>
+                {!isCoordinatorRole && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setExportScope('ALL_DEPARTMENTS')}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                        exportScope === 'ALL_DEPARTMENTS'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-amber-900 hover:bg-amber-50'
+                      }`}
+                      title="Download Master report of ALL university departments"
+                    >
+                      <Building2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Download All Departments (Master)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportScope('ENTIRE_DEPARTMENT')}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                        exportScope === 'ENTIRE_DEPARTMENT'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Entire Department ({department})
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => setExportScope('CURRENT_PROGRAM')}
@@ -383,7 +411,7 @@ export const DepartmentExportModal: React.FC<Props> = ({
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  Program: {program}
+                  Program: {program} (Active Session &amp; Sem)
                 </button>
                 <button
                   type="button"
