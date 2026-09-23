@@ -35,6 +35,7 @@ interface Props {
   currentSubjects: SubjectRow[];
   currentRecord?: SubmissionRecord | null;
   currentUser?: { name?: string; role?: string; designation?: string } | null;
+  defaultScope?: ExportScope;
 }
 
 export const DepartmentExportModal: React.FC<Props> = ({
@@ -52,12 +53,19 @@ export const DepartmentExportModal: React.FC<Props> = ({
   currentSubjects,
   currentRecord,
   currentUser,
+  defaultScope = 'ENTIRE_DEPARTMENT',
 }) => {
-  const [exportScope, setExportScope] = useState<ExportScope>('ENTIRE_DEPARTMENT');
+  const [exportScope, setExportScope] = useState<ExportScope>(defaultScope);
   const [includeBlankRows, setIncludeBlankRows] = useState<boolean>(false);
   const [reportTitle, setReportTitle] = useState<string>(
     'Official LMS Result Upload Status & Academic Compliance Report'
   );
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setExportScope(defaultScope);
+    }
+  }, [isOpen, defaultScope]);
 
   // Retrieve records based on selected scope
   const targetRecords = useMemo(() => {

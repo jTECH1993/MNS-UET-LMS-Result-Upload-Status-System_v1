@@ -26,7 +26,7 @@ import { BulkCourseImportModal } from './BulkCourseImportModal';
 import { CoordinatorAssignmentModal } from './CoordinatorAssignmentModal';
 import { RequestAdditionalProgramModal } from './RequestAdditionalProgramModal';
 import { ChangeHistoryModal } from './ChangeHistoryModal';
-import { DepartmentExportModal } from './DepartmentExportModal';
+import { DepartmentExportModal, ExportScope } from './DepartmentExportModal';
 import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import {
@@ -414,6 +414,7 @@ export const HODEntryForm: React.FC<Props> = ({
   const [isReqProgModalOpen, setIsReqProgModalOpen] = useState<boolean>(false);
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [exportDefaultScope, setExportDefaultScope] = useState<ExportScope>('ENTIRE_DEPARTMENT');
   const isPendingCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'PENDING';
   const isRejectedCoordinator = currentUser?.role === 'COORDINATOR' && currentUser?.approvalStatus === 'REJECTED';
 
@@ -2078,6 +2079,11 @@ export const HODEntryForm: React.FC<Props> = ({
     );
   };
 
+  const handleOpenPDFReport = (scope: ExportScope = 'ENTIRE_DEPARTMENT') => {
+    setExportDefaultScope(scope);
+    setIsExportModalOpen(true);
+  };
+
   const handleSessionChangeFromModal = (newSess: string) => {
     setSession(newSess);
     if (onSessionChangedProp) onSessionChangedProp(newSess);
@@ -2285,16 +2291,16 @@ export const HODEntryForm: React.FC<Props> = ({
             <span>SEMESTER {semester}</span>
           </span>
 
-          {/* Export Department / Program Official Records (PDF / CSV) */}
+          {/* Export Departmental Summary PDF Report (Morning & Evening Merged) */}
           <button
             id="btn-export-department-report-top"
             type="button"
-            onClick={() => setIsExportModalOpen(true)}
+            onClick={() => handleOpenPDFReport('ENTIRE_DEPARTMENT')}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer"
-            title="Generate official signed PDF reports or CSV archives of department and program results"
+            title="Generate official signed PDF report of departmental summary merging Morning and Evening shifts"
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
-            <span>Export Official PDF Report</span>
+            <Printer className="w-3.5 h-3.5 shrink-0" />
+            <span>Export Departmental PDF Report (Morning &amp; Evening)</span>
           </button>
 
           {/* VC View Link: Return button if read-only, otherwise switch link */}
@@ -3843,18 +3849,18 @@ export const HODEntryForm: React.FC<Props> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                  title="Print official departmental sheet"
+                  onClick={() => handleOpenPDFReport('ENTIRE_DEPARTMENT')}
+                  className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Export official departmental summary PDF report merging Morning & Evening shifts"
                 >
-                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Print Sheet</span>
+                  <Printer className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Department PDF (Morning &amp; Evening)</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleExportCurrent}
-                  className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  title="Export results to CSV/Excel"
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Export comprehensive departmental results to CSV/Excel"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export CSV</span>
@@ -5099,12 +5105,12 @@ export const HODEntryForm: React.FC<Props> = ({
               <button
                 id="btn-export-department-report-bottom"
                 type="button"
-                onClick={() => setIsExportModalOpen(true)}
+                onClick={() => handleOpenPDFReport('ENTIRE_DEPARTMENT')}
                 className="px-3.5 sm:px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                title="Open official department PDF and CSV export modal"
+                title="Generate official signed PDF report of departmental summary merging Morning and Evening shifts"
               >
                 <Printer className="w-3.5 h-3.5 shrink-0" />
-                <span>Export Official PDF Report</span>
+                <span>Export Departmental PDF Report (Morning &amp; Evening)</span>
               </button>
 
               <button
@@ -5499,6 +5505,7 @@ export const HODEntryForm: React.FC<Props> = ({
         currentSubjects={subjects}
         currentRecord={loadedRecord}
         currentUser={currentUser}
+        defaultScope={exportDefaultScope}
       />
     </div>
   );
