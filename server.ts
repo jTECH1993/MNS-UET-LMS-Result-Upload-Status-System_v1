@@ -771,30 +771,50 @@ const CAMPUS_CONFIG_FILE = path.join(process.cwd(), 'campus-photo-config.json');
 // Get active campus photo
 app.get('/api/campus-photo', (req, res) => {
   try {
-    let customImageBase64 = null;
+    let customImage = null;
+    let fitMode = 'cover';
     let updatedAt = Date.now();
+
     if (fs.existsSync(CAMPUS_CONFIG_FILE)) {
       try {
         const config = JSON.parse(fs.readFileSync(CAMPUS_CONFIG_FILE, 'utf-8'));
-        if (config.image) {
-          customImageBase64 = config.image;
-        }
-        if (config.updatedAt) {
-          updatedAt = config.updatedAt;
-        }
+        if (config.photoUrl) customImage = config.photoUrl;
+        else if (config.image) customImage = config.image;
+        if (config.fitMode) fitMode = config.fitMode;
+        if (config.updatedAt) updatedAt = config.updatedAt;
       } catch (e) {}
     }
 
-    const publicJpg = path.join(process.cwd(), 'public', 'mns-uet-campus.jpg');
+    const publicDir = path.join(process.cwd(), 'public');
+    const c3Path = path.join(publicDir, 'c3.jpeg');
+    const publicJpg = path.join(publicDir, 'mns-uet-campus.jpg');
     let mtime = updatedAt;
-    if (fs.existsSync(publicJpg)) {
-      mtime = fs.statSync(publicJpg).mtimeMs;
+
+    if (fs.existsSync(c3Path)) {
+      mtime = Math.max(mtime, fs.statSync(c3Path).mtimeMs);
+    } else if (fs.existsSync(publicJpg)) {
+      mtime = Math.max(mtime, fs.statSync(publicJpg).mtimeMs);
+    }
+
+    // Determine primary resolved photo URL
+    let resolvedUrl = customImage;
+    if (!resolvedUrl) {
+      if (fs.existsSync(c3Path)) {
+        resolvedUrl = `/c3.jpeg?v=${Math.round(mtime)}`;
+      } else {
+        resolvedUrl = `/mns-uet-campus.jpg?v=${Math.round(mtime)}`;
+      }
     }
 
     res.json({
-      photoUrl: customImageBase64 || `/mns-uet-campus.jpg?v=${Math.round(mtime)}`,
-      isCustom: !!customImageBase64,
+      photoUrl: resolvedUrl,
+      fitMode,
+      isCustom: true,
       updatedAt: mtime,
+      availablePresets: [
+        { id: 'c3', name: 'MNS-UET Multan Main Academic Block (c3.jpeg)', url: `/c3.jpeg?v=${Math.round(mtime)}` },
+        { id: 'default', name: 'Official Institutional Campus Facade', url: `/mns-uet-campus.jpg?v=${Math.round(mtime)}` }
+      ]
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -804,20 +824,23 @@ app.get('/api/campus-photo', (req, res) => {
 // Upload & persist a new campus photo across the entire university portal
 app.post('/api/campus-photo', (req, res) => {
   try {
-    const { image } = req.body;
-    if (!image || typeof image !== 'string') {
-      return res.status(400).json({ error: 'Image data URL is required' });
+    const { image, photoUrl, fitMode = 'cover' } = req.body;
+    const effectiveImage = image || photoUrl;
+    if (!effectiveImage || typeof effectiveImage !== 'string') {
+      return res.status(400).json({ error: 'Image data URL or photo URL is required' });
     }
 
-    // Save configuration JSON
-    const configData = {
-      image,
-      updatedAt: Date.now(),
+    const updatedAt = Date.now();
+    const configData: any = {
+      image: effectiveImage,
+      photoUrl: photoUrl || (effectiveImage.startsWith('data:') ? undefined : effectiveImage),
+      fitMode,
+      updatedAt,
     };
-    fs.writeFileSync(CAMPUS_CONFIG_FILE, JSON.stringify(configData), 'utf-8');
+    fs.writeFileSync(CAMPUS_CONFIG_FILE, JSON.stringify(configData, null, 2), 'utf-8');
 
     // Extract base64 buffer and write directly to public and dist
-    const match = image.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
+    const match = effectiveImage.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
     if (match) {
       const buffer = Buffer.from(match[2], 'base64');
       const publicDir = path.join(process.cwd(), 'public');
@@ -833,12 +856,28 @@ app.post('/api/campus-photo', (req, res) => {
         fs.writeFileSync(path.join(distDir, 'mns-uet-campus.png'), buffer);
         fs.writeFileSync(path.join(distDir, 'mns-uet-campus-alt.jpg'), buffer);
       }
+    } else if (effectiveImage.includes('c3.jpeg')) {
+      const publicDir = path.join(process.cwd(), 'public');
+      const c3Path = path.join(publicDir, 'c3.jpeg');
+      if (fs.existsSync(c3Path)) {
+        const c3Buf = fs.readFileSync(c3Path);
+        fs.writeFileSync(path.join(publicDir, 'mns-uet-campus.jpg'), c3Buf);
+        fs.writeFileSync(path.join(publicDir, 'mns-uet-campus.png'), c3Buf);
+        fs.writeFileSync(path.join(publicDir, 'mns-uet-campus-alt.jpg'), c3Buf);
+        const distDir = path.join(process.cwd(), 'dist');
+        if (fs.existsSync(distDir)) {
+          fs.writeFileSync(path.join(distDir, 'mns-uet-campus.jpg'), c3Buf);
+          fs.writeFileSync(path.join(distDir, 'mns-uet-campus.png'), c3Buf);
+          fs.writeFileSync(path.join(distDir, 'mns-uet-campus-alt.jpg'), c3Buf);
+        }
+      }
     }
 
     res.json({
       success: true,
       message: 'Campus photo successfully updated and saved across all institutional users!',
-      photoUrl: image,
+      photoUrl: effectiveImage,
+      fitMode,
     });
   } catch (err: any) {
     console.error('Error saving campus photo:', err);
@@ -852,19 +891,19 @@ app.delete('/api/campus-photo', (req, res) => {
     if (fs.existsSync(CAMPUS_CONFIG_FILE)) {
       fs.unlinkSync(CAMPUS_CONFIG_FILE);
     }
-    // Re-run the official canvas generator if available
-    const genScript = path.join(process.cwd(), 'generate-campus-facade.cjs');
-    if (fs.existsSync(genScript)) {
-      try {
-        const { execSync } = require('child_process');
-        execSync(`node "${genScript}"`);
-      } catch (e) {}
+    const publicDir = path.join(process.cwd(), 'public');
+    const c3Path = path.join(publicDir, 'c3.jpeg');
+    if (fs.existsSync(c3Path)) {
+      const c3Buf = fs.readFileSync(c3Path);
+      fs.writeFileSync(path.join(publicDir, 'mns-uet-campus.jpg'), c3Buf);
+      fs.writeFileSync(path.join(publicDir, 'mns-uet-campus.png'), c3Buf);
+      fs.writeFileSync(path.join(publicDir, 'mns-uet-campus-alt.jpg'), c3Buf);
     }
 
     res.json({
       success: true,
       message: 'Restored official MNS UET Multan Main Academic Block default photo.',
-      photoUrl: `/mns-uet-campus.jpg?v=${Date.now()}`,
+      photoUrl: `/c3.jpeg?v=${Date.now()}`,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

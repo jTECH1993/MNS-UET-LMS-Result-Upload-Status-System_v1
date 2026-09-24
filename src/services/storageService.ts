@@ -290,6 +290,8 @@ export class StorageService {
       PROGRAM_SHIFTS_KEY,
       GLOBAL_ACTIVE_SHIFTS_KEY,
       LOCKDOWN_LOGS_KEY,
+      'MNS_UET_CUSTOM_CAMPUS_IMAGE',
+      'MNS_UET_CAMPUS_FIT_MODE',
       'mnsuet_cohort_sections_v99',
       'mnsuet_session_active_roster_v99__2023',
       'mnsuet_session_active_roster_v99__2024',

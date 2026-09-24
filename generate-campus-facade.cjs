@@ -1,5 +1,22 @@
 const fs = require('fs');
 const path = require('path');
+
+// If the real high-res campus photograph c3.jpeg exists, use it directly!
+const realCampusPhoto = path.join(__dirname, 'public', 'c3.jpeg');
+if (fs.existsSync(realCampusPhoto)) {
+  const photoBuf = fs.readFileSync(realCampusPhoto);
+  fs.writeFileSync('public/mns-uet-campus.png', photoBuf);
+  fs.writeFileSync('public/mns-uet-campus.jpg', photoBuf);
+  fs.writeFileSync('public/mns-uet-campus-alt.jpg', photoBuf);
+  if (fs.existsSync('dist')) {
+    fs.writeFileSync('dist/mns-uet-campus.png', photoBuf);
+    fs.writeFileSync('dist/mns-uet-campus.jpg', photoBuf);
+    fs.writeFileSync('dist/mns-uet-campus-alt.jpg', photoBuf);
+  }
+  console.log('Successfully applied real photographic image public/c3.jpeg to campus facade assets.');
+  process.exit(0);
+}
+
 const { createCanvas } = require('@napi-rs/canvas');
 
 // Generate a high-resolution 1920x800 photographic rendering of MNS UET Multan Main Academic Block
