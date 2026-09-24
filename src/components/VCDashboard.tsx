@@ -28,6 +28,7 @@ import { DepartmentDrillDownModal } from './DepartmentDrillDownModal';
 import { ProgramSectionDrillDownModal } from './ProgramSectionDrillDownModal';
 import { ActionRequiredPanel } from './ActionRequiredPanel';
 import { ActionCenterPanel } from './ActionCenterPanel';
+import { RecentActivityWidget } from './RecentActivityWidget';
 import { AdminGodModePanel } from './AdminGodModePanel';
 import { SectionPerformanceMatrix } from './SectionPerformanceMatrix';
 import { DeadlineAgingChart } from './DeadlineAgingChart';
@@ -89,7 +90,9 @@ import {
   Target,
   Database,
   RotateCcw,
+  Camera,
 } from 'lucide-react';
+import { useCampusPhoto } from '../services/campusPhotoService';
 
 interface Props {
   onSelectProgramToEdit: (
@@ -180,6 +183,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ACADEMIC_HEALTH'>('COMMAND_CENTER');
   const [isLockdownScopeModalOpen, setIsLockdownScopeModalOpen] = useState<boolean>(false);
   const [isBulkCSVImportModalOpen, setIsBulkCSVImportModalOpen] = useState<boolean>(false);
+  const campusPhoto = useCampusPhoto();
+  const [isCampusLightboxOpen, setIsCampusLightboxOpen] = useState<boolean>(false);
 
   // Change History / Audit Trail Modal State
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
@@ -1081,6 +1086,29 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             <p className="text-xs text-slate-300">
               Muhammad Nawaz Sharif UET Multan • Central Monitoring Portal • Task: LMS Result Upload Status &amp; Compliance
             </p>
+          </div>
+        </div>
+
+        {/* Campus Photo Live Showcase */}
+        <div
+          onClick={() => setIsCampusLightboxOpen(true)}
+          className="relative group rounded-xl overflow-hidden border border-slate-700 hover:border-emerald-500/70 bg-slate-950 w-full sm:w-44 h-18 sm:h-20 shrink-0 shadow-md cursor-pointer transition-all active:scale-98"
+          title="MNS-UET Multan Main Academic Block • Live dynamic database sync • Click to inspect"
+        >
+          <img
+            src={campusPhoto.photoUrl}
+            alt="MNS-UET Multan Campus Facade"
+            className={`w-full h-full object-${campusPhoto.fitMode} transition-transform duration-300 group-hover:scale-105`}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent flex items-end justify-between p-1.5">
+            <span className="text-[10px] font-bold text-emerald-300 flex items-center gap-1">
+              <Camera className="w-3 h-3 text-emerald-400" />
+              Campus View
+            </span>
+            <span className="text-[9px] text-emerald-400 bg-slate-900/90 px-1 py-0.5 rounded border border-emerald-700/60 font-semibold flex items-center gap-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Synced
+            </span>
           </div>
         </div>
 
@@ -2296,6 +2324,12 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             );
           })()}
 
+          {/* Recent Activity Feed Widget (Last 10 Result Uploads) */}
+          <RecentActivityWidget
+            departmentFilter={selectedDeptFilter}
+            title="University-Wide Recent Activity — Last 10 Result Uploads"
+          />
+
           {/* CRITICAL ACADEMIC ALERTS BOARD */}
           {criticalOverdueAlerts.length > 0 && (
             <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-950 rounded-xl p-5 shadow-xs space-y-4">
@@ -2642,7 +2676,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       {/* Live Activity Feed Section (Rendered in ACTIVITY mode) */}
       {dashboardViewMode === 'ACTIVITY' && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-6">
+          <RecentActivityWidget
+            departmentFilter={selectedDeptFilter}
+            title="Institutional Result Upload Activity — Last 10 Uploads"
+          />
           <VCAuditFeed />
         </div>
       )}
@@ -4162,6 +4200,52 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         onlyGenuineSubmissions={onlyGenuineSubmissions}
         stats={stats}
       />
+
+      {/* Campus Photo Full-Resolution Lightbox Modal */}
+      {isCampusLightboxOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsCampusLightboxOpen(false)}
+        >
+          <div
+            className="relative max-w-5xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-slate-950 flex items-center justify-between border-b border-slate-800 text-white">
+              <div className="flex items-center gap-2.5">
+                <Camera className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">
+                    MNS-UET Multan — Official Campus Facade &amp; Main Academic Block
+                  </h3>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Dynamic Database Synchronized
+                    </span>
+                    <span>•</span>
+                    <span className="capitalize">Fit: {campusPhoto.fitMode}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCampusLightboxOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative h-[65vh] max-h-[700px] bg-slate-950 flex items-center justify-center p-3">
+              <img
+                src={campusPhoto.photoUrl}
+                alt="MNS-UET Multan Campus Main Academic Block"
+                className={`max-h-full max-w-full w-auto h-auto object-${campusPhoto.fitMode} rounded-lg shadow-lg`}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

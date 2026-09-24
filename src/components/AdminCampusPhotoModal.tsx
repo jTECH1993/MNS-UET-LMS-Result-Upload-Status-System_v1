@@ -13,7 +13,12 @@ import {
   Eye,
   Check,
   Layers,
+  Trash2,
+  Cloud,
 } from 'lucide-react';
+
+import { CampusPhotoService, useCampusPhoto } from '../services/campusPhotoService';
+import { FirebaseStore } from '../lib/firebaseStore';
 
 interface Props {
   isOpen: boolean;
@@ -22,12 +27,9 @@ interface Props {
 }
 
 export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhotoUpdated }) => {
-  const [previewUrl, setPreviewUrl] = useState<string>(() => {
-    return localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/c3.jpeg';
-  });
-  const [fitMode, setFitMode] = useState<'cover' | 'contain'>(() => {
-    return (localStorage.getItem('MNS_UET_CAMPUS_FIT_MODE') as 'cover' | 'contain') || 'cover';
-  });
+  const campusState = useCampusPhoto();
+  const [previewUrl, setPreviewUrl] = useState<string>(campusState.photoUrl);
+  const [fitMode, setFitMode] = useState<'cover' | 'contain'>(campusState.fitMode);
   const [urlInput, setUrlInput] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>('');
@@ -38,23 +40,9 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
 
   useEffect(() => {
     if (!isOpen) return;
-
-    // Fetch the active server-persisted image URL
-    fetch('/api/campus-photo')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.photoUrl) {
-          setPreviewUrl(data.photoUrl);
-          if (data.fitMode) setFitMode(data.fitMode);
-          if (data.isCustom && data.photoUrl.startsWith('data:')) {
-            try {
-              localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', data.photoUrl);
-            } catch (e) {}
-          }
-        }
-      })
-      .catch(() => {});
-  }, [isOpen]);
+    setPreviewUrl(campusState.photoUrl);
+    setFitMode(campusState.fitMode);
+  }, [isOpen, campusState.photoUrl, campusState.fitMode]);
 
   if (!isOpen) return null;
 
@@ -62,52 +50,15 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
     setIsUploading(true);
     setErrorMsg('');
     try {
-      const response = await fetch('/api/campus-photo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: targetUrl,
-          photoUrl: targetUrl.startsWith('data:') ? undefined : targetUrl,
-          fitMode: selectedFit,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Server returned an error status while saving campus photo');
-      }
-
-      try {
-        localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', targetUrl);
-        localStorage.setItem('MNS_UET_CAMPUS_FIT_MODE', selectedFit);
-      } catch (e) {
-        console.warn('LocalStorage limit exceeded, server copy active.');
-      }
-
+      const res = await CampusPhotoService.updateCampusPhoto(targetUrl, selectedFit, 'admin');
       setPreviewUrl(targetUrl);
-      setSuccessMsg('Campus photo permanently updated and synchronized across all user portals!');
-      window.dispatchEvent(
-        new CustomEvent('mnsuet_campus_photo_updated', {
-          detail: { url: targetUrl, fitMode: selectedFit },
-        })
-      );
+      setFitMode(selectedFit);
+      setSuccessMsg('Campus photo dynamically saved in Cloud Firestore database & synced across all portal sessions!');
       onPhotoUpdated?.();
       setTimeout(() => setSuccessMsg(''), 5000);
     } catch (err: any) {
       console.error(err);
-      try {
-        localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', targetUrl);
-        localStorage.setItem('MNS_UET_CAMPUS_FIT_MODE', selectedFit);
-        setPreviewUrl(targetUrl);
-        setSuccessMsg('Campus photo saved locally in browser storage.');
-        window.dispatchEvent(
-          new CustomEvent('mnsuet_campus_photo_updated', {
-            detail: { url: targetUrl, fitMode: selectedFit },
-          })
-        );
-        onPhotoUpdated?.();
-      } catch (storageErr) {
-        setErrorMsg('Failed to persist photo. Please select a smaller image or use preset.');
-      }
+      setErrorMsg('Failed to update campus photo. Please try a different image or preset.');
     } finally {
       setIsUploading(false);
     }
@@ -151,30 +102,25 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
     await persistPhoto(presetUrl, fitMode);
   };
 
-  const handleResetToDefault = async () => {
+  const handleDeleteCustomPhoto = async () => {
     setIsUploading(true);
     setErrorMsg('');
     try {
-      await fetch('/api/campus-photo', { method: 'DELETE' });
-    } catch (e) {}
+      await CampusPhotoService.resetToDefault();
+      setPreviewUrl('/c3.jpeg');
+      setFitMode('cover');
+      setSuccessMsg('Custom campus photo successfully deleted from Cloud Firestore & local storage. Restored default campus photograph.');
+      onPhotoUpdated?.();
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } catch (e: any) {
+      setErrorMsg('Failed to delete custom photo: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
-    try {
-      localStorage.removeItem('MNS_UET_CUSTOM_CAMPUS_IMAGE');
-      localStorage.setItem('MNS_UET_CAMPUS_FIT_MODE', 'cover');
-    } catch (e) {}
-
-    const defaultUrl = `/c3.jpeg?v=${Date.now()}`;
-    setPreviewUrl(defaultUrl);
-    setFitMode('cover');
-    setSuccessMsg('Campus photo restored to the official MNS-UET Multan Main Academic Block photograph.');
-    window.dispatchEvent(
-      new CustomEvent('mnsuet_campus_photo_updated', {
-        detail: { url: defaultUrl, fitMode: 'cover' },
-      })
-    );
-    onPhotoUpdated?.();
-    setIsUploading(false);
-    setTimeout(() => setSuccessMsg(''), 5000);
+  const handleResetToDefault = async () => {
+    await handleDeleteCustomPhoto();
   };
 
   return (
@@ -469,20 +415,34 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
             </div>
 
             {/* Quick Actions Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isUploading}
-                onClick={handleResetToDefault}
-                className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Default Photo</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={handleDeleteCustomPhoto}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Delete any custom uploaded campus photo and restore default facade"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  <span>Delete Custom Image</span>
+                </button>
 
-              <span className="text-[11px] text-slate-500">
-                Changes apply instantly across all login screens and client sessions.
-              </span>
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={handleResetToDefault}
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset to Default</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-800">
+                <Cloud className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                <span>Cloud Firestore Synced</span>
+              </div>
             </div>
           </div>
 

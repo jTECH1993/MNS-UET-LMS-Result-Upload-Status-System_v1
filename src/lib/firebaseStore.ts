@@ -254,6 +254,89 @@ export class FirebaseStore {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // CAMPUS PHOTO INSTITUTIONAL SYNC
+  // ---------------------------------------------------------------------------
+  static async syncCampusPhoto(config: {
+    photoUrl: string;
+    fitMode?: 'cover' | 'contain';
+    updatedAt?: number | string;
+    updatedBy?: string;
+    isCustom?: boolean;
+  }): Promise<void> {
+    if (this.isQuotaExhausted()) return;
+    try {
+      const docRef = doc(db, 'config', 'campus_photo');
+      await setDoc(
+        docRef,
+        {
+          photoUrl: config.photoUrl,
+          fitMode: config.fitMode || 'cover',
+          updatedAt: config.updatedAt || new Date().toISOString(),
+          updatedBy: config.updatedBy || 'admin',
+          isCustom: config.isCustom !== false,
+        },
+        { merge: true }
+      );
+      FirestoreUsageService.recordOperation('WRITE', 'config', 1, 'Sync Campus Photo Configuration');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'config/campus_photo');
+    }
+  }
+
+  static async getCampusPhoto(): Promise<{
+    photoUrl: string;
+    fitMode?: 'cover' | 'contain';
+    updatedAt?: number | string;
+    updatedBy?: string;
+    isCustom?: boolean;
+  } | null> {
+    if (this.isQuotaExhausted()) return null;
+    try {
+      const docRef = doc(db, 'config', 'campus_photo');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        FirestoreUsageService.recordOperation('READ', 'config', 1, 'Get Campus Photo Configuration');
+        return snap.data() as any;
+      }
+      return null;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.GET, 'config/campus_photo');
+      return null;
+    }
+  }
+
+  static listenCampusPhoto(
+    callback: (config: {
+      photoUrl: string;
+      fitMode?: 'cover' | 'contain';
+      updatedAt?: number | string;
+      updatedBy?: string;
+      isCustom?: boolean;
+    } | null) => void
+  ): () => void {
+    if (this.isQuotaExhausted()) return () => {};
+    try {
+      const docRef = doc(db, 'config', 'campus_photo');
+      return onSnapshot(
+        docRef,
+        (snap) => {
+          if (snap.exists()) {
+            callback(snap.data() as any);
+          } else {
+            callback(null);
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'config/campus_photo');
+        }
+      );
+    } catch (e) {
+      console.warn('Failed to listen to campus photo in Firestore:', e);
+      return () => {};
+    }
+  }
+
   static async setSystemDeadline(isoString: string | null): Promise<void> {
     if (this.isQuotaExhausted()) return;
     try {

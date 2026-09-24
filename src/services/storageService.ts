@@ -292,6 +292,7 @@ export class StorageService {
       LOCKDOWN_LOGS_KEY,
       'MNS_UET_CUSTOM_CAMPUS_IMAGE',
       'MNS_UET_CAMPUS_FIT_MODE',
+      'mnsuet_campus_photo_config',
       'mnsuet_cohort_sections_v99',
       'mnsuet_session_active_roster_v99__2023',
       'mnsuet_session_active_roster_v99__2024',
@@ -377,6 +378,9 @@ export class StorageService {
             }
             if (key.startsWith(SESSION_ROSTER_KEY)) {
               window.dispatchEvent(new CustomEvent('mnsuet_roster_updated'));
+            }
+            if (key === 'MNS_UET_CUSTOM_CAMPUS_IMAGE' || key === 'MNS_UET_CAMPUS_FIT_MODE' || key === 'mnsuet_campus_photo_config') {
+              window.dispatchEvent(new CustomEvent('mnsuet_campus_photo_updated', { detail: data }));
             }
           }
         }

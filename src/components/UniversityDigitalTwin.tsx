@@ -4,7 +4,8 @@ import { UNIVERSITY_DEPARTMENTS, ACADEMIC_SEMESTERS } from '../data/departmentsD
 import { StorageService } from '../services/storageService';
 import { AuthService } from '../services/authService';
 import { CompletionRadarService } from '../services/completionRadarService';
-import { Building2, GraduationCap, Calendar, Layers, CheckCircle2, AlertCircle, Search, ChevronRight, ChevronDown, Award } from 'lucide-react';
+import { Building2, GraduationCap, Calendar, Layers, CheckCircle2, AlertCircle, Search, ChevronRight, ChevronDown, Award, Camera } from 'lucide-react';
+import { useCampusPhoto } from '../services/campusPhotoService';
 
 interface Props {
   allRecords: SubmissionRecord[];
@@ -77,6 +78,7 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
   selectedShiftFilter = 'ALL',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const campusPhoto = useCampusPhoto();
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     uni: true, // Root expanded by default
   });
@@ -488,6 +490,9 @@ export const UniversityDigitalTwin: React.FC<Props> = ({
                   <ChevronRight className="w-4 h-4" />
                 )}
               </button>
+              <div className="w-12 h-9 rounded-lg overflow-hidden border border-slate-700 bg-slate-900 shrink-0 shadow-xs" title="Official MNS-UET Multan Facade (Live Synced)">
+                <img src={campusPhoto.photoUrl} alt="MNS-UET Multan" className={`w-full h-full object-${campusPhoto.fitMode}`} />
+              </div>
               <div className="p-2 bg-emerald-950/80 rounded-lg border border-emerald-800">
                 <Award className="w-6 h-6 text-emerald-400" />
               </div>

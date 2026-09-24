@@ -18,6 +18,7 @@ import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentMo
 import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
 import { FirestoreUsageModal } from './components/FirestoreUsageModal';
 import { AdminCampusPhotoModal } from './components/AdminCampusPhotoModal';
+import { BulkCSVImportModal } from './components/BulkCSVImportModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { QuotaExceededModal } from './components/QuotaExceededModal';
 import { SplashScreen } from './components/SplashScreen';
@@ -97,6 +98,7 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [isCampusPhotoModalOpen, setIsCampusPhotoModalOpen] = useState<boolean>(false);
+  const [isGlobalBulkCSVImportModalOpen, setIsGlobalBulkCSVImportModalOpen] = useState<boolean>(false);
 
   // Admin Role Preview Simulation Mode: Allows System Admin to view page exactly as HOD or Coordinator
   const [adminPreviewMode, setAdminPreviewMode] = useState<'OFF' | 'HOD' | 'COORDINATOR'>('OFF');
@@ -557,6 +559,7 @@ export default function App() {
           onOpenUsageModal={() => setIsUsageModalOpen(true)}
           onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
           onOpenCampusPhotoModal={() => setIsCampusPhotoModalOpen(true)}
+          onOpenBulkCSVImportModal={() => setIsGlobalBulkCSVImportModalOpen(true)}
           onOpenDataMigrationModal={() => setIsDataMigrationModalOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           onLogout={handleLogout}
@@ -1667,6 +1670,23 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Global Bulk CSV Import Modal */}
+      <BulkCSVImportModal
+        isOpen={isGlobalBulkCSVImportModalOpen}
+        onClose={() => setIsGlobalBulkCSVImportModalOpen(false)}
+        departmentName={currentUser?.department || targetDept}
+        programName={currentUser?.program || targetProg}
+        degreeLevel={targetDegreeLevel}
+        currentShift={targetShift}
+        currentSemester={targetSemester}
+        currentSection={targetAcademicSection}
+        currentSession={targetSession}
+        onCommitSuccess={() => {
+          reloadRecords();
+          window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+        }}
+      />
       {/* Session Program Roster Selector Modal for Coordinator / VC */}
       <Session2023SelectorModal
         isOpen={isRosterModalOpen}

@@ -37,6 +37,8 @@ import {
   Maximize2,
 } from 'lucide-react';
 
+import { useCampusPhoto } from '../services/campusPhotoService';
+
 interface Props {
   onAuthenticated: (session: ActiveUserSession) => void;
 }
@@ -54,42 +56,19 @@ const STANDARD_DESIGNATION_OPTIONS = [
 export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const [tab, setTab] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
 
-  // Official default campus photograph (persisted or updated by Admin across portal)
-  const [campusImage, setCampusImage] = useState<string>(() => {
-    return localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/c3.jpeg';
-  });
-  const [fitMode, setFitMode] = useState<'cover' | 'contain'>(() => {
-    return (localStorage.getItem('MNS_UET_CAMPUS_FIT_MODE') as 'cover' | 'contain') || 'cover';
-  });
+  // Official campus photograph synced in real-time across database and all sessions
+  const campusPhoto = useCampusPhoto();
+  const campusImage = campusPhoto.photoUrl;
+  const [localFitMode, setLocalFitMode] = useState<'cover' | 'contain' | null>(null);
+  const fitMode = localFitMode || campusPhoto.fitMode;
   const [isPhotoLightboxOpen, setIsPhotoLightboxOpen] = useState<boolean>(false);
 
-  useEffect(() => {
-    // Fetch latest campus image directly from server configuration
-    fetch('/api/campus-photo')
-      .then(res => res.json())
-      .then(data => {
-        if (data?.photoUrl) {
-          setCampusImage(data.photoUrl);
-          if (data.fitMode) setFitMode(data.fitMode);
-          if (data.isCustom && data.photoUrl.startsWith('data:')) {
-            try {
-              localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', data.photoUrl);
-            } catch (e) {}
-          }
-        }
-      })
-      .catch(() => {});
-
-    const handlePhotoUpdated = (e: any) => {
-      const updated = e?.detail?.url || localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || `/c3.jpeg?v=${Date.now()}`;
-      setCampusImage(updated);
-      if (e?.detail?.fitMode) {
-        setFitMode(e.detail.fitMode);
-      }
-    };
-    window.addEventListener('mnsuet_campus_photo_updated', handlePhotoUpdated);
-    return () => window.removeEventListener('mnsuet_campus_photo_updated', handlePhotoUpdated);
-  }, []);
+  const setFitMode = (newFit: 'cover' | 'contain') => {
+    setLocalFitMode(newFit);
+    try {
+      localStorage.setItem('MNS_UET_CAMPUS_FIT_MODE', newFit);
+    } catch {}
+  };
 
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');

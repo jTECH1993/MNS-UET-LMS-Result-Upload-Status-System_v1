@@ -31,6 +31,7 @@ import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import { SendFacultyReminderModal } from './SendFacultyReminderModal';
 import { FacultyReminderBanner } from './FacultyReminderBanner';
+import { RecentActivityWidget } from './RecentActivityWidget';
 import { HODActiveSearchBar, HODSearchScope, OtherCohortMatch } from './HODActiveSearchBar';
 import {
   Save,
@@ -2966,6 +2967,13 @@ export const HODEntryForm: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Recent Activity Feed Widget for HOD Dashboard */}
+      <RecentActivityWidget
+        departmentFilter={department}
+        programFilter={program}
+        title={`Recent Activity — Last 10 Result Uploads (${department})`}
+      />
 
       {/* HOD Alert: Coordinator Authorization & Additional Program Requests Pending */}
       {currentUser?.role === 'HOD' && (pendingHODApprovals.length > 0 || pendingProgRequests.length > 0) && (
