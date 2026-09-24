@@ -31,6 +31,7 @@ import { HODDirectivePanel } from './HODDirectivePanel';
 import { CoordinatorDirectivePanel } from './CoordinatorDirectivePanel';
 import { SendFacultyReminderModal } from './SendFacultyReminderModal';
 import { FacultyReminderBanner } from './FacultyReminderBanner';
+import { HODActiveSearchBar, HODSearchScope, OtherCohortMatch } from './HODActiveSearchBar';
 import {
   Save,
   Trash2,
@@ -345,8 +346,9 @@ export const HODEntryForm: React.FC<Props> = ({
   // Semester selection (1 to 8) - strictly isolated institutional semester cycle
   // (semester state initialized at top of component)
 
-  // Course search query & advanced columns toggle
+  // Course search query, scope & advanced columns toggle
   const [courseFilterQuery, setCourseFilterQuery] = useState<string>('');
+  const [courseFilterScope, setCourseFilterScope] = useState<HODSearchScope>('ALL');
   const [showAdvancedColumns, setShowAdvancedColumns] = useState<boolean>(false);
 
   // Row selection & Quick Tool Scope state
@@ -1193,21 +1195,126 @@ export const HODEntryForm: React.FC<Props> = ({
     return StorageService.calculateSummary(subjects);
   }, [subjects]);
 
-  // Filtered rows for course table search
+  // Filtered rows for course table search with multi-field and scope support
   const filteredSubjects = useMemo(() => {
-    if (!courseFilterQuery.trim()) return subjects;
+    let list = subjects;
+    if (courseFilterScope === 'PENDING') {
+      list = list.filter((s) => s.status === 'Pending');
+    }
+    if (!courseFilterQuery.trim()) return list;
     const q = courseFilterQuery.toLowerCase().trim();
-    return subjects.filter((s) => {
+
+    return list.filter((s) => {
+      const code = (s.courseCode || '').toLowerCase();
+      const title = (s.subjectTitle || '').toLowerCase();
+      const teacher = (s.uploadedBy || '').toLowerCase();
+      const remarks = (s.remarks || '').toLowerCase();
+      const status = (s.status || '').toLowerCase();
+      const secShift = (s.sectionShift || '').toLowerCase();
+
+      if (courseFilterScope === 'CODE') {
+        return code.includes(q);
+      }
+      if (courseFilterScope === 'SUBJECT') {
+        return title.includes(q);
+      }
+      if (courseFilterScope === 'FACULTY') {
+        return teacher.includes(q);
+      }
+      // 'ALL' or 'PENDING'
       return (
-        s.courseCode.toLowerCase().includes(q) ||
-        s.subjectTitle.toLowerCase().includes(q) ||
-        s.status.toLowerCase().includes(q) ||
-        (s.remarks && s.remarks.toLowerCase().includes(q)) ||
-        (s.uploadedBy && s.uploadedBy.toLowerCase().includes(q)) ||
-        (s.sectionShift && s.sectionShift.toLowerCase().includes(q))
+        code.includes(q) ||
+        title.includes(q) ||
+        teacher.includes(q) ||
+        status.includes(q) ||
+        remarks.includes(q) ||
+        secShift.includes(q)
       );
     });
-  }, [subjects, courseFilterQuery]);
+  }, [subjects, courseFilterQuery, courseFilterScope]);
+
+  // Compute matches in other cohorts (semesters/sections) of this program if 0 in active view
+  const otherCohortsMatches = useMemo((): OtherCohortMatch[] => {
+    const q = courseFilterQuery.toLowerCase().trim();
+    if (q.length < 2 || filteredSubjects.length > 0) return [];
+
+    const matches: OtherCohortMatch[] = [];
+    const allStore = StorageService.getAllSubmissions();
+
+    allStore.forEach((rec) => {
+      if (
+        !StorageService._isDeptMatch(department, rec.department) ||
+        !StorageService._isProgMatch(program, rec.program)
+      ) {
+        return;
+      }
+      const recSem = String(rec.semester || '1').replace(/\D/g, '');
+      const recSec = rec.section || 'A';
+      const recShift = (rec.shift as AcademicShift) || shift;
+
+      // Skip current active cohort
+      if (recSem === semester && recSec === section && recShift === shift) {
+        return;
+      }
+
+      if (rec.subjects && Array.isArray(rec.subjects)) {
+        rec.subjects.forEach((sub) => {
+          const code = (sub.courseCode || '').toLowerCase();
+          const title = (sub.subjectTitle || '').toLowerCase();
+          const teacher = (sub.uploadedBy || '').toLowerCase();
+
+          let isMatch = false;
+          if (courseFilterScope === 'CODE' && code.includes(q)) isMatch = true;
+          else if (courseFilterScope === 'SUBJECT' && title.includes(q)) isMatch = true;
+          else if (courseFilterScope === 'FACULTY' && teacher.includes(q)) isMatch = true;
+          else if (code.includes(q) || title.includes(q) || teacher.includes(q)) isMatch = true;
+
+          if (isMatch) {
+            matches.push({
+              semester: recSem,
+              section: recSec,
+              shift: recShift,
+              courseCode: sub.courseCode,
+              subjectTitle: sub.subjectTitle,
+              faculty: sub.uploadedBy || '',
+              status: sub.status,
+            });
+          }
+        });
+      }
+    });
+
+    return matches.slice(0, 6);
+  }, [courseFilterQuery, courseFilterScope, filteredSubjects.length, department, program, semester, section, shift, storageVersion]);
+
+  // Text highlighting helper for search matches
+  const highlightMatch = useCallback(
+    (text: string | undefined | null, query: string) => {
+      if (!text) return null;
+      if (!query || !query.trim()) return <>{text}</>;
+      const q = query.trim();
+      try {
+        const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+        return (
+          <>
+            {parts.map((part, i) =>
+              part.toLowerCase() === q.toLowerCase() ? (
+                <mark key={i} className="bg-amber-200 text-amber-950 font-bold px-0.5 rounded">
+                  {part}
+                </mark>
+              ) : (
+                part
+              )
+            )}
+          </>
+        );
+      } catch {
+        return <>{text}</>;
+      }
+    },
+    []
+  );
 
   // Clean up auto-save timers on unmount
   useEffect(() => {
@@ -4156,6 +4263,26 @@ export const HODEntryForm: React.FC<Props> = ({
       {/* SECTION 02: EXECUTIVE SUMMARY */}
       <ExecutiveSummaryCards summary={summary} />
 
+      {/* SECTION 02.5: ACTIVE DATA VIEW SEARCH & FILTER BAR */}
+      <HODActiveSearchBar
+        searchQuery={courseFilterQuery}
+        onSearchChange={setCourseFilterQuery}
+        searchScope={courseFilterScope}
+        onSearchScopeChange={setCourseFilterScope}
+        totalCount={subjects.length}
+        matchCount={filteredSubjects.length}
+        currentSemester={semester}
+        currentSection={section}
+        currentShift={shift}
+        otherCohortsMatches={otherCohortsMatches}
+        onSwitchCohort={(targetSem, targetSec, targetShift) => {
+          handleSemesterChange(targetSem);
+          handleSectionChange(targetSec);
+          if (targetShift !== shift) handleShiftChange(targetShift);
+          showFeedback('info', `Switched active cohort view to Semester ${targetSem} Section ${targetSec} (${targetShift})`);
+        }}
+      />
+
       {/* CARD 3: COURSE RESULT UPLOAD STATUS (Matching Screenshot 1) */}
       <div
         id="course-result-upload-card"
@@ -4758,7 +4885,7 @@ export const HODEntryForm: React.FC<Props> = ({
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
                           <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
-                            {subject.courseCode || 'N/A'}
+                            {highlightMatch(subject.courseCode || 'N/A', courseFilterQuery)}
                           </span>
                           <span className="font-mono font-bold text-[10px] bg-indigo-50 text-indigo-900 px-1.5 py-0.5 rounded border border-indigo-200">
                             Sec {section}
@@ -4786,12 +4913,14 @@ export const HODEntryForm: React.FC<Props> = ({
                         </div>
                       </div>
                       <div className="font-bold text-slate-900 text-sm">
-                        {subject.subjectTitle || 'Untitled Course'}
+                        {highlightMatch(subject.subjectTitle || 'Untitled Course', courseFilterQuery)}
                       </div>
                       <div className="text-xs text-slate-600 flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
                         <div className="flex items-center gap-1">
                           <User className="w-3 h-3 text-slate-400" />
-                          <span className="font-medium text-slate-700">{subject.uploadedBy || 'Instructor Assigned'}</span>
+                          <span className="font-medium text-slate-700">
+                            {highlightMatch(subject.uploadedBy || 'Instructor Assigned', courseFilterQuery)}
+                          </span>
                         </div>
                         <span className="font-mono text-slate-500 font-semibold">{subject.creditHours || '3'} Cr. Hrs</span>
                       </div>
@@ -5110,7 +5239,7 @@ export const HODEntryForm: React.FC<Props> = ({
                       <td className="py-2 px-3">
                         {isReadOnly ? (
                           <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">
-                            {subject.courseCode || 'N/A'}
+                            {highlightMatch(subject.courseCode || 'N/A', courseFilterQuery)}
                           </span>
                         ) : (
                           <input
@@ -5120,7 +5249,11 @@ export const HODEntryForm: React.FC<Props> = ({
                               handleRowChangeById(subject.id, 'courseCode', e.target.value.toUpperCase())
                             }
                             placeholder="e.g. CS-101"
-                            className="w-full bg-transparent border border-slate-200 rounded px-2 py-1 text-xs font-mono font-semibold text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                            className={`w-full bg-transparent border rounded px-2 py-1 text-xs font-mono font-semibold text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white ${
+                              courseFilterQuery && subject.courseCode?.toLowerCase().includes(courseFilterQuery.toLowerCase().trim())
+                                ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300/60'
+                                : 'border-slate-200'
+                            }`}
                           />
                         )}
                       </td>
@@ -5129,7 +5262,7 @@ export const HODEntryForm: React.FC<Props> = ({
                       <td className="py-2 px-3">
                         {isReadOnly ? (
                           <span className="font-semibold text-slate-900 text-xs">
-                            {subject.subjectTitle || 'Untitled Course'}
+                            {highlightMatch(subject.subjectTitle || 'Untitled Course', courseFilterQuery)}
                           </span>
                         ) : (
                           <input
@@ -5139,7 +5272,11 @@ export const HODEntryForm: React.FC<Props> = ({
                               handleRowChangeById(subject.id, 'subjectTitle', e.target.value)
                             }
                             placeholder="Enter course name / subject title"
-                            className="w-full bg-transparent border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium"
+                            className={`w-full bg-transparent border rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white font-medium ${
+                              courseFilterQuery && subject.subjectTitle?.toLowerCase().includes(courseFilterQuery.toLowerCase().trim())
+                                ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300/60'
+                                : 'border-slate-200'
+                            }`}
                           />
                         )}
                       </td>
@@ -5180,7 +5317,7 @@ export const HODEntryForm: React.FC<Props> = ({
                         {isReadOnly ? (
                           <div className="flex items-center gap-1.5 text-xs text-slate-800 font-medium">
                             <User className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{subject.uploadedBy || 'Not specified'}</span>
+                            <span>{highlightMatch(subject.uploadedBy || 'Not specified', courseFilterQuery)}</span>
                           </div>
                         ) : (
                           <input
@@ -5190,7 +5327,11 @@ export const HODEntryForm: React.FC<Props> = ({
                               handleRowChangeById(subject.id, 'uploadedBy', e.target.value)
                             }
                             placeholder="e.g. Dr. Ahmad Khan"
-                            className="w-full bg-transparent border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white"
+                            className={`w-full bg-transparent border rounded px-2.5 py-1 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white ${
+                              courseFilterQuery && subject.uploadedBy?.toLowerCase().includes(courseFilterQuery.toLowerCase().trim())
+                                ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300/60'
+                                : 'border-slate-200'
+                            }`}
                           />
                         )}
                       </td>

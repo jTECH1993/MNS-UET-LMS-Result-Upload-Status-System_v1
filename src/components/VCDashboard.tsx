@@ -1931,9 +1931,58 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
+      {/* Universal Search Bar for the Active Data View (Quickly find specific courses, subjects, or faculty names) */}
+      <GlobalSearchFilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchScope={searchScope}
+        onSearchScopeChange={setSearchScope}
+        selectedDeptFilters={selectedDeptFilters}
+        onDeptFiltersChange={setSelectedDeptFilters}
+        selectedSemesters={selectedSemesters}
+        onSemestersChange={setSelectedSemesters}
+        selectedShifts={selectedShifts}
+        onShiftsChange={setSelectedShifts}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onlyGenuineSubmissions={onlyGenuineSubmissions}
+        onOnlyGenuineChange={setOnlyGenuineSubmissions}
+        allRecords={allRecords}
+        onSelectDepartment={(deptName) => {
+          setSelectedDeptFilter(deptName);
+          const matched = hierarchy.departments.find((d) => StorageService._isDeptMatch(d.name, deptName));
+          if (matched) {
+            setSelectedDrillDownDept(matched);
+            setIsDeptDrillDownOpen(true);
+          }
+        }}
+        onSelectCourse={(dept, prog, shift, session, sem, sec) => {
+          onSelectProgramToEdit(dept, prog, shift, session, sem, sec);
+        }}
+      />
+
       {/* 7. VC Command Center Visualizations */}
       {dashboardViewMode === 'COMMAND_CENTER' && (
         <div className="space-y-6">
+          {/* Quick Active Search Results Notification in Command Center */}
+          {searchQuery.trim().length > 0 && (
+            <div className="bg-emerald-950/90 border border-emerald-700/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-white shadow-md">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-bold">
+                  Searching for &quot;<strong className="text-emerald-300">{searchQuery}</strong>&quot;: Found matching courses or faculty across {filteredDepartmentStats.length} department(s) ({filteredPrograms.length} program(s)).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDashboardViewMode('ROSTER')}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <span>Jump to Program Roster ({filteredPrograms.length})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* UNIVERSITY STATUS EXECUTIVE CONTROL CENTER */}
           {(() => {
@@ -2471,33 +2520,6 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         </div>
       </div>
 
-      {/* Global Search & Multi-Select Filter Chip Bar */}
-      <GlobalSearchFilterBar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchScope={searchScope}
-        onSearchScopeChange={setSearchScope}
-        selectedDeptFilters={selectedDeptFilters}
-        onDeptFiltersChange={setSelectedDeptFilters}
-        selectedSemesters={selectedSemesters}
-        onSemestersChange={setSelectedSemesters}
-        selectedShifts={selectedShifts}
-        onShiftsChange={setSelectedShifts}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        onlyGenuineSubmissions={onlyGenuineSubmissions}
-        onOnlyGenuineChange={setOnlyGenuineSubmissions}
-        allRecords={allRecords}
-        onSelectDepartment={(deptName) => {
-          setSelectedDeptFilter(deptName);
-          const matched = hierarchy.departments.find((d) => StorageService._isDeptMatch(d.name, deptName));
-          if (matched) {
-            setSelectedDrillDownDept(matched);
-            setIsDeptDrillDownOpen(true);
-          }
-        }}
-      />
-
       {/* Vice Chancellor Executive Productivity Suite: Department Performance & Compliance Matrix */}
       <div className="bg-white rounded-lg border border-slate-300 shadow-2xs overflow-hidden">
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
@@ -2962,6 +2984,64 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                           </span>
                         )}
                       </div>
+
+                      {/* Mobile Search Matches inside this program */}
+                      {searchQuery.trim().length > 0 && (() => {
+                        const q = searchQuery.toLowerCase().trim();
+                        const matched: { code: string; title: string; faculty?: string; sem: string; sec: string }[] = [];
+                        const allSemesterRecs = [
+                          ...Object.entries(progItem.shifts.Morning.semesterRecords).map(([sem, r]) => ({ sem, r })),
+                          ...Object.entries(progItem.shifts.Evening.semesterRecords).map(([sem, r]) => ({ sem, r })),
+                        ];
+
+                        for (const { sem, r } of allSemesterRecs) {
+                          if (!r) continue;
+                          if (r.hodCoordinator?.toLowerCase().includes(q)) {
+                            matched.push({ code: 'Coord', title: 'HOD/Coordinator', faculty: r.hodCoordinator, sem, sec: r.section || 'A' });
+                          }
+                          if (r.subjects && Array.isArray(r.subjects)) {
+                            for (const sub of r.subjects) {
+                              if (
+                                sub.courseCode?.toLowerCase().includes(q) ||
+                                sub.subjectTitle?.toLowerCase().includes(q) ||
+                                sub.uploadedBy?.toLowerCase().includes(q)
+                              ) {
+                                matched.push({
+                                  code: sub.courseCode || 'Course',
+                                  title: sub.subjectTitle || '',
+                                  faculty: sub.uploadedBy,
+                                  sem,
+                                  sec: r.section || 'A',
+                                });
+                              }
+                            }
+                          }
+                        }
+
+                        if (matched.length === 0) return null;
+                        return (
+                          <div className="mt-1 p-1 bg-amber-50 rounded border border-amber-200 text-[9px] space-y-0.5">
+                            <div className="font-bold text-amber-900">
+                              Matches ({matched.length}):
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {matched.slice(0, 2).map((m, idx) => (
+                                <span
+                                  key={idx}
+                                  className="bg-white px-1 py-0.5 rounded border border-amber-300 text-slate-800 font-medium text-[9px]"
+                                >
+                                  <strong>{m.code}:</strong> {m.title} {m.faculty ? `(${m.faculty})` : ''} • Sem {m.sem}
+                                </span>
+                              ))}
+                              {matched.length > 2 && (
+                                <span className="text-amber-700 font-bold self-center">
+                                  +{matched.length - 2} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Shift Toggle Buttons */}
@@ -3233,6 +3313,64 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
                             </span>
                           )}
                         </div>
+
+                        {/* Search Matches inside this program */}
+                        {searchQuery.trim().length > 0 && (() => {
+                          const q = searchQuery.toLowerCase().trim();
+                          const matched: { code: string; title: string; faculty?: string; sem: string; sec: string }[] = [];
+                          const allSemesterRecs = [
+                            ...Object.entries(progItem.shifts.Morning.semesterRecords).map(([sem, r]) => ({ sem, r })),
+                            ...Object.entries(progItem.shifts.Evening.semesterRecords).map(([sem, r]) => ({ sem, r })),
+                          ];
+
+                          for (const { sem, r } of allSemesterRecs) {
+                            if (!r) continue;
+                            if (r.hodCoordinator?.toLowerCase().includes(q)) {
+                              matched.push({ code: 'Coord', title: 'HOD/Coordinator', faculty: r.hodCoordinator, sem, sec: r.section || 'A' });
+                            }
+                            if (r.subjects && Array.isArray(r.subjects)) {
+                              for (const sub of r.subjects) {
+                                if (
+                                  sub.courseCode?.toLowerCase().includes(q) ||
+                                  sub.subjectTitle?.toLowerCase().includes(q) ||
+                                  sub.uploadedBy?.toLowerCase().includes(q)
+                                ) {
+                                  matched.push({
+                                    code: sub.courseCode || 'Course',
+                                    title: sub.subjectTitle || '',
+                                    faculty: sub.uploadedBy,
+                                    sem,
+                                    sec: r.section || 'A',
+                                  });
+                                }
+                              }
+                            }
+                          }
+
+                          if (matched.length === 0) return null;
+                          return (
+                            <div className="mt-1.5 p-1.5 bg-amber-50 rounded border border-amber-200 text-[10px] space-y-1">
+                              <span className="font-bold text-amber-900 block">
+                                Matched Courses / Faculty ({matched.length}):
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {matched.slice(0, 3).map((m, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="bg-white px-1.5 py-0.5 rounded border border-amber-300 text-slate-800 font-medium inline-flex items-center gap-1"
+                                  >
+                                    <strong className="text-amber-800 font-mono">{m.code}:</strong> {m.title} {m.faculty ? `(${m.faculty})` : ''} • Sem {m.sem} Sec {m.sec}
+                                  </span>
+                                ))}
+                                {matched.length > 3 && (
+                                  <span className="text-amber-700 font-bold self-center">
+                                    +{matched.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Degree Level */}

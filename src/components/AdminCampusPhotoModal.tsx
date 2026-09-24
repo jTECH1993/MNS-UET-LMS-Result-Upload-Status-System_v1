@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { X, Camera, Upload, RotateCcw, Image, CheckCircle2, Shield } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Camera, Upload, RotateCcw, CheckCircle2, Shield, Loader2, Sparkles } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -11,9 +11,29 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
   const [previewUrl, setPreviewUrl] = useState<string>(() => {
     return localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/mns-uet-campus.jpg';
   });
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Fetch the active server-persisted image URL
+    fetch('/api/campus-photo')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.photoUrl) {
+          setPreviewUrl(data.photoUrl);
+          if (data.isCustom && data.photoUrl.startsWith('data:')) {
+            try {
+              localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', data.photoUrl);
+            } catch (e) {}
+          }
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -26,36 +46,80 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setErrorMsg('Image file size is too large (maximum 8MB allowed).');
+    if (file.size > 25 * 1024 * 1024) {
+      setErrorMsg('Image file size is too large (maximum 25MB allowed).');
       return;
     }
 
     setErrorMsg('');
+    setIsUploading(true);
+
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target?.result as string;
       if (base64) {
         setPreviewUrl(base64);
+
         try {
-          localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', base64);
-          setSuccessMsg('Campus photo successfully updated for the portal!');
+          // Persist to server backend
+          const response = await fetch('/api/campus-photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: base64 }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Server returned error status');
+          }
+
+          // Cache in local storage for fast client bootstrap
+          try {
+            localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', base64);
+          } catch (e) {
+            console.warn('LocalStorage limit exceeded, server copy active.');
+          }
+
+          setSuccessMsg('Campus photo permanently saved to portal server! All users will see this image on the login page.');
+          window.dispatchEvent(new CustomEvent('mnsuet_campus_photo_updated', { detail: { url: base64 } }));
           onPhotoUpdated?.();
-          setTimeout(() => setSuccessMsg(''), 4000);
-        } catch (err) {
-          setErrorMsg('Failed to persist photo in browser storage.');
+          setTimeout(() => setSuccessMsg(''), 5000);
+        } catch (err: any) {
+          console.error(err);
+          // Fallback to localStorage if server fails
+          try {
+            localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', base64);
+            setSuccessMsg('Campus photo saved to browser storage.');
+            window.dispatchEvent(new CustomEvent('mnsuet_campus_photo_updated', { detail: { url: base64 } }));
+            onPhotoUpdated?.();
+          } catch (storageErr) {
+            setErrorMsg('Failed to persist photo. Please try a slightly smaller image.');
+          }
+        } finally {
+          setIsUploading(false);
         }
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleResetToDefault = () => {
-    localStorage.removeItem('MNS_UET_CUSTOM_CAMPUS_IMAGE');
-    setPreviewUrl('/mns-uet-campus.jpg');
-    setSuccessMsg('Campus photo restored to the official university default.');
+  const handleResetToDefault = async () => {
+    setIsUploading(true);
+    setErrorMsg('');
+    try {
+      await fetch('/api/campus-photo', { method: 'DELETE' });
+    } catch (e) {}
+
+    try {
+      localStorage.removeItem('MNS_UET_CUSTOM_CAMPUS_IMAGE');
+    } catch (e) {}
+
+    const defaultUrl = `/mns-uet-campus.jpg?v=${Date.now()}`;
+    setPreviewUrl(defaultUrl);
+    setSuccessMsg('Campus photo restored to the official MNS-UET Multan academic block default.');
+    window.dispatchEvent(new CustomEvent('mnsuet_campus_photo_updated', { detail: { url: defaultUrl } }));
     onPhotoUpdated?.();
-    setTimeout(() => setSuccessMsg(''), 4000);
+    setIsUploading(false);
+    setTimeout(() => setSuccessMsg(''), 5000);
   };
 
   return (
@@ -132,30 +196,42 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
 
           {/* Controls */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Admin Upload Instructions
+            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              Institutional Campus Banner Synchronization
             </h4>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Upload an updated high-resolution photograph of the MNS UET Multan campus. The image will automatically appear on the main login screen for all institutional users.
+              Upload any high-resolution campus photo (such as the MNS UET Multan Main Academic Block with front lawns). When saved, it is written directly to the server files and database, automatically appearing for all users (VC, HODs, Coordinators, Lecturers) across every login session.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 type="button"
+                disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
               >
-                <Upload className="w-4 h-4" />
-                <span>Upload New Campus Photo</span>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving to Server...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>Upload &amp; Save Across Portal</span>
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
+                disabled={isUploading}
                 onClick={handleResetToDefault}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" />
-                <span>Restore Official Default</span>
+                <span>Restore Official Academic Block</span>
               </button>
 
               <input

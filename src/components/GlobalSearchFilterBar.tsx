@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Hash,
   Briefcase,
+  Eye,
 } from 'lucide-react';
 import { UNIVERSITY_DEPARTMENTS } from '../data/departmentsData';
 import { SubmissionRecord, SubjectRow, AcademicShift } from '../types';
@@ -44,6 +45,14 @@ interface GlobalSearchFilterBarProps {
   onOnlyGenuineChange: (genuine: boolean) => void;
   allRecords: SubmissionRecord[];
   onSelectDepartment?: (deptName: string) => void;
+  onSelectCourse?: (
+    dept: string,
+    prog: string,
+    shift: AcademicShift,
+    session?: string,
+    semester?: string,
+    section?: string
+  ) => void;
 }
 
 export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
@@ -63,6 +72,7 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
   onOnlyGenuineChange,
   allRecords,
   onSelectDepartment,
+  onSelectCourse,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [showResultsDrawer, setShowResultsDrawer] = useState<boolean>(false);
@@ -286,7 +296,7 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
               onSearchChange(e.target.value);
               if (e.target.value.trim().length > 0) setShowResultsDrawer(true);
             }}
-            placeholder="Global Search: Enter Subject Title, Course Code (e.g. CS-101), Lecturer Name, or Department..."
+            placeholder="Search courses, subjects, or faculty names across active view (e.g. CS-101, Data Structures, Dr. Tariq)..."
             className="w-full pl-10 pr-24 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium transition-all shadow-inner"
           />
 
@@ -380,7 +390,7 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
                   key={`${item.record.id}-${item.subject.courseCode}-${idx}`}
                   className="pt-1.5 first:pt-0 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-800/60 p-1.5 rounded transition-colors"
                 >
-                  <div className="flex items-center gap-2 font-sans">
+                  <div className="flex items-center gap-2 font-sans flex-wrap">
                     <span className="px-1.5 py-0.5 bg-indigo-900/80 text-indigo-300 font-bold rounded text-[10px] uppercase font-mono">
                       {item.subject.courseCode || 'N/A'}
                     </span>
@@ -388,11 +398,11 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
                       {item.subject.subjectTitle}
                     </span>
                     <span className="text-slate-400 text-[11px]">
-                      ({item.record.program} - Sem {item.record.semester} {item.record.shift})
+                      ({item.record.program} - Sem {item.record.semester} {item.record.shift}{item.record.section ? ` Sec ${item.record.section}` : ''})
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 text-[11px] font-sans">
+                  <div className="flex items-center gap-2.5 text-[11px] font-sans flex-wrap">
                     <button
                       type="button"
                       onClick={() => onSelectDepartment?.(item.deptName)}
@@ -416,6 +426,27 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
                     >
                       {item.subject.status || 'Pending'}
                     </span>
+
+                    {onSelectCourse && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSelectCourse(
+                            item.deptName,
+                            item.record.program,
+                            item.record.shift as AcademicShift,
+                            item.record.session,
+                            item.record.semester,
+                            item.record.section || 'A'
+                          )
+                        }
+                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                        title={`Inspect ${item.subject.courseCode || item.subject.subjectTitle} in ${item.record.program}`}
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Inspect Course</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

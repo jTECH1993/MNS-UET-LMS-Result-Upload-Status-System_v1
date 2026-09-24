@@ -53,14 +53,29 @@ const STANDARD_DESIGNATION_OPTIONS = [
 export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const [tab, setTab] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
 
-  // Official default campus photograph (persisted or updated by Admin)
+  // Official default campus photograph (persisted or updated by Admin across portal)
   const [campusImage, setCampusImage] = useState<string>(() => {
     return localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/mns-uet-campus.jpg';
   });
 
   useEffect(() => {
-    const handlePhotoUpdated = () => {
-      const updated = localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/mns-uet-campus.jpg';
+    // Fetch latest campus image directly from server configuration
+    fetch('/api/campus-photo')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.photoUrl) {
+          setCampusImage(data.photoUrl);
+          if (data.isCustom && data.photoUrl.startsWith('data:')) {
+            try {
+              localStorage.setItem('MNS_UET_CUSTOM_CAMPUS_IMAGE', data.photoUrl);
+            } catch (e) {}
+          }
+        }
+      })
+      .catch(() => {});
+
+    const handlePhotoUpdated = (e: any) => {
+      const updated = e?.detail?.url || localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || `/mns-uet-campus.jpg?v=${Date.now()}`;
       setCampusImage(updated);
     };
     window.addEventListener('mnsuet_campus_photo_updated', handlePhotoUpdated);
