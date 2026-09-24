@@ -36,12 +36,14 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'upload' | 'url' | 'presets'>('presets');
   const [isFullScreenPreview, setIsFullScreenPreview] = useState<boolean>(false);
+  const [customPresets, setCustomPresets] = useState<string[]>(() => CampusPhotoService.getCustomPresets());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setPreviewUrl(campusState.photoUrl);
     setFitMode(campusState.fitMode);
+    setCustomPresets(CampusPhotoService.getCustomPresets());
   }, [isOpen, campusState.photoUrl, campusState.fitMode]);
 
   if (!isOpen) return null;
@@ -53,6 +55,7 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
       const res = await CampusPhotoService.updateCampusPhoto(targetUrl, selectedFit, 'admin');
       setPreviewUrl(targetUrl);
       setFitMode(selectedFit);
+      setCustomPresets(CampusPhotoService.getCustomPresets());
       setSuccessMsg('Campus photo dynamically saved in Cloud Firestore database & synced across all portal sessions!');
       onPhotoUpdated?.();
       setTimeout(() => setSuccessMsg(''), 5000);
@@ -100,6 +103,18 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
 
   const handleSelectPreset = async (presetUrl: string) => {
     await persistPhoto(presetUrl, fitMode);
+  };
+
+  const handleDeleteCustomPresetItem = (urlToDelete: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    CampusPhotoService.deleteCustomPreset(urlToDelete);
+    const updated = CampusPhotoService.getCustomPresets();
+    setCustomPresets(updated);
+    if (previewUrl === urlToDelete) {
+      setPreviewUrl('/c3.jpeg');
+    }
+    setSuccessMsg('Preset image deleted successfully from custom presets gallery.');
+    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const handleDeleteCustomPhoto = async () => {
@@ -298,14 +313,21 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
               {/* Tab 1: Official Presets */}
               {activeTab === 'presets' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Select from verified high-resolution institutional campus images:
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      Select from verified institutional campus images &amp; uploaded custom presets:
+                    </p>
+                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                      {2 + customPresets.length} Available Presets
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                    {/* Built-in Preset 1 */}
                     <div
                       onClick={() => handleSelectPreset('/c3.jpeg')}
                       className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                        previewUrl.includes('c3.jpeg')
+                        previewUrl === '/c3.jpeg' || previewUrl.includes('c3.jpeg')
                           ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
                           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 hover:border-slate-300'
                       }`}
@@ -317,7 +339,7 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
                         <div>
                           <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             Real Campus Photo (c3.jpeg)
-                            {previewUrl.includes('c3.jpeg') && (
+                            {(previewUrl === '/c3.jpeg' || previewUrl.includes('c3.jpeg')) && (
                               <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             )}
                           </div>
@@ -326,10 +348,11 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
                       </div>
                     </div>
 
+                    {/* Built-in Preset 2 */}
                     <div
                       onClick={() => handleSelectPreset('/mns-uet-campus.jpg')}
                       className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                        previewUrl.includes('mns-uet-campus.jpg')
+                        previewUrl === '/mns-uet-campus.jpg' || previewUrl.includes('mns-uet-campus.jpg')
                           ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
                           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 hover:border-slate-300'
                       }`}
@@ -341,7 +364,7 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
                         <div>
                           <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                             Institutional Campus Asset
-                            {previewUrl.includes('mns-uet-campus.jpg') && (
+                            {(previewUrl === '/mns-uet-campus.jpg' || previewUrl.includes('mns-uet-campus.jpg')) && (
                               <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             )}
                           </div>
@@ -349,6 +372,50 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
                         </div>
                       </div>
                     </div>
+
+                    {/* Custom Uploaded Presets List */}
+                    {customPresets.map((presetUrl, idx) => {
+                      const isSelected = previewUrl === presetUrl;
+                      return (
+                        <div
+                          key={`custom_preset_${idx}_${presetUrl.slice(-10)}`}
+                          onClick={() => handleSelectPreset(presetUrl)}
+                          className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all group ${
+                            isSelected
+                              ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="relative h-24 rounded-lg overflow-hidden mb-2 bg-slate-900 border border-slate-300 dark:border-slate-700">
+                            <img src={presetUrl} alt={`Uploaded Campus Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                            
+                            {/* Delete Preset Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteCustomPresetItem(presetUrl, e)}
+                              className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-all hover:scale-105 z-10 cursor-pointer"
+                              title="Delete this uploaded preset photo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <span className="truncate">Uploaded Custom Photo #{idx + 1}</span>
+                                {isSelected && (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate">
+                                {presetUrl.startsWith('data:') ? 'Custom Base64 Upload' : presetUrl}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

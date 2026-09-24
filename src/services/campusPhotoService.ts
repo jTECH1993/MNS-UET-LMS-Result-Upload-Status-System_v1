@@ -18,6 +18,7 @@ export const DEFAULT_FIT_MODE: CampusFitMode = 'cover';
 const STORAGE_IMAGE_KEY = 'MNS_UET_CUSTOM_CAMPUS_IMAGE';
 const STORAGE_FIT_KEY = 'MNS_UET_CAMPUS_FIT_MODE';
 const STORAGE_CONFIG_KEY = 'mnsuet_campus_photo_config';
+const STORAGE_PRESETS_KEY = 'mnsuet_custom_campus_presets';
 
 export class CampusPhotoService {
   private static currentState: CampusPhotoState = {
@@ -31,6 +32,49 @@ export class CampusPhotoService {
   private static isInitialized = false;
   private static listeners: Set<(state: CampusPhotoState) => void> = new Set();
   private static unsubscribeFirestore: (() => void) | null = null;
+
+  public static getCustomPresets(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_PRESETS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.filter((url) => typeof url === 'string' && url.trim().length > 0);
+      }
+    } catch {}
+    return [];
+  }
+
+  public static addCustomPreset(url: string): void {
+    if (!url || url === DEFAULT_CAMPUS_PHOTO || url === '/mns-uet-campus.jpg') return;
+    try {
+      const current = this.getCustomPresets();
+      if (!current.includes(url)) {
+        const updated = [url, ...current].slice(0, 12);
+        localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(updated));
+        FirebaseStore.syncGlobalState(STORAGE_PRESETS_KEY, updated).catch(() => {});
+      }
+    } catch {}
+  }
+
+  public static deleteCustomPreset(urlToDelete: string): void {
+    try {
+      const current = this.getCustomPresets();
+      const updated = current.filter((u) => u !== urlToDelete);
+      localStorage.setItem(STORAGE_PRESETS_KEY, JSON.stringify(updated));
+      FirebaseStore.syncGlobalState(STORAGE_PRESETS_KEY, updated).catch(() => {});
+
+      // If active photo was deleted, revert to default photo
+      if (this.currentState.photoUrl === urlToDelete) {
+        this.resetToDefault();
+      } else if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('mnsuet_campus_photo_updated', {
+            detail: { url: this.currentState.photoUrl, photoUrl: this.currentState.photoUrl, fitMode: this.currentState.fitMode, updatedAt: Date.now() },
+          })
+        );
+      }
+    } catch {}
+  }
 
   public static initialize(): void {
     if (this.isInitialized) return;
@@ -225,6 +269,9 @@ export class CampusPhotoService {
 
       const resData = await response.json();
       const serverUrl = resData?.photoUrl || targetUrl;
+
+      // Auto-register to custom presets gallery so it shows in Official Presets tab
+      this.addCustomPreset(serverUrl);
 
       // 2. Broadcast and persist to Firestore database
       this.applyState(
