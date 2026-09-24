@@ -15,6 +15,7 @@ import {
   Layers,
   Trash2,
   Cloud,
+  Save,
 } from 'lucide-react';
 
 import { CampusPhotoService, useCampusPhoto } from '../services/campusPhotoService';
@@ -102,7 +103,12 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
   };
 
   const handleSelectPreset = async (presetUrl: string) => {
+    setPreviewUrl(presetUrl);
     await persistPhoto(presetUrl, fitMode);
+  };
+
+  const handleSaveAndApply = async () => {
+    await persistPhoto(previewUrl, fitMode);
   };
 
   const handleDeleteCustomPresetItem = (urlToDelete: string, e: React.MouseEvent) => {
@@ -518,13 +524,33 @@ export const AdminCampusPhotoModal: React.FC<Props> = ({ isOpen, onClose, onPhot
             <span className="text-xs text-slate-500 dark:text-slate-400">
               MNS UET Multan &bull; Institutional Monitoring Portal
             </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={handleSaveAndApply}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save &amp; Apply Campus Photo</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
