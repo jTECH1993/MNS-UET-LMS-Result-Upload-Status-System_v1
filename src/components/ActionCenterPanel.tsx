@@ -1045,11 +1045,10 @@ export function ActionCenterPanel({
 
       {/* 5. FOOTER STICKY ACTION BAR */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-2 bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-200">
+        <div className="flex flex-wrap items-center gap-2 bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-200">
           <Calendar className="w-4 h-4 text-indigo-400" />
           <span>Active Scope: <strong className="text-white">Session {currentSession} ({selectedSemesterFilter === 'ALL' ? 'All Semesters' : `Semester ${selectedSemesterFilter}`})</strong></span>
-          <span className="text-slate-500 font-normal">|</span>
-          <span className="text-indigo-300 font-extrabold">Schedule: {systemDeadline}</span>
+          <span className="text-indigo-300 font-extrabold bg-indigo-900/60 px-2 py-0.5 rounded border border-indigo-700/40">Schedule: {systemDeadline}</span>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">

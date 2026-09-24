@@ -428,16 +428,14 @@ export const DepartmentExportModal: React.FC<Props> = ({
             </div>
 
             {/* Quick Metrics Bar */}
-            <div className="flex items-center gap-3 text-xs bg-white px-3 py-1 rounded-md border border-slate-200 shadow-2xs">
-              <span className="text-slate-500">
-                Offerings: <strong className="text-slate-800">{aggregateStats.totalOfferings}</strong>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs bg-white dark:bg-slate-800 px-3 py-1 rounded-md border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <span className="text-slate-500 dark:text-slate-400">
+                Offerings: <strong className="text-slate-800 dark:text-slate-200">{aggregateStats.totalOfferings}</strong>
               </span>
-              <span className="text-slate-300">|</span>
-              <span className="text-slate-500">
-                Courses: <strong className="text-slate-800">{aggregateStats.totalCourses}</strong>
+              <span className="text-slate-500 dark:text-slate-400">
+                Courses: <strong className="text-slate-800 dark:text-slate-200">{aggregateStats.totalCourses}</strong>
               </span>
-              <span className="text-slate-300">|</span>
-              <span className="text-emerald-700 font-bold">
+              <span className="text-emerald-700 dark:text-emerald-400 font-bold">
                 {aggregateStats.complianceRate}% Uploaded
               </span>
             </div>

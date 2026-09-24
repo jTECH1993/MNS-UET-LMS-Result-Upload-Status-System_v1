@@ -428,19 +428,18 @@ export const DepartmentUploadVelocityTrend: React.FC<Props> = ({
             <Filter className="w-3.5 h-3.5 text-indigo-500" />
             <span>Compare Departments on Trend Chart ({selectedDepts.length} Selected):</span>
           </span>
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <button
               type="button"
               onClick={handleSelectTop4}
-              className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+              className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
             >
               Top 4 Highest
             </button>
-            <span className="text-slate-300">|</span>
             <button
               type="button"
               onClick={handleSelectAll}
-              className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+              className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
             >
               Select All
             </button>

@@ -432,14 +432,17 @@ Director, Academic Affairs & Examination Directorate`;
                 <span className="text-slate-500">Ref. No: </span>
                 <strong className="font-mono text-slate-900">{refNumber}</strong>
               </div>
-              <div>
-                <span className="text-slate-500">Academic Session: </span>
-                <strong className="text-slate-900">{currentSession}</strong>
-                <span className="text-slate-300 mx-1.5">|</span>
-                <span className="text-slate-500">Semester: </span>
-                <strong className="text-slate-900">
-                  {selectedSemester === 'ALL' ? 'All Semesters' : `Semester ${selectedSemester}`}
-                </strong>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  <span className="text-slate-500">Academic Session: </span>
+                  <strong className="text-slate-900">{currentSession}</strong>
+                </span>
+                <span>
+                  <span className="text-slate-500">Semester: </span>
+                  <strong className="text-slate-900">
+                    {selectedSemester === 'ALL' ? 'All Semesters' : `Semester ${selectedSemester}`}
+                  </strong>
+                </span>
               </div>
               <div>
                 <span className="text-slate-500">Issued Date: </span>

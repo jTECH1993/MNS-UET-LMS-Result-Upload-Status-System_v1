@@ -478,16 +478,13 @@ export const GlobalSearchFilterBar: React.FC<GlobalSearchFilterBarProps> = ({
               All Departments
             </button>
             {selectedDeptFilters.length > 0 && (
-              <>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  onClick={handleClearDepts}
-                  className="text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
-                >
-                  Reset Depts
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={handleClearDepts}
+                className="text-rose-600 dark:text-rose-400 hover:underline cursor-pointer ml-1"
+              >
+                Reset Depts
+              </button>
             )}
           </div>
         </div>
