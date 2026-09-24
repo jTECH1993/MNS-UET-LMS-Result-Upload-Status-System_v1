@@ -53,6 +53,20 @@ const STANDARD_DESIGNATION_OPTIONS = [
 export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const [tab, setTab] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
 
+  // Official default campus photograph (persisted or updated by Admin)
+  const [campusImage, setCampusImage] = useState<string>(() => {
+    return localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/mns-uet-campus.jpg';
+  });
+
+  useEffect(() => {
+    const handlePhotoUpdated = () => {
+      const updated = localStorage.getItem('MNS_UET_CUSTOM_CAMPUS_IMAGE') || '/mns-uet-campus.jpg';
+      setCampusImage(updated);
+    };
+    window.addEventListener('mnsuet_campus_photo_updated', handlePhotoUpdated);
+    return () => window.removeEventListener('mnsuet_campus_photo_updated', handlePhotoUpdated);
+  }, []);
+
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -468,35 +482,158 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
   const newPassStrength = SecurityService.validatePasswordStrength(newPassword);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 text-slate-800 font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-3 sm:p-6 text-slate-800 font-sans relative overflow-hidden">
       {/* Background ambient lighting */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-slate-700/20 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-300">
-        {/* Institutional Crest & Brand Header */}
-        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-slate-900 text-white p-6 sm:p-7 relative">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-white p-1.5 shadow-lg border-2 border-emerald-400 shrink-0 flex items-center justify-center">
-              <MnsUetLogo className="w-full h-full" />
+      {/* Main Container - Split Layout on XL screens */}
+      <div className="max-w-7xl w-full grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch relative z-10 animate-in fade-in zoom-in-95 duration-300">
+        
+        {/* LEFT COLUMN: UNIVERSITY CAMPUS HERO SHOWCASE (VISIBLE ON XL SCREENS) */}
+        <div className="hidden xl:flex xl:col-span-7 bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex-col justify-between relative text-white">
+          {/* Sky Header Overlay */}
+          <div className="p-7 relative z-10 bg-gradient-to-b from-slate-950/80 via-slate-900/60 to-transparent">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-16 h-16 rounded-full bg-white p-1.5 shadow-xl border-2 border-emerald-400 shrink-0 flex items-center justify-center">
+                  <MnsUetLogo className="w-full h-full" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-black text-white leading-tight">
+                    Muhammad Nawaz Sharif
+                  </h1>
+                  <h2 className="text-sm font-extrabold text-emerald-300 tracking-wide">
+                    University of Engineering &amp; Technology Multan
+                  </h2>
+                  <p className="text-xs text-slate-300 font-semibold mt-0.5">
+                    Institutional &amp; Academic Monitoring System
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="inline-block bg-emerald-800/90 text-emerald-200 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-emerald-500/60 mb-1">
-                Central Monitoring Portal
-              </span>
-              <h1 className="text-lg sm:text-xl font-black text-white leading-tight">
-                Muhammad Nawaz Sharif UET Multan
-              </h1>
-              <p className="text-xs text-emerald-200 font-semibold mt-0.5">
-                Institutional &amp; Academic Monitoring System
-              </p>
-              <div className="inline-flex items-center gap-1.5 mt-2 bg-emerald-950/90 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-md border border-emerald-600/70 shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+
+            <div className="flex items-center gap-3 pt-2">
+              <div className="flex items-center gap-2 bg-slate-800/90 text-emerald-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Active Task: LMS Result Upload Status</span>
               </div>
             </div>
           </div>
+
+          {/* REAL MNS-UET UNIVERSITY BUILDING IMAGE SHOWCASE */}
+          <div className="relative flex-1 min-h-[350px] overflow-hidden bg-slate-950">
+            {/* Real University Building Photograph */}
+            <img
+              src={campusImage}
+              alt="Muhammad Nawaz Sharif University of Engineering & Technology (MNS UET) Multan Main Academic Block"
+              className="w-full h-full object-cover select-none transition-transform duration-700 hover:scale-105"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.includes('mns-uet-campus.png')) {
+                  target.src = '/mns-uet-campus.png';
+                }
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/15 to-slate-950/40 pointer-events-none"></div>
+
+            {/* University Name Badge on Building Overlay */}
+            <div className="absolute bottom-4 left-6 right-6 bg-slate-950/85 backdrop-blur-md px-4 py-3 rounded-xl border border-slate-700/80 text-white shadow-2xl flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider block">
+                  Official Campus Facade
+                </span>
+                <span className="text-xs font-bold text-slate-100 truncate block">
+                  MNS UET Multan Main Academic Block
+                </span>
+              </div>
+
+              <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-md border border-emerald-700/60 shrink-0">
+                Multan, Pakistan
+              </span>
+            </div>
+          </div>
+
+          {/* Bottom Features & Contact Info Bar */}
+          <div className="p-6 bg-slate-950 border-t border-slate-800/80 space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-900/60 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Monitor Progress</span>
+                  <span className="text-[10px] text-slate-400">Department LMS uploads</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-900/60 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Enable Collaboration</span>
+                  <span className="text-[10px] text-slate-400">VC, HOD &amp; Coordinators</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-900/60 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Data Compliance</span>
+                  <span className="text-[10px] text-slate-400">Verified audit sheets</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 pt-3">
+              <span>📍 Multan, Punjab, Pakistan</span>
+              <a
+                href="https://www.mnsuet.edu.pk"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-emerald-400 font-semibold transition-colors"
+              >
+                🌐 www.mnsuet.edu.pk
+              </a>
+            </div>
+          </div>
         </div>
+
+        {/* RIGHT COLUMN: SIGN IN & REGISTRATION FORM CARD */}
+        <div className="xl:col-span-5 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col justify-between relative">
+          <div>
+            {/* Header / Campus Banner for Mobile/Tablet */}
+            <div className="xl:hidden relative h-36 bg-slate-900 overflow-hidden">
+              <img
+                src={campusImage}
+                alt="MNS UET Multan Main Campus Building"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.includes('mns-uet-campus.png')) {
+                    target.src = '/mns-uet-campus.png';
+                  }
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent p-4 flex items-end justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-white p-1 shadow-md shrink-0 flex items-center justify-center">
+                    <MnsUetLogo className="w-full h-full" />
+                  </div>
+                  <div>
+                    <h1 className="text-sm font-black text-white leading-tight">
+                      MNS UET Multan
+                    </h1>
+                    <p className="text-[11px] text-emerald-300 font-semibold">
+                      Central Monitoring Portal
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
         {/* Tab Switcher */}
         {tab !== 'FORGOT_PASSWORD' ? (
@@ -683,26 +820,18 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
             </form>
 
             {/* Authorized Users Banner */}
-            <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-xl flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-full bg-slate-200/80 text-slate-800 shrink-0 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6 text-slate-700" />
+            <div className="p-4 bg-slate-50/90 border border-slate-200/90 rounded-xl flex items-center gap-3.5 shadow-2xs">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0 flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-emerald-700" />
               </div>
               <div>
                 <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
                   Authorized University Users Only
                 </h4>
-                <p className="text-xs text-slate-500 font-medium mt-0.5 leading-relaxed">
+                <p className="text-xs text-slate-600 font-medium mt-0.5 leading-relaxed">
                   Access departmental submissions, track progress, and manage academic data efficiently.
                 </p>
               </div>
-            </div>
-
-            {/* Anti-Hacking Security Badge */}
-            <div className="px-3.5 py-2.5 bg-slate-50/70 border border-slate-200/80 rounded-lg flex items-center justify-between text-[11px] text-slate-600">
-              <span className="flex items-center gap-1.5 font-semibold">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                Anti-Brute Force &amp; Intrusion Defense Active
-              </span>
             </div>
           </div>
         )}
@@ -1736,16 +1865,19 @@ export const AuthScreen: React.FC<Props> = ({ onAuthenticated }) => {
           </div>
         )}
 
-        {/* Footer info */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
-          <span>Official Central Monitoring Portal of MNS-UET Multan &bull; Anti-Hacking &amp; Brute-Force Protected</span>
-          <div className="inline-flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity">
-            <div className="w-3.5 h-3.5 shrink-0">
-              <JtechLogo className="w-full h-full" />
+          </div>
+
+          {/* Footer info */}
+          <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <span>Official Central Monitoring Portal of MNS-UET Multan &bull; Protected</span>
+            <div className="inline-flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity">
+              <div className="w-3.5 h-3.5 shrink-0">
+                <JtechLogo className="w-full h-full" />
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Created by <span className="font-bold text-slate-700">Jtech Solutions</span>
+              </span>
             </div>
-            <span className="text-[11px] text-slate-500">
-              Created by <span className="font-bold text-slate-700">Jtech Solutions</span>
-            </span>
           </div>
         </div>
       </div>

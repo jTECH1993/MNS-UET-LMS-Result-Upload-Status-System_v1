@@ -17,6 +17,7 @@ import { Session2023SelectorModal } from './components/Session2023SelectorModal'
 import { CoordinatorAssignmentModal } from './components/CoordinatorAssignmentModal';
 import { AdminDataMigrationModal } from './components/AdminDataMigrationModal';
 import { FirestoreUsageModal } from './components/FirestoreUsageModal';
+import { AdminCampusPhotoModal } from './components/AdminCampusPhotoModal';
 import { SyncEvidenceToast } from './components/SyncEvidenceToast';
 import { QuotaExceededModal } from './components/QuotaExceededModal';
 import { SplashScreen } from './components/SplashScreen';
@@ -95,6 +96,7 @@ export default function App() {
   const [isCoordinatorAssignModalOpen, setIsCoordinatorAssignModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
+  const [isCampusPhotoModalOpen, setIsCampusPhotoModalOpen] = useState<boolean>(false);
 
   // Admin Role Preview Simulation Mode: Allows System Admin to view page exactly as HOD or Coordinator
   const [adminPreviewMode, setAdminPreviewMode] = useState<'OFF' | 'HOD' | 'COORDINATOR'>('OFF');
@@ -547,6 +549,7 @@ export default function App() {
           onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
           onOpenUsageModal={() => setIsUsageModalOpen(true)}
           onOpenUserAccountsModal={() => setIsUserAccountsModalOpen(true)}
+          onOpenCampusPhotoModal={() => setIsCampusPhotoModalOpen(true)}
           onOpenDataMigrationModal={() => setIsDataMigrationModalOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
           onLogout={handleLogout}
@@ -1644,6 +1647,17 @@ export default function App() {
         <AdminDataMigrationModal
           isOpen={isDataMigrationModalOpen}
           onClose={() => setIsDataMigrationModalOpen(false)}
+        />
+      )}
+
+      {/* Admin Portal Campus Photo Modal */}
+      {isAdmin && (
+        <AdminCampusPhotoModal
+          isOpen={isCampusPhotoModalOpen}
+          onClose={() => setIsCampusPhotoModalOpen(false)}
+          onPhotoUpdated={() => {
+            window.dispatchEvent(new Event('mnsuet_campus_photo_updated'));
+          }}
         />
       )}
       {/* Session Program Roster Selector Modal for Coordinator / VC */}
