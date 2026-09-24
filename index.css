@@ -67,21 +67,37 @@ html[data-theme="sunset"] body {
 
 /* 5. Auditor High-Contrast Clarity */
 html[data-theme="contrast"] {
-  --color-emerald-50: var(--color-slate-100);
-  --color-emerald-100: var(--color-slate-200);
-  --color-emerald-200: var(--color-slate-300);
-  --color-emerald-300: var(--color-slate-400);
-  --color-emerald-400: var(--color-slate-500);
-  --color-emerald-500: var(--color-slate-600);
-  --color-emerald-600: var(--color-slate-700);
-  --color-emerald-700: var(--color-slate-800);
-  --color-emerald-800: var(--color-slate-900);
+  --color-emerald-50: #f1f5f9;
+  --color-emerald-100: #e2e8f0;
+  --color-emerald-200: #cbd5e1;
+  --color-emerald-300: #94a3b8;
+  --color-emerald-400: #64748b;
+  --color-emerald-500: #334155;
+  --color-emerald-600: #1e293b;
+  --color-emerald-700: #0f172a;
+  --color-emerald-800: #020617;
   --color-emerald-900: #000000;
   --color-emerald-950: #000000;
 }
 html[data-theme="contrast"] body {
   background-color: #ffffff;
-  color: #050505;
+  color: #000000;
+}
+html[data-theme="contrast"] .border-slate-200,
+html[data-theme="contrast"] .border-slate-300,
+html[data-theme="contrast"] .border-gray-200,
+html[data-theme="contrast"] .border-gray-300 {
+  border-color: #1e293b !important;
+}
+html[data-theme="contrast"] input,
+html[data-theme="contrast"] select,
+html[data-theme="contrast"] textarea {
+  border-color: #000000 !important;
+  color: #000000 !important;
+}
+html[data-theme="contrast"] table th,
+html[data-theme="contrast"] table td {
+  border-color: #cbd5e1 !important;
 }
 
 

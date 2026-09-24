@@ -19,7 +19,7 @@ export interface ThemeDefinition {
 export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
   {
     id: 'emerald',
-    name: 'Institutional Emerald',
+    name: 'Emerald Day',
     category: 'day',
     badge: 'Official Day Mode',
     description: 'Official MNS-UET green & slate daylight canvas with pristine readability.',
@@ -30,7 +30,7 @@ export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
   },
   {
     id: 'midnight',
-    name: 'Executive Midnight',
+    name: 'Midnight Dark',
     category: 'night',
     badge: 'Night Mode',
     description: 'Deep midnight slate canvas with luminous emerald highlights, tailored for night grading.',
@@ -63,9 +63,9 @@ export const INSTITUTIONAL_THEMES: ThemeDefinition[] = [
   },
   {
     id: 'contrast',
-    name: 'Auditor High-Contrast',
+    name: 'High Contrast',
     category: 'special',
-    badge: 'Projector & Audit',
+    badge: 'High Contrast Clarity',
     description: 'Ultra-crisp monochrome with high-contrast borders for projector presentations & audits.',
     primaryPreview: 'bg-black',
     accentPreview: 'bg-white border-black',
@@ -450,9 +450,9 @@ export class AuthService {
       token: `auth_tok_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     };
 
-    if (account.themePreference) {
-      this.applyTheme(account.themePreference);
-    }
+    const userTheme = this.getUserTheme(account.id, account.username) || account.themePreference || 'emerald';
+    session.themePreference = userTheme;
+    this.applyTheme(userTheme);
 
     this.setCurrentSession(session);
     return {
@@ -939,6 +939,8 @@ export class AuthService {
   // Logout
   public static logout(): void {
     this.setCurrentSession(null);
+    const guestTheme = this.getUserTheme('guest');
+    this.applyTheme(guestTheme);
   }
 
   // Delete an account (Admin only)
@@ -1988,12 +1990,56 @@ export class AuthService {
     return INSTITUTIONAL_THEMES;
   }
 
-  // Initialize theme mode on app boot
-  public static initTheme(): AppTheme {
+  // Retrieve preferred theme for a specific user from persistent local storage
+  public static getUserTheme(userId?: string, username?: string): AppTheme {
     try {
-      const activeSession = this.getCurrentSession();
-      const stored = localStorage.getItem('mnsuet_theme_mode');
-      const theme = this.normalizeTheme(activeSession?.themePreference || stored);
+      const session = this.getCurrentSession();
+      const targetId = userId || session?.id;
+      const targetUsername = username || (session?.id === targetId ? session?.username : undefined);
+
+      if (typeof localStorage !== 'undefined') {
+        // 1. User-specific storage key by User ID
+        if (targetId) {
+          const userVal = localStorage.getItem(`mnsuet_user_theme_${targetId}`);
+          if (userVal) return this.normalizeTheme(userVal);
+        }
+        // 2. User-specific storage key by Username
+        if (targetUsername) {
+          const userVal = localStorage.getItem(`mnsuet_user_theme_${targetUsername}`);
+          if (userVal) return this.normalizeTheme(userVal);
+        }
+      }
+
+      // 3. User session preference
+      if (session && (session.id === targetId || session.username === targetUsername)) {
+        if (session.themePreference) return this.normalizeTheme(session.themePreference);
+      }
+
+      // 4. Stored account record
+      if (targetId || targetUsername) {
+        const accounts = this.getAccounts();
+        const acc = accounts.find((a) => a.id === targetId || (targetUsername && a.username === targetUsername));
+        if (acc?.themePreference) return this.normalizeTheme(acc.themePreference);
+      }
+
+      // 5. Fallback to guest or global theme
+      if (typeof localStorage !== 'undefined') {
+        const guestTheme = localStorage.getItem('mnsuet_user_theme_guest');
+        if (guestTheme) return this.normalizeTheme(guestTheme);
+        const globalTheme = localStorage.getItem('mnsuet_theme_mode');
+        if (globalTheme) return this.normalizeTheme(globalTheme);
+      }
+
+      return 'emerald';
+    } catch (e) {
+      return 'emerald';
+    }
+  }
+
+  // Initialize theme mode on app boot for active or specific user
+  public static initTheme(userId?: string): AppTheme {
+    try {
+      const theme = this.getUserTheme(userId);
       this.applyTheme(theme);
       return theme;
     } catch (e) {
@@ -2001,15 +2047,15 @@ export class AuthService {
     }
   }
 
-  // Retrieve current active theme
+  // Retrieve current active theme from document / storage
   public static getCurrentTheme(): AppTheme {
     if (typeof document !== 'undefined') {
       const current = document.documentElement.getAttribute('data-theme');
       if (current) return this.normalizeTheme(current);
       if (document.documentElement.classList.contains('dark')) return 'midnight';
     }
-    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('mnsuet_theme_mode') : null;
-    return this.normalizeTheme(stored);
+    const session = this.getCurrentSession();
+    return this.getUserTheme(session?.id, session?.username);
   }
 
   // Apply theme to HTML root element
@@ -2030,12 +2076,29 @@ export class AuthService {
     return normalized;
   }
 
-  // Set explicit theme with persistence & user profile sync
+  // Set explicit theme with persistent per-user local storage & user profile sync
   public static setTheme(newTheme: AppTheme | 'light' | 'dark', userId?: string): AppTheme {
     const normalized = this.applyTheme(newTheme);
     const accounts = this.getAccounts();
     const session = this.getCurrentSession();
     const targetId = userId || session?.id;
+    const targetUser = targetId ? accounts.find((a) => a.id === targetId || a.username === targetId) : null;
+    const targetUsername = targetUser?.username || (session?.id === targetId ? session?.username : undefined);
+
+    // Save strictly to per-user persistent local storage
+    if (typeof localStorage !== 'undefined') {
+      if (targetId) {
+        localStorage.setItem(`mnsuet_user_theme_${targetId}`, normalized);
+      }
+      if (targetUsername) {
+        localStorage.setItem(`mnsuet_user_theme_${targetUsername}`, normalized);
+      }
+      if (!targetId && !targetUsername) {
+        localStorage.setItem('mnsuet_user_theme_guest', normalized);
+      }
+      localStorage.setItem('mnsuet_theme_mode', normalized);
+    }
+
     if (normalized !== 'midnight') {
       const storageKey = `mnsuet_prev_light_theme_${targetId || 'guest'}`;
       if (typeof localStorage !== 'undefined') {
@@ -2044,20 +2107,19 @@ export class AuthService {
     }
 
     if (targetId) {
-      const user = accounts.find((a) => a.id === targetId);
-      if (user) {
-        user.themePreference = normalized;
+      if (targetUser) {
+        targetUser.themePreference = normalized;
         this.saveAccounts(accounts);
-        FirebaseStore.saveUserAccount(user).catch(() => {});
+        FirebaseStore.saveUserAccount(targetUser).catch(() => {});
         if (typeof window !== 'undefined') {
-          fetch(`/api/users/${user.id}`, {
+          fetch(`/api/users/${targetUser.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ themePreference: normalized }),
           }).catch(() => {});
         }
       }
-      if (session && session.id === targetId) {
+      if (session && (session.id === targetId || session.username === targetUsername)) {
         session.themePreference = normalized;
         this.setCurrentSession(session);
       }
@@ -2065,14 +2127,28 @@ export class AuthService {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
-        new CustomEvent('mnsuet_theme_changed', { detail: { theme: normalized } })
+        new CustomEvent('mnsuet_theme_changed', { detail: { theme: normalized, userId: targetId } })
       );
     }
 
     return normalized;
   }
 
-  // Quick toggle between Day and Night
+  // Cycle through the three primary themes: 'emerald' (Emerald Day) -> 'midnight' (Midnight Dark) -> 'contrast' (High Contrast)
+  public static cycleTheme(userId?: string): AppTheme {
+    const current = this.getCurrentTheme();
+    let next: AppTheme = 'emerald';
+    if (current === 'emerald') {
+      next = 'midnight';
+    } else if (current === 'midnight') {
+      next = 'contrast';
+    } else {
+      next = 'emerald';
+    }
+    return this.setTheme(next, userId);
+  }
+
+  // Quick toggle between Day and Night (backward compatibility)
   public static toggleTheme(userId?: string): AppTheme {
     const current = this.getCurrentTheme();
 

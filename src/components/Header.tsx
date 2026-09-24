@@ -3,6 +3,7 @@ import { LogOut, Sun, Moon, User, Users, Database, Palette, Menu, FileText, BarC
 import { ActiveUserSession, AppTheme } from '../types';
 import { AuthService } from '../services/authService';
 import { MnsUetLogo } from './MnsUetLogo';
+import { ThemeSwitcher } from './ThemeSwitcher';
 
 interface Props {
   currentUser: ActiveUserSession;
@@ -159,9 +160,7 @@ export const Header: React.FC<Props> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] shrink-0 min-w-0">
-          <button onClick={handleToggleTheme} className="flex items-center gap-1.5 bg-emerald-950/90 hover:bg-emerald-800 text-emerald-100 px-2 py-0.5 rounded-full border border-emerald-600/60 transition-all cursor-pointer font-medium shrink-0">
-            {isDark ? (<><Sun className="w-3.5 h-3.5 text-amber-400" /><span className="text-amber-300 font-semibold hidden sm:inline">Day</span></>) : (<><Moon className="w-3.5 h-3.5 text-indigo-300" /><span className="text-indigo-200 font-semibold hidden sm:inline">Night</span></>)}
-          </button>
+          <ThemeSwitcher currentUser={currentUser} variant="header-segmented" />
           <button onClick={onOpenProfileModal} className="flex items-center gap-1.5 bg-emerald-950/90 hover:bg-emerald-800 text-emerald-100 px-1.5 py-0.5 sm:px-2 rounded-full border border-emerald-600/60 transition-all cursor-pointer active:scale-95 text-left shrink-0 min-w-0 max-w-full">
             {currentUser.avatarUrl ? (<img src={currentUser.avatarUrl} alt={currentUser.name} className="w-4 h-4 rounded-full object-cover border border-emerald-400 shrink-0" />) : (<div className="w-4 h-4 rounded-full bg-emerald-700 flex items-center justify-center text-[9px] font-bold text-white shrink-0 border border-emerald-500">{getInitials(currentUser.name)}</div>)}
             <strong className="text-white font-bold min-w-[36px] max-w-[80px] sm:max-w-[180px] truncate">{currentUser.name}</strong>
@@ -245,7 +244,7 @@ export const Header: React.FC<Props> = ({
             {isAdmin && onOpenFirebaseModal && (<button onClick={onOpenFirebaseModal} className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/50 text-red-800 dark:text-red-300 text-xs font-semibold rounded-lg border border-red-300 dark:border-red-900 flex items-center gap-1.5 shadow-2xs"><Database className="w-3.5 h-3.5" />DB Admin</button>)}
             {isAdmin && onOpenDataMigrationModal && (<button onClick={onOpenDataMigrationModal} className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-lg border border-emerald-300 dark:border-emerald-900 flex items-center gap-1.5 shadow-2xs" title="Institutional Data Migration & Correction"><RefreshCw className="w-3.5 h-3.5" />Migration Tool</button>)}
             
-            <button onClick={handleToggleTheme} className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors">{isDark ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-500" />}</button>
+            <ThemeSwitcher currentUser={currentUser} variant="header-dropdown" />
             <button onClick={onLogout} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-200 text-xs font-bold rounded-lg border border-rose-300 dark:border-rose-800 flex items-center gap-1.5 shadow-2xs transition-all"><LogOut className="w-3.5 h-3.5" />Sign Out</button>
           </div>
         </div>
@@ -292,6 +291,11 @@ export const Header: React.FC<Props> = ({
             )}
           </div>
 
+          {/* Dedicated Theme Switcher for Mobile */}
+          <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <ThemeSwitcher currentUser={currentUser} variant="mobile" />
+          </div>
+
           {isAdmin && onOpenUsageModal && (
             <button
               onClick={() => {
@@ -305,9 +309,8 @@ export const Header: React.FC<Props> = ({
             </button>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={onOpenProfileModal} className="py-2 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5"><User className="w-3.5 h-3.5" /> Edit Profile</button>
-            <button onClick={handleToggleTheme} className="py-2 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5">{isDark ? <><Sun className="w-3.5 h-3.5 text-amber-500" />Day Mode</> : <><Moon className="w-3.5 h-3.5 text-indigo-500" />Night Mode</>}</button>
+          <div>
+            <button onClick={onOpenProfileModal} className="w-full py-2 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5"><User className="w-3.5 h-3.5" /> Edit Profile</button>
           </div>
           <button onClick={onLogout} className="w-full py-2.5 rounded-lg bg-rose-600 text-white text-xs font-bold flex items-center justify-center gap-2"><LogOut className="w-4 h-4" /> Sign Out</button>
         </div>

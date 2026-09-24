@@ -231,6 +231,13 @@ export default function App() {
     const handleAuthUpdate = () => {
       const session = AuthService.getCurrentSession();
       setCurrentUser(session);
+      if (session) {
+        const userTheme = AuthService.getUserTheme(session.id, session.username);
+        AuthService.applyTheme(userTheme);
+      } else {
+        const guestTheme = AuthService.getUserTheme('guest');
+        AuthService.applyTheme(guestTheme);
+      }
     };
     const handleSessionsUpdate = () => {
       const currentActive = StorageService.getActiveSessions();
