@@ -33,6 +33,7 @@ interface VCAnalyticsChartsProps {
   selectedSemesterFilter: string;
   selectedShiftFilter: 'ALL' | AcademicShift;
   selectedSectionFilter: string;
+  selectedDepartment?: string;
   onFilterByDepartment?: (deptName: string) => void;
   onFilterByStatus?: (status: 'ALL' | 'SUBMITTED' | 'PENDING') => void;
   onSelectDepartment?: (dept: DepartmentDimension) => void;
@@ -104,6 +105,7 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
   selectedSemesterFilter,
   selectedShiftFilter,
   selectedSectionFilter,
+  selectedDepartment,
   onSelectDepartment,
   onSelectProgram,
 }) => {
@@ -123,8 +125,9 @@ export const VCAnalyticsCharts: React.FC<VCAnalyticsChartsProps> = ({
       semesterFilter: selectedSemesterFilter,
       shiftFilter: selectedShiftFilter,
       sectionFilter: selectedSectionFilter,
+      departmentFilter: selectedDepartment,
     });
-  }, [allRecords, effectiveSessions, currentSession, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter]);
+  }, [allRecords, effectiveSessions, currentSession, selectedSemesterFilter, selectedShiftFilter, selectedSectionFilter, selectedDepartment]);
 
   // Program-Level dataset for Grouped Bar Chart
   const programGroupedData = useMemo(() => {

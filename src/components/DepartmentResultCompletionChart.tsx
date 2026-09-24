@@ -25,6 +25,8 @@ import {
   Info,
   ChevronRight,
   ShieldCheck,
+  Building2,
+  RotateCcw,
 } from 'lucide-react';
 
 export interface DepartmentCompletionData {
@@ -42,6 +44,8 @@ export interface DepartmentCompletionData {
 interface Props {
   departments: DepartmentCompletionData[];
   activeSessionLabel: string;
+  selectedDeptFilter?: string;
+  onSelectDepartmentFilter?: (deptName: string) => void;
   onSelectDepartment?: (deptName: string) => void;
   className?: string;
 }
@@ -49,6 +53,8 @@ interface Props {
 export const DepartmentResultCompletionChart: React.FC<Props> = ({
   departments,
   activeSessionLabel,
+  selectedDeptFilter = 'ALL',
+  onSelectDepartmentFilter,
   onSelectDepartment,
   className = '',
 }) => {
@@ -257,6 +263,28 @@ export const DepartmentResultCompletionChart: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Global Filter Indicator (if filtered) */}
+      {selectedDeptFilter && selectedDeptFilter !== 'ALL' && (
+        <div className="flex items-center justify-between gap-3 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/80 px-3.5 py-2 rounded-xl text-xs">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-slate-700 dark:text-slate-300">
+              Department Focus: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{selectedDeptFilter}</strong>
+            </span>
+          </div>
+          {onSelectDepartmentFilter && (
+            <button
+              type="button"
+              onClick={() => onSelectDepartmentFilter('ALL')}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 text-indigo-600 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-700 shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset to All Departments</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* University Snapshot Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -505,39 +533,55 @@ export const DepartmentResultCompletionChart: React.FC<Props> = ({
 
       {/* Department Breakdown Mini-Pills */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-        {chartData.map((d) => (
-          <button
-            key={d.name}
-            type="button"
-            onClick={() => onSelectDepartment?.(d.fullName)}
-            className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-left transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-800 dark:text-slate-200 group-hover:text-emerald-500 transition-colors">
-                {d.deptCode}
-              </span>
-              <span
-                className="text-[10px] font-mono font-black"
-                style={{ color: d.barColor }}
-              >
-                {d.completionPercentage}%
-              </span>
-            </div>
-            <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1.5">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${d.completionPercentage}%`,
-                  backgroundColor: d.barColor,
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[9px] text-slate-400 mt-1">
-              <span>{d.uploadedCourses} up</span>
-              <span>{d.pendingCourses} pnd</span>
-            </div>
-          </button>
-        ))}
+        {chartData.map((d) => {
+          const isSelected = selectedDeptFilter === d.fullName || selectedDeptFilter === d.deptCode;
+          return (
+            <button
+              key={d.name}
+              type="button"
+              onClick={() => {
+                if (onSelectDepartmentFilter) {
+                  onSelectDepartmentFilter(isSelected ? 'ALL' : d.fullName);
+                } else if (onSelectDepartment) {
+                  onSelectDepartment(d.fullName);
+                }
+              }}
+              className={`p-2 rounded-lg border text-left transition-all cursor-pointer group ${
+                isSelected
+                  ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/30 shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80'
+              }`}
+              title={`${d.fullName} - Click to toggle department filter`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`text-[10px] font-black transition-colors ${
+                  isSelected ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-800 dark:text-slate-200 group-hover:text-emerald-500'
+                }`}>
+                  {d.deptCode}
+                </span>
+                <span
+                  className="text-[10px] font-mono font-black"
+                  style={{ color: d.barColor }}
+                >
+                  {d.completionPercentage}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1.5">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${d.completionPercentage}%`,
+                    backgroundColor: d.barColor,
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-slate-400 mt-1">
+                <span>{d.uploadedCourses} up</span>
+                <span>{d.pendingCourses} pnd</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

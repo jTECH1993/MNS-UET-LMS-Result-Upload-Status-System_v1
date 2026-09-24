@@ -112,6 +112,7 @@ export class VCAnalyticsService {
     semesterFilter?: string | string[]; // 'ALL' or '1'-'8' or array of semester IDs
     shiftFilter?: 'ALL' | AcademicShift;
     sectionFilter?: string; // 'ALL' or 'A'-'D'
+    departmentFilter?: string; // 'ALL' or specific department name/code
   }): {
     departments: DepartmentDimension[];
     overallCompletionRate: number;
@@ -127,7 +128,7 @@ export class VCAnalyticsService {
     exceptions: ActionRequiredException[];
     agingRisk: DeadlineAgingRisk;
   } {
-    const { allRecords, currentSession, semesterFilter = 'ALL', shiftFilter = 'ALL', sectionFilter = 'ALL' } = params;
+    const { allRecords, currentSession, semesterFilter = 'ALL', shiftFilter = 'ALL', sectionFilter = 'ALL', departmentFilter = 'ALL' } = params;
     const sessionList = Array.isArray(currentSession) ? currentSession : [currentSession];
     const semesterList = Array.isArray(semesterFilter)
       ? semesterFilter.filter((s) => s !== 'ALL')
@@ -163,6 +164,14 @@ export class VCAnalyticsService {
     }
 
     UNIVERSITY_DEPARTMENTS.forEach((dept) => {
+      // Apply department filter if specified
+      if (departmentFilter && departmentFilter !== 'ALL') {
+        const match =
+          dept.name.trim().toLowerCase() === departmentFilter.trim().toLowerCase() ||
+          dept.code.trim().toLowerCase() === departmentFilter.trim().toLowerCase();
+        if (!match) return;
+      }
+
       // 1. Resolve HOD Dimension (Department exists even if HOD is not registered)
       const hodAccount = accounts.find(
         (acc) => acc.role === 'HOD' && acc.department.trim().toLowerCase() === dept.name.trim().toLowerCase()

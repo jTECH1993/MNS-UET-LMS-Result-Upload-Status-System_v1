@@ -86,7 +86,8 @@ import {
   Timer,
   Info,
   Target,
-  Database
+  Database,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -193,6 +194,24 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
   const [radarInspectorUnit, setRadarInspectorUnit] = useState<RadarUnit | null>(null);
   const [highlightedBottleneckSection, setHighlightedBottleneckSection] = useState<string | null>(null);
 
+  // Keep radarDrillPath in sync with global department focus
+  useEffect(() => {
+    if (selectedDeptFilter && selectedDeptFilter !== 'ALL') {
+      setRadarDrillPath({ deptName: selectedDeptFilter });
+    } else {
+      setRadarDrillPath({});
+    }
+  }, [selectedDeptFilter]);
+
+  // Keep selectedDeptFilters array in sync with single selectedDeptFilter
+  useEffect(() => {
+    if (selectedDeptFilter && selectedDeptFilter !== 'ALL') {
+      setSelectedDeptFilters([selectedDeptFilter]);
+    } else {
+      setSelectedDeptFilters([]);
+    }
+  }, [selectedDeptFilter]);
+
   // Traverses hierarchy across all levels to pinpoint the single most critical submission bottleneck
   const institutionalBottleneck = useMemo(() => {
     return CompletionRadarService.findBottleneck(allRecords, activeSessions, selectedSemesters);
@@ -297,8 +316,9 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       semesterFilter: selectedSemesters,
       shiftFilter: selectedShiftFilter,
       sectionFilter: selectedSectionFilter,
+      departmentFilter: selectedDeptFilter,
     });
-  }, [allRecords, activeSessions, selectedSemesters, selectedShiftFilter, selectedSectionFilter]);
+  }, [allRecords, activeSessions, selectedSemesters, selectedShiftFilter, selectedSectionFilter, selectedDeptFilter]);
 
   const criticalOverdueAlerts = useMemo(() => {
     return (hierarchy.exceptions || []).filter((exc) => exc.category === 'OVERDUE');
@@ -623,10 +643,11 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
   // High-Level Statistics based on active Session, Shift, and Semester filters
   const stats = useMemo(() => {
-    const totalDepartments = UNIVERSITY_DEPARTMENTS.length;
+    const totalDepartments = selectedDeptFilter !== 'ALL' ? 1 : UNIVERSITY_DEPARTMENTS.length;
 
-    // Tracked cohorts based on shift filter
+    // Tracked cohorts based on shift filter and department focus
     const trackedPrograms = allUniversityPrograms.filter((p) => {
+      if (selectedDeptFilter !== 'ALL' && p.department !== selectedDeptFilter) return false;
       if (onlySessionFilter && !p.sessionActive) return false;
       return true;
     });
@@ -707,7 +728,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       uniUploadPercentage,
       totalGenuineSubmissionsCount,
     };
-  }, [allUniversityPrograms, onlySessionFilter, selectedShiftFilter, selectedSemesterFilter]);
+  }, [allUniversityPrograms, onlySessionFilter, selectedShiftFilter, selectedSemesterFilter, selectedDeptFilter]);
 
   // Department-level metrics for Vice Chancellor executive monitoring
   const departmentStats = useMemo(() => {
@@ -786,10 +807,18 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
   // Filtered department list for Matrix based on search query (by Department Name, Code, Program, or Coordinator)
   const filteredDepartmentStats = useMemo(() => {
+    let list = departmentStats;
+    if (selectedDeptFilter !== 'ALL') {
+      list = list.filter(
+        (dept) =>
+          dept.deptName.toLowerCase() === selectedDeptFilter.toLowerCase() ||
+          dept.deptCode.toLowerCase() === selectedDeptFilter.toLowerCase()
+      );
+    }
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return departmentStats;
+    if (!query) return list;
 
-    return departmentStats.filter((dept) => {
+    return list.filter((dept) => {
       if (
         dept.deptName.toLowerCase().includes(query) ||
         dept.deptCode.toLowerCase().includes(query)
@@ -837,20 +866,28 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       return false;
     });
-  }, [departmentStats, searchQuery, allUniversityPrograms]);
+  }, [departmentStats, selectedDeptFilter, searchQuery, allUniversityPrograms]);
 
   // Executive Top Summary Metrics (Total Pending Departments, Completed Uploads, Departments Requiring Attention)
   const executiveSummaryMetrics = useMemo(() => {
-    const totalDepts = departmentStats.length;
-    const completedDepts = departmentStats.filter((d) => d.percentage === 100 && d.totalSubjects > 0);
-    const pendingDepts = departmentStats.filter((d) => d.percentage < 100);
-    const attentionDepts = departmentStats.filter(
+    const listToEvaluate = selectedDeptFilter !== 'ALL'
+      ? departmentStats.filter(
+          (d) =>
+            d.deptName.toLowerCase() === selectedDeptFilter.toLowerCase() ||
+            d.deptCode.toLowerCase() === selectedDeptFilter.toLowerCase()
+        )
+      : departmentStats;
+
+    const totalDepts = listToEvaluate.length;
+    const completedDepts = listToEvaluate.filter((d) => d.percentage === 100 && d.totalSubjects > 0);
+    const pendingDepts = listToEvaluate.filter((d) => d.percentage < 100);
+    const attentionDepts = listToEvaluate.filter(
       (d) => d.percentage === 0 || (d.totalPending > 0 && d.percentage < 50)
     );
 
-    const totalUploadedCourses = departmentStats.reduce((acc, d) => acc + d.totalUploaded, 0);
-    const totalPendingCourses = departmentStats.reduce((acc, d) => acc + d.totalPending, 0);
-    const totalCourses = departmentStats.reduce((acc, d) => acc + d.totalSubjects, 0);
+    const totalUploadedCourses = listToEvaluate.reduce((acc, d) => acc + d.totalUploaded, 0);
+    const totalPendingCourses = listToEvaluate.reduce((acc, d) => acc + d.totalPending, 0);
+    const totalCourses = listToEvaluate.reduce((acc, d) => acc + d.totalSubjects, 0);
     const overallPercentage = totalCourses > 0 ? Math.round((totalUploadedCourses / totalCourses) * 100) : 0;
 
     return {
@@ -866,7 +903,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       totalCourses,
       overallPercentage,
     };
-  }, [departmentStats]);
+  }, [departmentStats, selectedDeptFilter]);
 
   // Filtered program list (Single Row Per Program)
   const filteredPrograms = useMemo(() => {
@@ -993,6 +1030,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       semesterFilter: selectedSemesterFilter,
       shiftFilter: selectedShiftFilter as any,
       sectionFilter: selectedSectionFilter,
+      departmentFilter: selectedDeptFilter,
     });
   }, [
     allRecords,
@@ -1000,6 +1038,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     selectedSemesterFilter,
     selectedShiftFilter,
     selectedSectionFilter,
+    selectedDeptFilter,
   ]);
 
   return (
@@ -1439,6 +1478,110 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
               </select>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* GLOBAL DEPARTMENT TOGGLE BAR */}
+      <div className="bg-slate-900 text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-md space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Global Department Filter
+                </h3>
+                {selectedDeptFilter !== 'ALL' ? (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Focus: {selectedDeptFilter}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                    Institutional Overview (All {UNIVERSITY_DEPARTMENTS.length} Departments)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Toggle between university-wide institutional view or isolate a specific department across all charts, tables, and KPIs.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedDeptFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedDeptFilter('ALL')}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold rounded-lg border border-slate-700 hover:border-slate-600 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset to All Departments</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Interactive Faculty Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <button
+            type="button"
+            onClick={() => setSelectedDeptFilter('ALL')}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-2 border cursor-pointer ${
+              selectedDeptFilter === 'ALL'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md ring-2 ring-emerald-500/30'
+                : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-750 hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>All Departments</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+              selectedDeptFilter === 'ALL' ? 'bg-emerald-700 text-emerald-100 font-bold' : 'bg-slate-900 text-slate-400'
+            }`}>
+              {UNIVERSITY_DEPARTMENTS.length}
+            </span>
+          </button>
+
+          {UNIVERSITY_DEPARTMENTS.map((dept) => {
+            const isSelected = selectedDeptFilter === dept.name || selectedDeptFilter === dept.code;
+            const dStat = departmentStats.find((ds) => ds.deptName === dept.name || ds.deptCode === dept.code);
+            const pct = dStat ? dStat.percentage : 0;
+            const isComplete = pct === 100;
+
+            return (
+              <button
+                key={dept.code}
+                type="button"
+                onClick={() => setSelectedDeptFilter(isSelected ? 'ALL' : dept.name)}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-2 border cursor-pointer ${
+                  isSelected
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-md ring-2 ring-indigo-500/40'
+                    : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-750 hover:text-white'
+                }`}
+                title={`${dept.name} (${dept.programs.length} programs) - Click to isolate this department in all dashboard visuals`}
+              >
+                <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  isSelected ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-300'
+                }`}>
+                  {dept.code}
+                </span>
+                <span className="truncate max-w-[120px] sm:max-w-[170px]">
+                  {dept.name.replace('Department of ', '')}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                  isComplete
+                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
+                    : pct >= 50
+                    ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                    : 'bg-rose-950/80 text-rose-300 border border-rose-800'
+                }`}>
+                  {pct}%
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1941,7 +2084,14 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
         searchScope={searchScope}
         onSearchScopeChange={setSearchScope}
         selectedDeptFilters={selectedDeptFilters}
-        onDeptFiltersChange={setSelectedDeptFilters}
+        onDeptFiltersChange={(depts) => {
+          setSelectedDeptFilters(depts);
+          if (depts.length === 0 || depts.includes('ALL')) {
+            setSelectedDeptFilter('ALL');
+          } else if (depts.length === 1) {
+            setSelectedDeptFilter(depts[0]);
+          }
+        }}
         selectedSemesters={selectedSemesters}
         onSemestersChange={setSelectedSemesters}
         selectedShifts={selectedShifts}
@@ -1995,6 +2145,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             let critical = 0;
 
             allUniversityPrograms.forEach((p) => {
+              if (selectedDeptFilter !== 'ALL' && p.department !== selectedDeptFilter) return;
               if (onlySessionFilter && !p.sessionActive) return;
               const effectiveShift = rowShiftOverrides[p.program] || p.recommendedShift;
               const sh = p.shifts[effectiveShift];
@@ -2005,7 +2156,10 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             });
 
             // Action required interventions
-            const itemsIntervention = allRecords.filter(r => r.hodCoordinator === 'Unassigned' || !r.hodCoordinator).length + stats.pendingSlots;
+            const itemsIntervention = allRecords.filter(r => {
+              if (selectedDeptFilter !== 'ALL' && r.department !== selectedDeptFilter) return false;
+              return r.hodCoordinator === 'Unassigned' || !r.hodCoordinator;
+            }).length + stats.pendingSlots;
             const updatesToday = allRecords.filter(r => r.updatedAt && new Date(r.updatedAt).toDateString() === new Date().toDateString()).length || 4;
 
             return (
@@ -2195,6 +2349,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <DepartmentResultCompletionChart
             departments={filteredDepartmentStats}
             activeSessionLabel={activeSessLabel}
+            selectedDeptFilter={selectedDeptFilter}
+            onSelectDepartmentFilter={(deptName) => setSelectedDeptFilter(deptName)}
             onSelectDepartment={(deptName) => {
               const matched = hierarchy.departments.find(
                 (d) =>
@@ -2377,6 +2533,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             selectedSemesterFilter={selectedSemesterFilter}
             selectedShiftFilter={selectedShiftFilter}
             selectedSectionFilter={selectedSectionFilter}
+            selectedDepartment={selectedDeptFilter}
             onSelectDepartment={(dept) => {
               setSelectedDrillDownDept(dept);
               setIsDeptDrillDownOpen(true);
@@ -2440,6 +2597,8 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           <DepartmentResultCompletionChart
             departments={filteredDepartmentStats}
             activeSessionLabel={activeSessLabel}
+            selectedDeptFilter={selectedDeptFilter}
+            onSelectDepartmentFilter={(deptName) => setSelectedDeptFilter(deptName)}
             onSelectDepartment={(deptName) => {
               const matched = hierarchy.departments.find(
                 (d) =>
