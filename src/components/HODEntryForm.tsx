@@ -4453,16 +4453,16 @@ export const HODEntryForm: React.FC<Props> = ({
                   )}
                 </div>
 
-                {/* Bulk Paste from Excel/LMS */}
+                {/* Bulk CSV / Excel Import */}
                 <button
                   id="btn-open-bulk-import"
                   type="button"
                   onClick={() => setIsBulkImportOpen(true)}
                   className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  title="Copy and paste courses from Excel, LMS, or timetable"
+                  title="Import course results in bulk from CSV, Excel, or LMS with database validation"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Bulk Paste</span>
+                  <span>Bulk CSV Import</span>
                 </button>
 
                 {/* Add Course Row Button */}
@@ -5968,9 +5968,25 @@ export const HODEntryForm: React.FC<Props> = ({
         currentShift={shift}
         currentSemester={semester}
         currentSection={section}
+        currentSession={session}
         departmentName={department}
         programName={program}
         availableSections={sectionStatuses.map((s) => s.id)}
+        onCommitSuccess={() => {
+          if (onRecordSavedOrDeleted) onRecordSavedOrDeleted();
+          const rec = StorageService.getSubmission(
+            department,
+            program,
+            degreeLevel,
+            shift,
+            session,
+            semester,
+            section
+          );
+          if (rec && rec.subjects) {
+            setSubjects(rec.subjects);
+          }
+        }}
       />
 
       {/* Custom Section Dialog Modal */}

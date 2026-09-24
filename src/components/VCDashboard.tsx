@@ -38,6 +38,7 @@ import { ChangeHistoryModal } from './ChangeHistoryModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { UniversityDigitalTwin } from './UniversityDigitalTwin';
 import { VCDashboardPDFExportModal } from './VCDashboardPDFExportModal';
+import { BulkCSVImportModal } from './BulkCSVImportModal';
 import { DepartmentUploadVelocityTrend } from './DepartmentUploadVelocityTrend';
 import { GlobalSearchFilterBar, SearchScope } from './GlobalSearchFilterBar';
 import { CircularProgress } from './CircularProgress';
@@ -178,6 +179,7 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
   const [dashboardViewMode, setDashboardViewMode] = useState<'COMMAND_CENTER' | 'ROSTER' | 'ACTIVITY' | 'DIGITAL_TWIN' | 'ACTION_CENTER' | 'ACADEMIC_HEALTH'>('COMMAND_CENTER');
   const [isLockdownScopeModalOpen, setIsLockdownScopeModalOpen] = useState<boolean>(false);
+  const [isBulkCSVImportModalOpen, setIsBulkCSVImportModalOpen] = useState<boolean>(false);
 
   // Change History / Audit Trail Modal State
   const [isChangeHistoryOpen, setIsChangeHistoryOpen] = useState<boolean>(false);
@@ -1127,6 +1129,17 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
           >
             <Download className="w-4 h-4" />
             Download Master University Report (CSV)
+          </button>
+
+          <button
+            id="btn-open-bulk-csv-import"
+            type="button"
+            onClick={() => setIsBulkCSVImportModalOpen(true)}
+            className="px-3.5 py-2 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+            title="Import course results in bulk from CSV with database validation and error summary"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-200" />
+            <span>Bulk CSV Import Results</span>
           </button>
         </div>
       </div>
@@ -3951,6 +3964,21 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
       </div>
     </>
   )}
+
+      {/* Bulk CSV Import Modal */}
+      <BulkCSVImportModal
+        isOpen={isBulkCSVImportModalOpen}
+        onClose={() => setIsBulkCSVImportModalOpen(false)}
+        currentSession={currentSession || (activeSessions && activeSessions[0]) || '2023'}
+        currentSemester={selectedSemesterFilter !== 'ALL' ? selectedSemesterFilter : '1'}
+        currentShift={selectedShiftFilter !== 'ALL' ? (selectedShiftFilter as AcademicShift) : 'Morning'}
+        departmentName={selectedDeptFilter !== 'ALL' ? selectedDeptFilter : undefined}
+        onCommitSuccess={() => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mnsuet_storage_updated'));
+          }
+        }}
+      />
 
       {/* Academic Session Selector Modal */}
       <AcademicSessionModal
