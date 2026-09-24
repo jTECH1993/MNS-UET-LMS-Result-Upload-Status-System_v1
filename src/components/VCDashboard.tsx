@@ -42,6 +42,7 @@ import { DepartmentUploadVelocityTrend } from './DepartmentUploadVelocityTrend';
 import { GlobalSearchFilterBar, SearchScope } from './GlobalSearchFilterBar';
 import { CircularProgress } from './CircularProgress';
 import { AcademicHealthTab } from './AcademicHealthTab';
+import { DepartmentResultCompletionChart } from './DepartmentResultCompletionChart';
 import {
   CompletionRadarService,
   BottleneckInfo,
@@ -303,11 +304,13 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
     return (hierarchy.exceptions || []).filter((exc) => exc.category === 'OVERDUE');
   }, [hierarchy.exceptions]);
 
-  const { longitudinalData, currentBarKey, prevBarKey } = useMemo(() => {
-    const activeSessLabel = Array.isArray(activeSessions)
+  const activeSessLabel = useMemo(() => {
+    return Array.isArray(activeSessions)
       ? activeSessions.join(', ')
       : activeSessions || '2023';
+  }, [activeSessions]);
 
+  const { longitudinalData, currentBarKey, prevBarKey } = useMemo(() => {
     let prevSess = '2022';
     if (activeSessLabel.includes('2025')) prevSess = '2024';
     else if (activeSessLabel.includes('2024')) prevSess = '2023';
@@ -2188,6 +2191,23 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
             </div>
           )}
 
+          {/* RESULT UPLOAD COMPLETION PERCENTAGE FOR ALL DEPARTMENTS SIDE-BY-SIDE (CURRENT ACTIVE SESSION) */}
+          <DepartmentResultCompletionChart
+            departments={filteredDepartmentStats}
+            activeSessionLabel={activeSessLabel}
+            onSelectDepartment={(deptName) => {
+              const matched = hierarchy.departments.find(
+                (d) =>
+                  d.name.toLowerCase() === deptName.toLowerCase() ||
+                  d.code.toLowerCase() === deptName.toLowerCase()
+              );
+              if (matched) {
+                setSelectedDrillDownDept(matched);
+                setIsDeptDrillDownOpen(true);
+              }
+            }}
+          />
+
           {/* LONGITUDINAL YEAR-OVER-YEAR PERFORMANCE COMPONENT */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-850 pb-3">
@@ -2416,7 +2436,22 @@ export const VCDashboard: React.FC<Props> = ({ onSelectProgramToEdit, allRecords
 
       {/* Academic Health Tab */}
       {dashboardViewMode === 'ACADEMIC_HEALTH' && (
-        <div className="mt-2">
+        <div className="mt-2 space-y-6">
+          <DepartmentResultCompletionChart
+            departments={filteredDepartmentStats}
+            activeSessionLabel={activeSessLabel}
+            onSelectDepartment={(deptName) => {
+              const matched = hierarchy.departments.find(
+                (d) =>
+                  d.name.toLowerCase() === deptName.toLowerCase() ||
+                  d.code.toLowerCase() === deptName.toLowerCase()
+              );
+              if (matched) {
+                setSelectedDrillDownDept(matched);
+                setIsDeptDrillDownOpen(true);
+              }
+            }}
+          />
           <AcademicHealthTab
             allRecords={allRecords}
             activeSessions={activeSessions}
